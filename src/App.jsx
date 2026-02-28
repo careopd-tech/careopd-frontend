@@ -39,6 +39,7 @@ const App = () => {
         const [docRes, patRes] = await Promise.all([
           fetch(`${API_BASE_URL}/api/doctors/${clinicId}`),
           fetch(`${API_BASE_URL}/api/patients/${clinicId}`)
+          
         ]);
 
         if (docRes.ok && patRes.ok) {
