@@ -6,6 +6,7 @@ import FAB from '../components/ui/FAB';
 import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import TimeSlotPicker from '../components/business/TimeSlotPicker';
+import API_BASE_URL from '../config';
 
 const getTodayDate = () => new Date().toISOString().split('T')[0];
 

@@ -5,6 +5,7 @@ import {
 import Modal from '../components/ui/Modal';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import AlertMessage from '../components/ui/AlertMessage';
+import API_BASE_URL from '../config';
 
 // Initial Defaults
 const DEFAULT_TEMPLATES = [

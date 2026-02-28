@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, KeyRound, Eye, EyeOff, CheckCircle, ArrowLeft } from 'lucide-react';
 import AlertMessage from '../components/ui/AlertMessage';
+import API_BASE_URL from '../config';
 
 const Auth = ({ authState, setAuthState }) => {
   const [showPassword, setShowPassword] = useState(false);

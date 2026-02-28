@@ -6,6 +6,7 @@ import Modal from '../components/ui/Modal';
 import FAB from '../components/ui/FAB';
 import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
+import API_BASE_URL from '../config';
 
 const Patients = ({ data, setData }) => {
   const [searchQuery, setSearchQuery] = useState('');
