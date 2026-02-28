@@ -14,15 +14,39 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments }) 
 
   const bookedSlots = useMemo(() => {
     if (!date) return [];
+
+    // --- FIX START ---
+    // 1. Get the correct ID (handle MongoDB _id or standard id)
+    const currentDocId = doctor._id || doctor.id;
+
     return appointments
-      .filter(a => a.doctorId === doctor.id && a.date === date && a.status !== 'Cancelled')
+      .filter(a => {
+        // 2. Ensure both IDs are strings before comparing (prevents Type mismatches)
+        const apptDocId = String(a.doctorId);
+        const targetDocId = String(currentDocId);
+
+        return (
+          apptDocId === targetDocId && 
+          a.date === date && 
+          a.status !== 'Cancelled'
+        );
+      })
       .map(a => a.time);
-  }, [doctor.id, date, appointments]);
+      // --- FIX END ---
+
+  }, [doctor, date, appointments]);
 
   const filteredSlots = useMemo(() => {
+    // If doctor has no specific hours set, default to standard business hours
+    const mStart = doctor.morningStart || '09:00';
+    const mEnd = doctor.morningEnd || '13:00';
+    const eStart = doctor.eveningStart || '17:00';
+    const eEnd = doctor.eveningEnd || '21:00';
+
     return TIME_SLOTS.filter(time => {
-      const isMorning = time >= (doctor.morningStart || '09:00') && time < (doctor.morningEnd || '13:00');
-      const isEvening = time >= (doctor.eveningStart || '17:00') && time < (doctor.eveningEnd || '21:00');
+      // Logic: Is the time within Morning OR Evening shift?
+      const isMorning = time >= mStart && time < mEnd;
+      const isEvening = time >= eStart && time < eEnd;
       return isMorning || isEvening;
     });
   }, [doctor]);
