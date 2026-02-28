@@ -116,6 +116,8 @@ const Auth = ({ authState, setAuthState }) => {
                 <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input 
                   type="email" 
+                  name="email"
+                  autoComplete="username"
                   placeholder="admin@careopd.com" 
                   className={`w-full pl-9 pr-3 py-2.5 bg-slate-50 border rounded-xl text-[14px] transition-all outline-none ${invalidFields.includes('email') ? 'border-red-500 focus:ring-2 focus:ring-red-500' : 'border-slate-200 focus:ring-2 focus:ring-teal-500'}`}
                   value={email}
@@ -134,6 +136,7 @@ const Auth = ({ authState, setAuthState }) => {
                 <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input 
                   type={showPassword ? "text" : "password"} 
+                  autoComplete="current-password"
                   placeholder="••••••••" 
                   className={`w-full pl-9 pr-10 py-2.5 bg-slate-50 border rounded-xl text-[14px] transition-all outline-none ${invalidFields.includes('password') ? 'border-red-500 focus:ring-2 focus:ring-red-500' : 'border-slate-200 focus:ring-2 focus:ring-teal-500'}`}
                   value={password}
