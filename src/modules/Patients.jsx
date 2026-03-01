@@ -8,6 +8,25 @@ import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import API_BASE_URL from '../config';
 
+// --- NEW: PATIENT SKELETON LOADER ---
+const PatientSkeleton = () => (
+  <div className="space-y-3 p-2 animate-pulse">
+    {[1, 2, 3].map((i) => (
+      <div key={i} className="p-3 rounded-xl border border-slate-100 bg-white flex flex-col md:flex-row gap-3">
+        <div className="flex-1 space-y-2">
+          <div className="h-4 bg-slate-100 rounded w-1/4"></div>
+          <div className="h-3 bg-slate-100 rounded w-1/3"></div>
+          <div className="h-3 bg-slate-100 rounded w-1/5 mt-2"></div>
+        </div>
+        <div className="flex gap-2 mt-2 md:mt-0 md:w-32">
+          <div className="flex-1 h-7 bg-slate-100 rounded-lg"></div>
+          <div className="flex-1 h-7 bg-slate-100 rounded-lg"></div>
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 const Patients = ({ data, setData }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -19,7 +38,10 @@ const Patients = ({ data, setData }) => {
   const [addPatientTab, setAddPatientTab] = useState('demographics');
   const [modalError, setModalError] = useState('');
   const [invalidFields, setInvalidFields] = useState([]);
-  const [loading, setLoading] = useState(false);
+  
+  // --- LOGIC FIX 1: Smart Loading State ---
+  // If data exists, start false (background sync). If empty, start true (skeleton).
+  const [loading, setLoading] = useState(!data.patients || data.patients.length === 0);
 
   // Default state ensures we don't have nulls for new patients
   const defaultPatientState = {
@@ -29,37 +51,44 @@ const Patients = ({ data, setData }) => {
   };
   const [newPatient, setNewPatient] = useState(defaultPatientState);
 
-  useEffect(() => {
-    const fetchPatientsAndAppointments = async () => {
-      const clinicId = localStorage.getItem('clinicId');
-      if (!clinicId) return;
+  // --- 1. DATA FETCHING ---
+  // --- 1. DATA FETCHING (With Auto-Sync) ---
+  // Copy into Patients.jsx
+useEffect(() => {
+  const fetchPatientsAndAppointments = async () => {
+    const clinicId = localStorage.getItem('clinicId');
+    if (!clinicId) return;
 
-      try {
-        setLoading(true);
-        const [patsRes, apptsRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/patients/${clinicId}?tag=patients`),
-          fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments`)
-        ]);
+    try {
+      const [patsRes, apptsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/patients/${clinicId}?tag=patients`),
+        fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments`)
+      ]);
 
-        if (patsRes.ok && apptsRes.ok) {
-          const pats = await patsRes.json();
-          const appts = await apptsRes.json();
-          
-          setData(prev => ({
-            ...prev,
-            patients: pats,
-            appointments: appts
-          }));
-        }
-      } catch (err) {
-        console.error("Error fetching patient data:", err);
-      } finally {
-        setLoading(false);
+      if (patsRes.ok && apptsRes.ok) {
+        const pats = await patsRes.json();
+        const appts = await apptsRes.json();
+        
+        setData(prev => ({
+          ...prev,
+          patients: pats,
+          appointments: appts
+        }));
       }
-    };
+    } catch (err) {
+      console.error("Error fetching patient data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchPatientsAndAppointments();
-  }, [setData]);
+  fetchPatientsAndAppointments();
+
+  // Polling every 60 seconds
+  const intervalId = setInterval(fetchPatientsAndAppointments, 60000);
+
+  return () => clearInterval(intervalId);
+}, [setData]); // ✅ SAFE: No data dependencies
 
   const handleEditPatient = (patient, tab = 'demographics') => {
     setModalError('');
@@ -143,7 +172,6 @@ const Patients = ({ data, setData }) => {
 
   const processedPatients = useMemo(() => {
     return (data.patients || []).map(p => {
-      // Safety Check: Ensure _id exists
       if (!p._id) return { ...p, category: 'noVisit', sortDate: '', sortTime: '' };
 
       const pAppts = (data.appointments || []).filter(a => a.patientId === p._id && a.status !== 'Cancelled');
@@ -153,7 +181,6 @@ const Patients = ({ data, setData }) => {
       let sortTime = '';
       let sortDate = '';
       
-      // Safety Check: handle missing lastVisit
       const safeLastVisit = p.lastVisit || '-';
 
       if (todayAppt) {
@@ -187,7 +214,6 @@ const Patients = ({ data, setData }) => {
   const filteredPatients = processedPatients.filter(p => {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      // Safety check for p.name and p.phone
       const name = p.name ? p.name.toLowerCase() : '';
       const phone = p.phone || '';
       if (!name.includes(q) && !phone.includes(q)) return false;
@@ -205,8 +231,6 @@ const Patients = ({ data, setData }) => {
     return true;
   });
 
-  // --- SAFE SORTING LOGIC ---
-  // Using || '' ensures we compare strings, never nulls
   const sections = {
     visitingToday: filteredPatients
       .filter(p => p.category === 'visitingToday')
@@ -260,24 +284,30 @@ const Patients = ({ data, setData }) => {
           <div className={`flex items-center gap-1.5 ${colorClass}`}>
             <Icon size={14} />
             <h3 className="text-[11px] font-bold uppercase tracking-wider">{title}</h3>
-            {id === 'visitingToday' && <span className="bg-teal-100 text-teal-700 text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-1.5">Live</span>}
-            <span className="ml-1.5 text-[10px] text-slate-400 font-normal">({items.length})</span>
+            {id === 'visitingToday' && <span className="bg-teal-100 text-teal-700 text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-1.5">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
+            {/* Count logic */}
+            <span className="ml-1.5 text-[10px] text-slate-400 font-normal">
+                {(!loading || items.length > 0) ? `(${items.length})` : ''}
+            </span>
           </div>
           {isExpanded ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
         </button>
         
         {isExpanded && (
-          <div className="flex-1 overflow-y-auto bg-slate-50/50 p-2 space-y-1.5 scrollbar-hide">
-            {items.length > 0 ? items.map(renderPatientCard) : <div className="text-center py-6 text-slate-400 text-[13px] italic">No patients in this section</div>}
+          <div className="flex-1 overflow-y-auto bg-slate-50/50 p-2 space-y-1.5 scrollbar-hide relative">
+            {/* --- UI FIX: SKELETON LOADER --- */}
+            {loading && items.length === 0 ? (
+                <PatientSkeleton />
+            ) : (
+                items.length > 0 ? items.map(renderPatientCard) : <div className="text-center py-6 text-slate-400 text-[13px] italic">No patients in this section</div>
+            )}
           </div>
         )}
       </div>
     );
   };
 
-  if (loading && (!data.patients || data.patients.length === 0)) {
-    return <div className="p-10 text-center font-bold text-teal-600 animate-pulse">Loading Patients...</div>;
-  }
+  // --- REMOVED BLOCKING LOADING STATE ---
 
   return (
     <div className="h-full flex flex-col">

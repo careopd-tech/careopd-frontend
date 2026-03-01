@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Building2, MessageCircle, FileText, Plus, Edit2, ChevronDown, ChevronRight, Lock, LogOut 
+  Building2, MessageCircle, FileText, Plus, Edit2, ChevronDown, ChevronRight 
 } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import ModuleHeader from '../components/ui/ModuleHeader';
@@ -19,8 +19,8 @@ const DEFAULT_POLICIES = [
   { title: 'Consent Policy', text: 'By using our services, you consent to...' }
 ];
 
-const Settings = ({ data, setData, onLogout }) => {
-  const [expandedSection, setExpandedSection] = useState(null);
+const Settings = ({ data, setData }) => {
+  const [expandedSection, setExpandedSection] = useState('clinic');
   const [editModal, setEditModal] = useState(null);
   const [formData, setFormData] = useState({});
   const [modalError, setModalError] = useState('');
@@ -71,10 +71,6 @@ const Settings = ({ data, setData, onLogout }) => {
     } else if (editModal.type === 'template' || editModal.type === 'policy') {
       if (!formData.title) errors.push('title');
       if (!formData.text) errors.push('text');
-    } else if (editModal.type === 'change_password') {
-      if (!formData.currentPassword) errors.push('currentPassword');
-      if (!formData.newPassword) errors.push('newPassword');
-      if (!formData.confirmPassword) errors.push('confirmPassword');
     }
 
     if (errors.length > 0) {
@@ -108,8 +104,6 @@ const Settings = ({ data, setData, onLogout }) => {
       updatePayload = { name: formData.name, address: formData.address };
     } else if (editModal.stateKey === 'hours') {
       updatePayload = { hours: formData.value };
-    } else if (editModal.stateKey === 'phone') {
-      updatePayload = { phone: formData.value };
     }
 
     if (Object.keys(updatePayload).length > 0) {
@@ -138,12 +132,11 @@ const Settings = ({ data, setData, onLogout }) => {
   };
 
   // --- RENDER HELPERS ---
-
-  // Consistent PADDING: p-2 (match footer)
   const SettingItem = ({ title, subtitle, onEdit }) => (
     <div 
       onClick={onEdit}
-      className="flex justify-between items-center p-2 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-teal-200 transition-colors cursor-pointer group"
+      // Compact Padding: p-2.5 to match standard cards
+      className="flex justify-between items-center p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-teal-300 transition-colors cursor-pointer group"
     >
       <div className="min-w-0 pr-2">
         <h4 className="text-[13px] font-bold text-slate-800 truncate group-hover:text-teal-700 transition-colors">{title}</h4>
@@ -158,7 +151,6 @@ const Settings = ({ data, setData, onLogout }) => {
     </div>
   );
 
-  // Consistent PADDING: p-2 (match footer) inside the expanded area
   const renderAccordion = (id, title, icon, colorClass, children) => {
     const isExpanded = expandedSection === id;
     const Icon = icon;
@@ -166,16 +158,24 @@ const Settings = ({ data, setData, onLogout }) => {
       <div className={`flex flex-col border-b border-slate-100 ${isExpanded ? 'flex-1 min-h-0' : 'flex-none'}`}>
         <button 
           onClick={() => setExpandedSection(isExpanded ? null : id)}
+          // MATCHING APPOINTMENTS STYLE:
+          // px-3 py-2.5 (was px-4 py-3)
           className={`flex-none flex items-center justify-between px-3 py-2.5 bg-white hover:bg-slate-50 transition-colors z-10 shadow-sm ${isExpanded ? 'border-b border-slate-100' : 'border-transparent'}`}
         >
+          {/* gap-1.5 (was gap-2) */}
           <div className={`flex items-center gap-1.5 ${colorClass}`}>
+            {/* Icon size 14 (was 16) */}
             <Icon size={14} />
+            {/* Text 11px (was 12px) */}
             <h3 className="text-[11px] font-bold uppercase tracking-wider">{title}</h3>
           </div>
+          {/* Arrow size 14 (was 16) */}
           {isExpanded ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
         </button>
         {isExpanded && (
-          <div className="flex-1 overflow-y-auto bg-slate-50/50 p-2 space-y-2 scrollbar-hide animate-fadeIn">
+          // MATCHING CONTENT STYLE:
+          // p-2 space-y-1.5 (was p-3 space-y-2)
+          <div className="flex-1 overflow-y-auto bg-slate-50/50 p-2 space-y-1.5 scrollbar-hide animate-fadeIn">
             {children}
           </div>
         )}
@@ -190,25 +190,8 @@ const Settings = ({ data, setData, onLogout }) => {
     <div className="h-full flex flex-col bg-slate-50">
       <ModuleHeader title="Settings" showSearch={false} />
       
-      {/* CONSISTENT SPACING: 
-          - p-2 (padding around content)
-          - gap-2 (space between Profile, Accordion, and Footer) 
-      */}
-      <div className="flex-1 flex flex-col min-h-0 p-2 gap-2 max-w-2xl mx-auto w-full">
-        
-        {/* Profile - p-2 to match footer */}
-        <div className="flex-none bg-white p-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 relative">
-          <div className="relative">
-            <div className="w-14 h-14 bg-teal-100 text-teal-700 rounded-full flex items-center justify-center text-[18px] font-bold overflow-hidden border-2 border-white shadow-sm">AD</div>
-            <button className="absolute bottom-0 right-0 bg-teal-600 text-white p-1 rounded-full shadow border border-white hover:bg-teal-700 transition-colors"><Edit2 size={8} /></button>
-          </div>
-          <div>
-            <h3 className="font-bold text-[15px] text-slate-800 leading-tight">Admin User</h3>
-            <p className="text-[11px] text-slate-500 uppercase tracking-wide font-bold mt-0.5">Operations Manager</p>
-          </div>
-        </div>
-
-        {/* Settings Accordion Container */}
+      {/* Container Padding: p-2 gap-2 to match other pages */}
+      <div className="flex-1 flex flex-col min-h-0 p-2 gap-2 max-w-3xl mx-auto w-full">
         <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           
           {/* 1. CLINIC */}
@@ -227,17 +210,9 @@ const Settings = ({ data, setData, onLogout }) => {
             </>
           )}
           
-          {/* 2. WHATSAPP & TEMPLATES */}
+          {/* 2. WHATSAPP SETTINGS (Renamed) */}
           {renderAccordion('whatsapp', 'Whatsapp Settings', MessageCircle, 'text-green-600',
             <>
-              <SettingItem 
-                title="Clinic Whatsapp Number" 
-                subtitle={data.clinic?.phone || 'Set Phone...'} 
-                onEdit={() => openEdit({ title: 'Edit Whatsapp Number', type: 'single_input', inputLabel: 'Phone Number', stateKey: 'phone', initialData: { value: data.clinic?.phone } })}
-              />
-              
-              <div className="my-1 border-t border-slate-200"></div>
-              
               {clinicTemplates.map((tpl, idx) => (
                 <SettingItem 
                   key={idx}
@@ -249,7 +224,7 @@ const Settings = ({ data, setData, onLogout }) => {
 
               <button 
                 onClick={() => openEdit({ title: 'Add New Template', type: 'template', initialData: { title: '', text: '' } })}
-                className="w-full mt-1 py-2 text-[12px] font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100"
+                className="w-full mt-1.5 py-2 text-[12px] font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100"
               >
                 <Plus size={14} /> Add Template
               </button>
@@ -270,7 +245,7 @@ const Settings = ({ data, setData, onLogout }) => {
 
               <button 
                 onClick={() => openEdit({ title: 'Add New Policy', type: 'policy', initialData: { title: '', text: '' } })}
-                className="w-full mt-1 py-2 text-[12px] font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100"
+                className="w-full mt-1.5 py-2 text-[12px] font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100"
               >
                 <Plus size={14} /> Add Policy
               </button>
@@ -279,16 +254,9 @@ const Settings = ({ data, setData, onLogout }) => {
         </div>
       </div>
 
-      {/* FOOTER ACTIONS - Fixed at bottom */}
-      {/* p-2 and space-y-2 sets the consistent rhythm for the whole page */}
-      <div className="flex-none px-2 pb-2 pt-0 space-y-2 max-w-2xl mx-auto w-full bg-slate-50">
-        <button onClick={() => openEdit({ title: 'Change Password', type: 'change_password' })} className="w-full bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 py-2 rounded-xl text-[13px] font-bold flex items-center justify-center gap-2 shadow-sm transition-colors"><Lock size={14} /> Change Password</button>
-        <button onClick={onLogout} className="w-full bg-red-50 text-red-600 hover:bg-red-100 border border-red-100 py-2 rounded-xl text-[13px] font-bold flex items-center justify-center gap-2 shadow-sm transition-colors"><LogOut size={14} /> Sign Out</button>
-      </div>
-
       {/* EDIT MODAL */}
       <Modal isOpen={!!editModal} onClose={() => { setEditModal(null); setModalError(''); setInvalidFields([]); }} title={editModal?.title} footer={
-          <button onClick={handleSaveSetting} disabled={loading} className="w-full bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70">
+          <button onClick={handleSaveSetting} disabled={loading} className="w-full bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70 hover:bg-teal-700 transition-colors">
              {loading ? 'Saving...' : 'Save Changes'}
           </button>
         }>
@@ -314,14 +282,6 @@ const Settings = ({ data, setData, onLogout }) => {
                   <textarea className="w-full p-2 border border-slate-200 rounded-lg text-[13px] h-32 outline-none focus:ring-1 focus:ring-teal-500 resize-none" value={formData.text || ''} onChange={e => setFormData({...formData, text: e.target.value})} />
                   {editModal.type === 'template' && <p className="text-[10px] text-slate-400 mt-1">Variables: {'{patient_name}, {doctor_name}, {time}, {date}'}</p>}
                </div>
-             </>
-           )}
-
-           {editModal?.type === 'change_password' && (
-             <>
-               <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Current Password</label><input type="password" className="w-full p-2 border border-slate-200 rounded-lg text-[13px]" /></div>
-               <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">New Password</label><input type="password" className="w-full p-2 border border-slate-200 rounded-lg text-[13px]" /></div>
-               <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Confirm Password</label><input type="password" className="w-full p-2 border border-slate-200 rounded-lg text-[13px]" /></div>
              </>
            )}
         </div>

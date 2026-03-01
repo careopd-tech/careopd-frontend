@@ -1,7 +1,19 @@
 @import "tailwindcss";
 
-/* You can also put any truly global, custom CSS here if you ever need it */
+/* --- ADD THIS BLOCK TO FIX THE BLACK FLASH --- */
+:root {
+  color-scheme: light; /* 1. Forces browser native UI (scrollbars, dropdowns) to be light */
+}
+
+/* 2. Force inputs/selects to be white immediately */
+input, select, textarea {
+  background-color: #ffffff;
+  color: #0f172a; /* matches slate-900 */
+}
+/* --------------------------------------------- */
+
 body {
   margin: 0;
   padding: 0;
+  background-color: #f8fafc; /* matches slate-50 */
 }

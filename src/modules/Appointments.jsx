@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Calendar, CalendarCheck, History, Plus, Clock, RefreshCw, ChevronDown, ChevronRight, CalendarDays, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { Calendar, CalendarCheck, History, Plus, Clock, RefreshCw, ChevronDown, CalendarDays, CheckCircle, AlertCircle } from 'lucide-react';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import FAB from '../components/ui/FAB';
@@ -9,6 +9,23 @@ import TimeSlotPicker from '../components/business/TimeSlotPicker';
 import API_BASE_URL from '../config';
 
 const getTodayDate = () => new Date().toISOString().split('T')[0];
+
+// --- NEW: SKELETON LOADER COMPONENT ---
+// This creates the "Ghost UI" effect instead of a blocking spinner
+const AppointmentSkeleton = () => (
+  <div className="space-y-3 p-2 animate-pulse">
+    {[1, 2, 3].map((i) => (
+      <div key={i} className="flex gap-3 p-3 bg-white rounded-xl border border-slate-100">
+        <div className="flex-1 space-y-2">
+          <div className="h-4 bg-slate-100 rounded w-1/4"></div>
+          <div className="h-5 bg-slate-100 rounded w-1/2"></div>
+          <div className="h-3 bg-slate-100 rounded w-1/3"></div>
+        </div>
+        <div className="w-20 h-8 bg-slate-100 rounded-lg"></div>
+      </div>
+    ))}
+  </div>
+);
 
 const Appointments = ({ data, setData }) => {
   const [filter, setFilter] = useState('All');
@@ -26,10 +43,13 @@ const Appointments = ({ data, setData }) => {
   const [rebookingApptId, setRebookingApptId] = useState(null);
   const previousListRef = useRef(null);
   
-  // Notification State
   const [notification, setNotification] = useState(null);
 
-  const [loading, setLoading] = useState(true);
+  // --- LOGIC FIX 1: Initialize loading based on data presence ---
+  // If we already have appointments (from App.jsx or previous fetch), start false.
+  const [loading, setLoading] = useState(!data.appointments || data.appointments.length === 0);
+
+  // Form State
   const [newAppt, setNewAppt] = useState({ patientId: '', department: '', doctorId: '', time: '', date: getTodayDate() });
   const [newPatientDetails, setNewPatientDetails] = useState({ name: '', phone: '', age: '', gender: 'M', address: '' });
   const [actionAppt, setActionAppt] = useState(null);
@@ -38,41 +58,49 @@ const Appointments = ({ data, setData }) => {
   const [invalidFields, setInvalidFields] = useState([]);
 
   // --- 1. DATA FETCHING ---
-  useEffect(() => {
-    const fetchAllData = async () => {
-      const clinicId = localStorage.getItem('clinicId');
-      if (!clinicId) return setLoading(false);
+  // Copy into Appointments.jsx
+useEffect(() => {
+  const fetchAllData = async () => {
+    const clinicId = localStorage.getItem('clinicId');
+    if (!clinicId) return;
 
-      try {
-        setLoading(true);
-        const [apptsRes, docsRes, patsRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/appointments/${clinicId}`),
-          fetch(`${API_BASE_URL}/api/doctors/${clinicId}`),
-          fetch(`${API_BASE_URL}/api/patients/${clinicId}`)
+    try {
+      // Appointments need all three to display names correctly
+      const [apptsRes, docsRes, patsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/appointments/${clinicId}`),
+        fetch(`${API_BASE_URL}/api/doctors/${clinicId}`),
+        fetch(`${API_BASE_URL}/api/patients/${clinicId}`)
+      ]);
+
+      if (apptsRes.ok && docsRes.ok && patsRes.ok) {
+        const [appts, docs, pats] = await Promise.all([
+            apptsRes.json(), 
+            docsRes.json(), 
+            patsRes.json()
         ]);
-
-        if (apptsRes.ok && docsRes.ok && patsRes.ok) {
-          const [appts, docs, pats] = await Promise.all([apptsRes.json(), docsRes.json(), patsRes.json()]);
-          setData(prev => ({ ...prev, appointments: appts, doctors: docs, patients: pats }));
-        }
-      } catch (err) {
-        console.error("Fetch Error:", err);
-      } finally {
-        setLoading(false);
+        
+        setData(prev => ({ ...prev, appointments: appts, doctors: docs, patients: pats }));
       }
-    };
-    fetchAllData();
-  }, [setData]);
+    } catch (err) {
+      console.error("Fetch Error:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // --- 2. NOTIFICATION SYSTEM (FIXED) ---
+  fetchAllData();
+
+  // Polling every 60 seconds
+  const intervalId = setInterval(fetchAllData, 60000);
+
+  return () => clearInterval(intervalId);
+}, [setData]); // ✅ SAFE: No data dependencies
+
+  // --- 2. NOTIFICATION SYSTEM ---
   const showNotification = (message, type = 'success') => {
-    // A. Show the Toast (Visual Pop-up)
     setNotification({ message, type });
-
-    // B. Add to Global History (So it reflects in the panel later)
     setData(prev => ({
       ...prev,
-      // Create 'notifications' array if it doesn't exist, add new one to the top
       notifications: [
         {
           id: Date.now(),
@@ -84,12 +112,10 @@ const Appointments = ({ data, setData }) => {
         ...(prev.notifications || [])
       ]
     }));
-
-    // C. Hide Toast after 3s
     setTimeout(() => setNotification(null), 3000);
   };
 
-  // --- 3. ROBUST HELPERS ---
+  // --- 3. HELPERS ---
   const getPatientName = (identifier) => {
     if (!identifier) return 'Unknown';
     if (typeof identifier === 'object' && identifier.name) return identifier.name;
@@ -111,10 +137,9 @@ const Appointments = ({ data, setData }) => {
     return (data.doctors || []).find(d => String(d._id) === id.toString() || String(d.id) === id.toString());
   };
 
-  // --- 4. VALIDATION LOGIC ---
   const checkPatientConflict = (patientId, date, time, excludeApptId = null) => {
     if (patientId === 'add_new') return false;
-    return data.appointments.some(a => 
+    return (data.appointments || []).some(a => 
       String(a.patientId) === String(patientId) &&
       a.date === date &&
       a.time === time &&
@@ -161,7 +186,7 @@ const Appointments = ({ data, setData }) => {
     upcoming: filteredAppointments.filter(a => a.date > todayStr).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
   };
 
-  // --- 6. HANDLERS ---
+  // --- 6. HANDLERS (Same as before) ---
   const handleStatusChange = (id, newStatus) => {
     const updated = data.appointments.map(a => a._id === id ? { ...a, status: newStatus } : a);
     setData(prev => ({ ...prev, appointments: updated }));
@@ -180,11 +205,8 @@ const Appointments = ({ data, setData }) => {
       time: ''
     });
 
-    if (isPast) {
-      setRebookingApptId(null); // Clone (POST)
-    } else {
-      setRebookingApptId(appt._id); // Update (PUT)
-    }
+    if (isPast) setRebookingApptId(null); 
+    else setRebookingApptId(appt._id);
     
     setIsAddModalOpen(true);
   };
@@ -199,7 +221,7 @@ const Appointments = ({ data, setData }) => {
       });
       if (response.ok) {
           handleStatusChange(actionAppt._id, 'Cancelled');
-          showNotification('Appointment Cancelled', 'error'); // Trigger Notification
+          showNotification('Appointment Cancelled', 'error');
       }
     } catch(e) { console.error(e); }
     setIsCancelModalOpen(false);
@@ -324,6 +346,7 @@ const Appointments = ({ data, setData }) => {
   const renderAccordionSection = (id, title, icon, colorClass, items) => {
     const isExpanded = expandedSection === id;
     const Icon = icon;
+    
     return (
       <div className={`flex flex-col border-b border-slate-100 ${isExpanded ? 'flex-1 min-h-0' : 'flex-none'}`}>
         <button onClick={() => setExpandedSection(isExpanded ? null : id)} className={`flex items-center justify-between px-3 py-2.5 landscape:py-1.5 bg-white hover:bg-slate-50 transition-colors z-10 shadow-sm border-b outline-none ${isExpanded ? 'border-slate-100' : 'border-transparent'}`}>
@@ -331,13 +354,23 @@ const Appointments = ({ data, setData }) => {
             <Icon size={14} />
             <h3 className="text-[11px] font-bold uppercase tracking-wider">{title}</h3>
             {id === 'today' && <span className="bg-teal-100 text-teal-700 text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-1.5">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
-            <span className="ml-1.5 text-[10px] text-slate-400 font-normal">({items.length})</span>
+            {/* Show count only if not loading, or if we have items */}
+            <span className="ml-1.5 text-[10px] text-slate-400 font-normal">
+                {(!loading || items.length > 0) ? `(${items.length})` : ''}
+            </span>
           </div>
           <div className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}><ChevronDown size={14} className="text-slate-400" /></div>
         </button>
+        
         {isExpanded && (
-          <div ref={id === 'previous' ? previousListRef : null} className="flex-1 overflow-y-auto bg-slate-50/50 p-2 space-y-1.5 scrollbar-hide animate-fadeIn">
-            {items.length > 0 ? items.map(renderAppointmentCard) : <div className="text-center py-6 text-slate-400 text-[11px] italic">No appointments</div>}
+          <div ref={id === 'previous' ? previousListRef : null} className="flex-1 overflow-y-auto bg-slate-50/50 p-2 space-y-1.5 scrollbar-hide animate-fadeIn relative">
+             {/* --- UI FIX: SKELETON LOADER --- */}
+             {/* If loading AND no items, show Skeleton. If items exist, show them. */}
+             {loading && items.length === 0 ? (
+                <AppointmentSkeleton />
+             ) : (
+                items.length > 0 ? items.map(renderAppointmentCard) : <div className="text-center py-6 text-slate-400 text-[11px] italic">No appointments</div>
+             )}
           </div>
         )}
       </div>
@@ -352,7 +385,7 @@ const Appointments = ({ data, setData }) => {
     const showActions = !isCompleted && !isCancelled && !isPast;
     
     return (
-      <div key={appt._id} className={`p-3 rounded-xl border border-slate-100 shadow-sm relative transition-all flex flex-col md:flex-row landscape:flex-row md:items-stretch landscape:items-stretch gap-2 md:gap-3 landscape:gap-3 ${isCancelled || isNoShow ? 'bg-slate-50 opacity-90' : 'bg-white'}`}>
+      <div key={appt._id} className={`p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col md:flex-row landscape:flex-row md:items-stretch landscape:items-stretch gap-2 md:gap-3 landscape:gap-3 ${isCancelled || isNoShow ? 'bg-slate-50 opacity-90' : 'bg-white'}`}>
         <div className={`flex-1 min-w-0 ${(isCancelled || isNoShow) ? 'grayscale opacity-75' : ''}`}>
           <div className="flex justify-between items-start mb-1.5">
             <div className="flex items-center gap-1.5 mt-0.5">
@@ -382,30 +415,23 @@ const Appointments = ({ data, setData }) => {
 
   const clearFilters = () => { setDateRange({ from: '', to: '' }); setDoctorFilter(''); setIsFilterModalOpen(false); };
 
-  if (loading && (!data.appointments || data.appointments.length === 0)) return <div className="h-full flex items-center justify-center"><div className="text-teal-600 font-bold animate-pulse">Loading Appts...</div></div>;
-
   return (
-    
     <div className="h-full flex flex-col relative">
-      {/* NOTIFICATION TOAST - FIXED POSITION */}
       {notification && (
-        <div className={`fixed top-6 right-6 z-[100] px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 transition-all duration-300 animate-in fade-in slide-in-from-top-4 ${notification.type === 'success' ? 'bg-white border-l-4 border-teal-500 text-teal-800' : 'bg-white border-l-4 border-red-500 text-red-800'}`}>
+        <div className={`fixed top-6 right-6 z-[100] px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 duration-300 animate-in fade-in slide-in-from-top-4 ${notification.type === 'success' ? 'bg-white border-l-4 border-teal-500 text-teal-800' : 'bg-white border-l-4 border-red-500 text-red-800'}`}>
           {notification.type === 'success' ? <CheckCircle size={20} className="text-teal-500" /> : <AlertCircle size={20} className="text-red-500" />}
           <span className="text-[13px] font-bold">{notification.message}</span>
         </div>
       )}
-<ModuleHeader 
-  title="Appointments" 
-  shortTitle="Appts" 
-  searchVal={searchQuery} 
-  onSearch={setSearchQuery} 
-  onFilterClick={() => setIsFilterModalOpen(true)} 
-  hasFilter={dateRange.from || dateRange.to || doctorFilter} 
-  
-  // ✅ ADD THIS LINE:
-  notifications={data.notifications || []} 
-/>
-
+      <ModuleHeader 
+        title="Appointments" 
+        shortTitle="Appts" 
+        searchVal={searchQuery} 
+        onSearch={setSearchQuery} 
+        onFilterClick={() => setIsFilterModalOpen(true)} 
+        hasFilter={dateRange.from || dateRange.to || doctorFilter} 
+        notifications={data.notifications || []} 
+      />
       
       <div className="flex-1 flex flex-col landscape:flex-row min-h-0 p-2 gap-2">
         <div className="flex-none landscape:w-[72px] md:landscape:w-20 landscape:h-full pb-1 landscape:pb-0">
@@ -416,7 +442,7 @@ const Appointments = ({ data, setData }) => {
               { label: 'Pending', val: stats.pending, color: stats.pending > 0 ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-400', filterKey: 'Upcoming', isToggle: true },
               { label: 'Cancelled', val: stats.cancelled, color: 'bg-red-50 text-red-700', filterKey: 'Cancelled', isToggle: true }
             ].map((s, i) => (
-                <button key={i} onClick={() => setFilter(s.filterKey === filter && s.isToggle ? 'All' : s.filterKey)} className={`flex-1 p-1.5 landscape:p-1 md:landscape:p-1.5 rounded-xl border transition-all duration-200 text-center relative select-none flex flex-col items-center justify-center ${s.color} ${filter === s.filterKey && s.isToggle ? 'border-slate-400 shadow-inner' : 'border-slate-100'}`}>
+                <button key={i} onClick={() => setFilter(s.filterKey === filter && s.isToggle ? 'All' : s.filterKey)} className={`flex-1 p-1.5 landscape:p-1 md:landscape:p-1.5 rounded-xl border duration-200 text-center relative select-none flex flex-col items-center justify-center ${s.color} ${filter === s.filterKey && s.isToggle ? 'border-slate-400 shadow-inner' : 'border-slate-100'}`}>
                   <div className="text-[17px] md:text-[19px] font-bold leading-tight">{s.val}</div>
                   <div className="text-[9px] md:text-[10px] font-semibold uppercase mt-0.5">{s.label}</div>
                 </button>
@@ -452,7 +478,7 @@ const Appointments = ({ data, setData }) => {
            )}
            <div className="grid grid-cols-2 gap-2"><div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Department</label><select className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 outline-none" value={newAppt.department} onChange={(e) => setNewAppt({...newAppt, department: e.target.value, doctorId: '', time: ''})}><option value="">All</option>{departments.map(d => <option key={d} value={d}>{d}</option>)}</select></div><div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Doctor <span className="text-red-500">*</span></label><select className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 disabled:bg-slate-100 outline-none ${invalidFields.includes('doctorId') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.doctorId} onChange={(e) => { const doc = getDoctorById(e.target.value); setNewAppt({...newAppt, doctorId: e.target.value, department: doc ? doc.department : newAppt.department, time: ''}); }}><option value="">Select</option>{data.doctors.filter(d => d.status !== 'Inactive' && (!newAppt.department || d.department === newAppt.department)).map(d => <option key={d._id} value={d._id}>{d.name}</option>)}</select></div></div>
            <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Select Date <span className="text-red-500">*</span></label><input type="date" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 outline-none ${invalidFields.includes('date') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.date} onChange={(e) => setNewAppt({...newAppt, date: e.target.value, time: ''})} /></div>
-           <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Available Slots <span className="text-red-500">*</span></label><div className={`rounded-lg ${invalidFields.includes('time') ? 'ring-1 ring-red-500 border-red-500' : ''}`}><TimeSlotPicker selectedTime={newAppt.time} onSelect={(t) => setNewAppt({...newAppt, time: t})} doctor={getDoctorById(newAppt.doctorId)} date={newAppt.date} appointments={data.appointments.filter(a => a.doctorId === newAppt.doctorId &&     a.date === newAppt.date &&    a.status !== 'Cancelled')} /></div></div>
+           <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Available Slots <span className="text-red-500">*</span></label><div className={`rounded-lg ${invalidFields.includes('time') ? 'ring-1 ring-red-500 border-red-500' : ''}`}><TimeSlotPicker selectedTime={newAppt.time} onSelect={(t) => setNewAppt({...newAppt, time: t})} doctor={getDoctorById(newAppt.doctorId)} date={newAppt.date} appointments={data.appointments.filter(a => a.doctorId === newAppt.doctorId &&    a.date === newAppt.date &&    a.status !== 'Cancelled')} /></div></div>
         </div>
       </Modal>
 

@@ -9,6 +9,28 @@ import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import API_BASE_URL from '../config';
 
+// --- NEW: SKELETON LOADER ---
+const DoctorSkeleton = () => (
+  <div className="space-y-3 p-2 animate-pulse">
+    {[1, 2, 3].map((i) => (
+      <div key={i} className="p-3 rounded-xl border border-slate-100 bg-white flex flex-col md:flex-row gap-3">
+        <div className="flex-1 flex gap-3">
+          <div className="w-10 h-10 rounded-full bg-slate-100 flex-shrink-0"></div>
+          <div className="flex-1 space-y-2">
+            <div className="h-4 bg-slate-100 rounded w-1/3"></div>
+            <div className="h-3 bg-slate-100 rounded w-1/4"></div>
+            <div className="h-4 w-16 bg-slate-100 rounded-full mt-1"></div>
+          </div>
+        </div>
+        <div className="flex gap-2 mt-2 md:mt-0 md:w-32">
+          <div className="flex-1 h-8 bg-slate-100 rounded-lg"></div>
+          <div className="flex-1 h-8 bg-slate-100 rounded-lg"></div>
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 const Doctors = ({ data, setData }) => {
   const [activeModal, setActiveModal] = useState(null);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -27,10 +49,12 @@ const Doctors = ({ data, setData }) => {
   const [statusFilter, setStatusFilter] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [expandedSection, setExpandedSection] = useState('available');
-  const [loading, setLoading] = useState(false); // Added loading state
+
+  // --- LOGIC FIX 1: Smart Loading State ---
+  const [loading, setLoading] = useState(!data.doctors || data.doctors.length === 0);
 
   const defaultDoctorState = {
-    _id: null, // Changed from id to _id for MongoDB
+    _id: null,
     name: '', phone: '', email: '', gender: 'M', address: '',
     department: '', qualification: '', experience: '', regNo: '',
     morningStart: '09:00', morningEnd: '13:00', eveningStart: '17:00', eveningEnd: '21:00',
@@ -40,42 +64,48 @@ const Doctors = ({ data, setData }) => {
   const [newDoctor, setNewDoctor] = useState(defaultDoctorState);
 
   // --- 1. FETCH DATA ON LOAD ---
-  useEffect(() => {
-    const fetchDoctorsAndAppointments = async () => {
-      const clinicId = localStorage.getItem('clinicId');
-      if (!clinicId) return;
+  // Copy into Doctors.jsx
+useEffect(() => {
+  const fetchDoctorsAndAppointments = async () => {
+    const clinicId = localStorage.getItem('clinicId');
+    if (!clinicId) return;
 
-      try {
-        setLoading(true);
-        const [docsRes, apptsRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/doctors/${clinicId}?tag=doctors`),
-          fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments`) // Needed for calendar slots
-        ]);
+    // Note: We do NOT set loading=true here to avoid flickering during polling
+    
+    try {
+      const [docsRes, apptsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/doctors/${clinicId}?tag=doctors`),
+        fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments`)
+      ]);
 
-        if (docsRes.ok && apptsRes.ok) {
-          const docs = await docsRes.json();
-          const appts = await apptsRes.json();
-          
-          setData(prev => ({
-            ...prev,
-            doctors: docs,
-            appointments: appts
-          }));
-        }
-      } catch (err) {
-        console.error("Error fetching doctor data:", err);
-      } finally {
-        setLoading(false);
+      if (docsRes.ok && apptsRes.ok) {
+        const docs = await docsRes.json();
+        const appts = await apptsRes.json();
+        
+        setData(prev => ({
+          ...prev,
+          doctors: docs,
+          appointments: appts
+        }));
       }
-    };
+    } catch (err) {
+      console.error("Error fetching doctor data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchDoctorsAndAppointments();
-  }, [setData]);
+  fetchDoctorsAndAppointments();
+  
+  // Polling every 60 seconds
+  const intervalId = setInterval(fetchDoctorsAndAppointments, 60000);
+
+  return () => clearInterval(intervalId);
+}, [setData]); // ✅ SAFE: No data dependencies
 
   // --- 2. HANDLE STATUS CHANGE (API) ---
   const toggleStatus = async (doctor) => {
     if (doctor.status === 'Inactive') {
-       // Reactivate immediately
        try {
          const response = await fetch(`${API_BASE_URL}/api/doctors/${doctor._id}`, {
            method: 'PUT',
@@ -86,13 +116,10 @@ const Doctors = ({ data, setData }) => {
          if (response.ok) {
            const updatedDoc = await response.json();
            const updatedList = data.doctors.map(d => d._id === doctor._id ? updatedDoc : d);
-           setData({ ...data, doctors: updatedList });
+           setData(prev => ({ ...prev, doctors: updatedList }));
          }
-       } catch (err) {
-         console.error("Failed to activate doctor");
-       }
+       } catch (err) { console.error("Failed to activate doctor"); }
     } else {
-       // Open modal for deactivation
        setActiveModal({ type: 'deactivate', doctorId: doctor._id });
     }
   };
@@ -105,13 +132,13 @@ const Doctors = ({ data, setData }) => {
       const response = await fetch(`${API_BASE_URL}/api/doctors/${activeModal.doctorId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'Inactive', reason: reason }) // You might want to save reason in backend
+        body: JSON.stringify({ status: 'Inactive', reason: reason })
       });
 
       if (response.ok) {
         const updatedDoc = await response.json();
         const updatedList = data.doctors.map(d => d._id === activeModal.doctorId ? updatedDoc : d);
-        setData({ ...data, doctors: updatedList });
+        setData(prev => ({ ...prev, doctors: updatedList }));
         setActiveModal(null); 
         setReason('');
       } else {
@@ -126,7 +153,7 @@ const Doctors = ({ data, setData }) => {
     setNewDoctor({
       ...defaultDoctorState,
       ...doc,
-      name: doc.name.replace(/^Dr\.\s*/, '') // Remove prefix for editing
+      name: doc.name.replace(/^Dr\.\s*/, '')
     });
     setIsNewDept(false);
     setNewDeptName('');
@@ -149,10 +176,9 @@ const Doctors = ({ data, setData }) => {
     const finalDept = isNewDept ? newDeptName : newDoctor.department;
     if (!finalDept) errors.push('department');
     if (!newDoctor.qualification) errors.push('qualification');
-    // NEW: Checks if it is truly empty (null or undefined or empty string), but allows 0
-if (newDoctor.experience === '' || newDoctor.experience === null || newDoctor.experience === undefined) {
-    errors.push('experience');
-}
+    if (newDoctor.experience === '' || newDoctor.experience === null || newDoctor.experience === undefined) {
+        errors.push('experience');
+    }
     if (!newDoctor.regNo) errors.push('regNo');
 
     if (!newDoctor.morningStart) errors.push('morningStart');
@@ -175,18 +201,13 @@ if (newDoctor.experience === '' || newDoctor.experience === null || newDoctor.ex
 
     const clinicId = localStorage.getItem('clinicId');
     
-    // Construct Payload
-   // Construct Payload
     const docPayload = {
       clinicId,
       name: newDoctor.name.startsWith('Dr.') ? newDoctor.name : `Dr. ${newDoctor.name}`,
       phone: newDoctor.phone,
       email: newDoctor.email,
       gender: newDoctor.gender,
-      
-      // ✅ Address was already here, but good to keep!
       address: newDoctor.address, 
-      
       department: finalDept,
       qualification: newDoctor.qualification,
       experience: newDoctor.experience,
@@ -196,23 +217,18 @@ if (newDoctor.experience === '' || newDoctor.experience === null || newDoctor.ex
       eveningStart: newDoctor.eveningStart,
       eveningEnd: newDoctor.eveningEnd,
       status: newDoctor.status || 'Available',
-      
-      // ✅ ADD THIS: Photo is now mandatory in Schema. 
-      // We send the existing photo string, or the first letter of the name as a fallback.
       photo: newDoctor.photo || newDoctor.name.charAt(0) 
     };
 
     try {
       let response;
       if (newDoctor._id) {
-        // UPDATE Existing
         response = await fetch(`${API_BASE_URL}/api/doctors/${newDoctor._id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(docPayload)
         });
       } else {
-        // CREATE New
         response = await fetch(`${API_BASE_URL}/api/doctors`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -224,7 +240,6 @@ if (newDoctor.experience === '' || newDoctor.experience === null || newDoctor.ex
         const savedDoc = await response.json();
         
         setData(prev => {
-          // If update, replace; if new, append
           const isUpdate = prev.doctors.some(d => d._id === savedDoc._id);
           return {
             ...prev,
@@ -250,9 +265,8 @@ if (newDoctor.experience === '' || newDoctor.experience === null || newDoctor.ex
   };
 
   const generateSlots = (doc, dateStr) => {
-    // Ensure we are filtering by the correct MongoDB _id
     const docAppts = data.appointments?.filter(a => 
-      (a.doctorId === doc._id || a.doctorId === doc.id) && // Check both for safety during migration
+      (a.doctorId === doc._id || a.doctorId === doc.id) && 
       a.date === dateStr && 
       a.status !== 'Cancelled'
     ) || [];
@@ -313,7 +327,6 @@ if (newDoctor.experience === '' || newDoctor.experience === null || newDoctor.ex
                 <p className="text-[10px] text-slate-500 uppercase leading-tight mt-0.5">{doc.department}</p>
               </div>
             </div>
-            {/* Status toggle area */}
             <div className="flex items-center gap-1.5 mt-1">
               <span className={`text-[10px] font-bold uppercase transition-colors ${!isInactive ? 'text-teal-600' : 'text-slate-400'}`}>
                 {!isInactive ? 'Active' : 'Inactive'}
@@ -366,24 +379,29 @@ if (newDoctor.experience === '' || newDoctor.experience === null || newDoctor.ex
           <div className={`flex items-center gap-1.5 ${colorClass}`}>
             <Icon size={14} />
             <h3 className="text-[11px] font-bold uppercase tracking-wider">{title}</h3>
-            <span className="ml-1.5 text-[10px] text-slate-400 font-normal">({items.length})</span>
+            {/* Count shown only if not loading OR we have items */}
+            <span className="ml-1.5 text-[10px] text-slate-400 font-normal">
+                {(!loading || items.length > 0) ? `(${items.length})` : ''}
+            </span>
           </div>
           {isExpanded ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
         </button>
         
         {isExpanded && (
-          <div className="flex-1 overflow-y-auto bg-slate-50/50 p-2 space-y-1.5 scrollbar-hide">
-            {items.length > 0 ? items.map(renderDoctorCard) : <div className="text-center py-6 text-slate-400 text-[11px] italic">No doctors in this section</div>}
+          <div className="flex-1 overflow-y-auto bg-slate-50/50 p-2 space-y-1.5 scrollbar-hide relative">
+            {/* --- UI FIX: SKELETON LOADER --- */}
+            {loading && items.length === 0 ? (
+                <DoctorSkeleton />
+            ) : (
+                items.length > 0 ? items.map(renderDoctorCard) : <div className="text-center py-6 text-slate-400 text-[11px] italic">No doctors in this section</div>
+            )}
           </div>
         )}
       </div>
     );
   };
 
-  // --- LOADING STATE ---
-  if (loading && (!data.doctors || data.doctors.length === 0)) {
-    return <div className="p-10 text-center font-bold text-teal-600 animate-pulse">Loading Doctors...</div>;
-  }
+  // --- REMOVED BLOCKING LOADING RETURN ---
 
   return (
     <div className="h-full flex flex-col">
