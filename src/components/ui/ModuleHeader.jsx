@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Search, SlidersHorizontal, Bell, X, CheckCircle, AlertCircle, Clock, 
-  User, LogOut, ChevronDown 
+  User, LogOut, ChevronDown, Trash2 
 } from 'lucide-react';
 import MyAccountModal from '../profile/MyAccountModal';
 
@@ -13,11 +13,15 @@ const ModuleHeader = ({
   onSearch, 
   onFilterClick, 
   hasFilter,
-  notifications = [] 
+  notifications = [],
+  onClearAll, // NEW: Handler to clear list
+  onDismiss   // NEW: Handler to remove single item
 }) => {
   const [showNotif, setShowNotif] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  
+  // Count unread (assuming all in list are 'new' until cleared, or logic can be added later)
   const unreadCount = notifications.length;
 
   const notifRef = useRef(null);
@@ -76,6 +80,7 @@ const ModuleHeader = ({
               className={`p-1.5 rounded-lg border transition-colors ${hasFilter ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-slate-200 text-slate-500'}`}
             >
               <SlidersHorizontal size={16} />
+              {hasFilter && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>}
             </button>
           </div>
         )}
@@ -90,7 +95,6 @@ const ModuleHeader = ({
                   setShowNotif(!showNotif); 
                   setIsProfileOpen(false); 
                 }} 
-                // ADDED: flex items-center justify-center w-8 h-8 rounded-full for perfect centering
                 className={`relative transition-colors flex items-center justify-center w-8 h-8 rounded-full outline-none ${showNotif ? 'text-teal-600 bg-teal-50' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}
               >
                 <Bell size={18} />
@@ -102,26 +106,47 @@ const ModuleHeader = ({
               {showNotif && (
                 <div className={POPUP_CLASSES}>
                     <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                      <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Notifications</h3>
-                      <button onClick={() => setShowNotif(false)} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Notifications</h3>
+                        <span className="bg-teal-100 text-teal-700 text-[10px] font-bold px-1.5 rounded-full">{unreadCount}</span>
+                      </div>
+                      
+                      {/* CLEAR ALL BUTTON */}
+                      <div className="flex items-center gap-2">
+                        {unreadCount > 0 && (
+                            <button onClick={onClearAll} className="text-[10px] font-bold text-teal-600 hover:text-teal-700 hover:underline">
+                                Clear All
+                            </button>
+                        )}
+                        <button onClick={() => setShowNotif(false)} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
+                      </div>
                     </div>
+                    
                     <div className="max-h-[300px] overflow-y-auto scrollbar-hide">
                       {notifications.length === 0 ? (
                         <div className="p-6 text-center text-slate-400 text-[12px] italic">No new notifications</div>
                       ) : (
                         <div className="divide-y divide-slate-50">
                           {notifications.map((notif) => (
-                            <div key={notif.id} className="p-3 hover:bg-slate-50 transition-colors flex gap-3 items-start">
+                            <div key={notif.id} className="p-3 hover:bg-slate-50 transition-colors flex gap-3 items-start group relative">
                                <div className={`mt-0.5 flex-shrink-0 ${notif.type === 'success' ? 'text-teal-500' : 'text-red-500'}`}>
                                  {notif.type === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
                                </div>
-                               <div className="flex-1 min-w-0">
+                               <div className="flex-1 min-w-0 pr-4"> {/* Padding Right for X button */}
                                  <p className="text-[12px] text-slate-700 font-medium leading-tight">{notif.message}</p>
                                  <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-400">
                                    <Clock size={10} /> <span>{notif.timestamp}</span>
                                  </div>
                                </div>
-                             </div>
+                               
+                               {/* INDIVIDUAL DISMISS BUTTON */}
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); onDismiss(notif.id); }}
+                                 className="absolute top-3 right-3 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                               >
+                                 <X size={12} />
+                               </button>
+                            </div>
                            ))}
                          </div>
                        )}

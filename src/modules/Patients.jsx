@@ -98,7 +98,7 @@ useEffect(() => {
     setIsAddPatientModalOpen(true);
   };
 
-  const handleSavePatient = async () => {
+ const handleSavePatient = async () => {
     setModalError('');
     let errors = [];
     
@@ -116,17 +116,37 @@ useEffect(() => {
     setInvalidFields([]);
     
     const clinicId = localStorage.getItem('clinicId');
+    
+    // --- SUGGESTION: ROBUST PAYLOAD CONSTRUCTION ---
     const patPayload = {
-      ...newPatient,
       clinicId,
-      type: newPatient._id ? newPatient.type : 'New',
-      lastVisit: newPatient._id ? newPatient.lastVisit : '-'
+      name: newPatient.name,
+      phone: newPatient.phone,
+      age: newPatient.age,
+      gender: newPatient.gender,
+      bloodGroup: newPatient.bloodGroup,
+      email: newPatient.email,
+      address: newPatient.address,
+      insuranceProvider: newPatient.insuranceProvider,
+      insuranceId: newPatient.insuranceId,
+      expiryDate: newPatient.expiryDate,
+      type: newPatient._id ? newPatient.type : 'New' // 'New' for creation, keep existing for update
     };
+
+    // 3. Conditional Fields for UPDATES ONLY
+    // If we are updating, we attach the ID and preserve the lastVisit date.
+    if (newPatient._id) {
+        patPayload._id = newPatient._id;
+        patPayload.lastVisit = newPatient.lastVisit;
+    }
+    // ----------------------------------------------
 
     try {
       let response;
-      if (newPatient._id) {
-        response = await fetch(`${API_BASE_URL}/api/patients/${newPatient._id}`, {
+      
+      // Use patPayload._id to decide (Double check)
+      if (patPayload._id) {
+        response = await fetch(`${API_BASE_URL}/api/patients/${patPayload._id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(patPayload)

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  Plus, CheckCircle, CalendarDays, XCircle, Building2, AlertTriangle, ChevronDown, ChevronRight, Edit2 
+  Plus, CheckCircle, CalendarDays, XCircle, Building2, AlertTriangle, 
+  ChevronDown, ChevronRight, Edit2, CheckCircle as CheckIcon, AlertCircle 
 } from 'lucide-react';
 import { TIME_SLOTS } from '../data/constants';
 import Modal from '../components/ui/Modal';
@@ -9,7 +10,7 @@ import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import API_BASE_URL from '../config';
 
-// --- NEW: SKELETON LOADER ---
+// --- SKELETON LOADER ---
 const DoctorSkeleton = () => (
   <div className="space-y-3 p-2 animate-pulse">
     {[1, 2, 3].map((i) => (
@@ -21,10 +22,6 @@ const DoctorSkeleton = () => (
             <div className="h-3 bg-slate-100 rounded w-1/4"></div>
             <div className="h-4 w-16 bg-slate-100 rounded-full mt-1"></div>
           </div>
-        </div>
-        <div className="flex gap-2 mt-2 md:mt-0 md:w-32">
-          <div className="flex-1 h-8 bg-slate-100 rounded-lg"></div>
-          <div className="flex-1 h-8 bg-slate-100 rounded-lg"></div>
         </div>
       </div>
     ))}
@@ -45,94 +42,139 @@ const Doctors = ({ data, setData }) => {
   const [newDeptName, setNewDeptName] = useState('');
   
   const [reason, setReason] = useState('');
+  const [customReason, setCustomReason] = useState(''); // New state for "Others" text box
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [expandedSection, setExpandedSection] = useState('available');
 
-  // --- LOGIC FIX 1: Smart Loading State ---
   const [loading, setLoading] = useState(!data.doctors || data.doctors.length === 0);
+
+  // --- NOTIFICATION STATE (PERSISTENT) ---
+  // Initialize from LocalStorage to persist across navigation
+  const [notification, setNotification] = useState(null);
+  const [notificationStack, setNotificationStack] = useState(() => {
+      try {
+          const saved = localStorage.getItem('doc_notifications');
+          return saved ? JSON.parse(saved) : [];
+      } catch (e) { return []; }
+  });
+
+  // Sync Notification Stack to LocalStorage
+  useEffect(() => {
+      localStorage.setItem('doc_notifications', JSON.stringify(notificationStack));
+  }, [notificationStack]);
 
   const defaultDoctorState = {
     _id: null,
     name: '', phone: '', email: '', gender: 'M', address: '',
     department: '', qualification: '', experience: '', regNo: '',
     morningStart: '09:00', morningEnd: '13:00', eveningStart: '17:00', eveningEnd: '21:00',
-    photoUrl: '', photo: ''
+    photoUrl: '', photo: '' 
   };
 
   const [newDoctor, setNewDoctor] = useState(defaultDoctorState);
 
-  // --- 1. FETCH DATA ON LOAD ---
-  // Copy into Doctors.jsx
-useEffect(() => {
-  const fetchDoctorsAndAppointments = async () => {
-    const clinicId = localStorage.getItem('clinicId');
-    if (!clinicId) return;
+  // --- NOTIFICATION HELPERS ---
+  const showNotification = (shortMessage, type = 'success', detailedMessage = null) => {
+    setNotification({ message: shortMessage, type });
+    setTimeout(() => setNotification(null), 3000);
+    const newNotif = {
+        id: Date.now(),
+        message: detailedMessage || shortMessage,
+        type,
+        timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+    };
+    setNotificationStack(prev => [newNotif, ...prev]);
+  };
 
-    // Note: We do NOT set loading=true here to avoid flickering during polling
-    
-    try {
-      const [docsRes, apptsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/doctors/${clinicId}?tag=doctors`),
-        fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments`)
-      ]);
+  const handleClearNotifications = () => setNotificationStack([]);
+  const handleDismissNotification = (id) => setNotificationStack(prev => prev.filter(n => n.id !== id));
 
-      if (docsRes.ok && apptsRes.ok) {
-        const docs = await docsRes.json();
-        const appts = await apptsRes.json();
-        
-        setData(prev => ({
-          ...prev,
-          doctors: docs,
-          appointments: appts
-        }));
+  // --- 1. DATA FETCHING ---
+  useEffect(() => {
+    const fetchDoctorsAndAppointments = async () => {
+      const clinicId = localStorage.getItem('clinicId');
+      if (!clinicId) return;
+
+      try {
+        const [docsRes, apptsRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/doctors/${clinicId}?tag=doctors`),
+          fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments`)
+        ]);
+
+        if (docsRes.ok && apptsRes.ok) {
+          const docs = await docsRes.json();
+          const appts = await apptsRes.json();
+          
+          setData(prev => ({
+            ...prev,
+            doctors: docs,
+            appointments: appts
+          }));
+        }
+      } catch (err) {
+        console.error("Error fetching doctor data:", err);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error("Error fetching doctor data:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  fetchDoctorsAndAppointments();
-  
-  // Polling every 60 seconds
-  const intervalId = setInterval(fetchDoctorsAndAppointments, 60000);
+    fetchDoctorsAndAppointments();
+    const intervalId = setInterval(fetchDoctorsAndAppointments, 60000);
+    return () => clearInterval(intervalId);
+  }, [setData]);
 
-  return () => clearInterval(intervalId);
-}, [setData]); // ✅ SAFE: No data dependencies
-
-  // --- 2. HANDLE STATUS CHANGE (API) ---
+  // --- 2. ACTIONS ---
   const toggleStatus = async (doctor) => {
+    // SCENARIO: REACTIVATING (Inactive -> Available)
     if (doctor.status === 'Inactive') {
-       try {
-         const response = await fetch(`${API_BASE_URL}/api/doctors/${doctor._id}`, {
-           method: 'PUT',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({ status: 'Available' })
-         });
-         
-         if (response.ok) {
-           const updatedDoc = await response.json();
-           const updatedList = data.doctors.map(d => d._id === doctor._id ? updatedDoc : d);
-           setData(prev => ({ ...prev, doctors: updatedList }));
-         }
-       } catch (err) { console.error("Failed to activate doctor"); }
-    } else {
-       setActiveModal({ type: 'deactivate', doctorId: doctor._id });
+       // Open Modal for Activation Remarks
+       setReason('');
+       setCustomReason('');
+       setActiveModal({ type: 'status_change', subType: 'activate', doctorId: doctor._id, doctorName: doctor.name });
+    } 
+    // SCENARIO: DEACTIVATING (Available -> Inactive)
+    else {
+       // STRICT VALIDATION: Check for active appointments (Today or Future)
+       const todayStr = new Date().toISOString().split('T')[0];
+       const hasAppointments = (data.appointments || []).some(a => {
+           // Handle Populated vs String ID
+           const apptDocId = a.doctorId && typeof a.doctorId === 'object' ? a.doctorId._id : a.doctorId;
+           return String(apptDocId) === String(doctor._id) && 
+                  a.date >= todayStr && 
+                  a.status !== 'Cancelled';
+       });
+
+       if (hasAppointments) {
+           showNotification(
+        'Cannot Deactivate', 
+        'error', 
+        `${doctor.name} has upcoming appointments. Please cancel them first.`
+    );
+           return;
+       }
+
+       // Open Modal for Deactivation Remarks
+       setReason('');
+       setCustomReason('');
+       setActiveModal({ type: 'status_change', subType: 'deactivate', doctorId: doctor._id, doctorName: doctor.name });
     }
   };
 
-  const confirmDeactivation = async () => {
+  const confirmStatusChange = async () => {
     setModalError('');
-    if (!reason) return setModalError('Please select a reason to deactivate this doctor.');
+    if (!reason) return setModalError('Please select a reason.');
+    if (reason === 'Others' && !customReason.trim()) return setModalError('Please enter remarks.');
+
+    const finalReason = reason === 'Others' ? customReason : reason;
+    const targetStatus = activeModal.subType === 'activate' ? 'Available' : 'Inactive';
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/doctors/${activeModal.doctorId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'Inactive', reason: reason })
+        body: JSON.stringify({ status: targetStatus, reason: finalReason })
       });
 
       if (response.ok) {
@@ -141,8 +183,12 @@ useEffect(() => {
         setData(prev => ({ ...prev, doctors: updatedList }));
         setActiveModal(null); 
         setReason('');
+        setCustomReason('');
+        
+        const actionWord = targetStatus === 'Available' ? 'Activated' : 'Deactivated';
+        showNotification(`Doctor ${actionWord}`, 'success', `${activeModal.doctorName} marked as ${targetStatus}.`);
       } else {
-        setModalError('Failed to deactivate. Try again.');
+        setModalError('Failed to update status.');
       }
     } catch (err) {
       setModalError('Server connection failed.');
@@ -163,22 +209,68 @@ useEffect(() => {
     setIsAddDoctorModalOpen(true);
   };
 
-  // --- 3. SAVE / UPDATE DOCTOR (API) ---
+  // --- INPUT HANDLERS ---
+  const handleNameInput = (e) => {
+      let val = e.target.value.replace(/[^a-zA-Z\s.]/g, '');
+      if (val.startsWith(' ')) val = val.trimStart();
+      val = val.replace(/\s\s+/g, ' '); 
+      setNewDoctor({ ...newDoctor, name: val });
+  };
+
+  const handleQualificationInput = (e) => {
+      let val = e.target.value.replace(/[^a-zA-Z\s,]/g, '');
+      if (val.startsWith(' ')) val = val.trimStart();
+      val = val.replace(/\s\s+/g, ' ');
+      setNewDoctor({ ...newDoctor, qualification: val });
+  };
+
+  const handleExperienceInput = (e) => {
+      const val = e.target.value.replace(/\D/g, '').slice(0, 3);
+      setNewDoctor({ ...newDoctor, experience: val });
+  };
+
+  const handlePhoneInput = (e) => {
+      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+      setNewDoctor({ ...newDoctor, phone: val });
+  };
+
+  const handlePhotoInput = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+          setNewDoctor(prev => ({
+              ...prev,
+              photoUrl: url,        
+              photo: reader.result  
+          }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSaveDoctor = async () => {
     setModalError('');
     let errors = [];
     
+    // Validate Photo
+    if ((!newDoctor.photo || newDoctor.photo.length < 50) && !newDoctor.photoUrl) {
+        errors.push('photo');
+    }
+
     if (!newDoctor.name) errors.push('name');
-    if (!newDoctor.phone) errors.push('phone');
-    if (!newDoctor.email) errors.push('email');
+    if (!newDoctor.phone || newDoctor.phone.length < 10) errors.push('phone');
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!newDoctor.email || !emailRegex.test(newDoctor.email)) errors.push('email');
+    
     if (!newDoctor.address) errors.push('address');
 
     const finalDept = isNewDept ? newDeptName : newDoctor.department;
     if (!finalDept) errors.push('department');
     if (!newDoctor.qualification) errors.push('qualification');
-    if (newDoctor.experience === '' || newDoctor.experience === null || newDoctor.experience === undefined) {
-        errors.push('experience');
-    }
+    if (newDoctor.experience === '' || newDoctor.experience === null) errors.push('experience');
     if (!newDoctor.regNo) errors.push('regNo');
 
     if (!newDoctor.morningStart) errors.push('morningStart');
@@ -188,19 +280,17 @@ useEffect(() => {
 
     if (errors.length > 0) {
       setInvalidFields(errors);
-      if (['name', 'phone', 'email', 'address'].some(f => errors.includes(f))) {
-        setAddDoctorTab('personal');
-      } else if (['department', 'qualification', 'experience', 'regNo'].some(f => errors.includes(f))) {
-        setAddDoctorTab('professional');
-      } else {
-        setAddDoctorTab('working_hours');
-      }
-      return setModalError('Please fill all required details marked with *');
+      if (errors.includes('photo')) setAddDoctorTab('personal');
+      else if (['name', 'phone', 'email', 'address'].some(f => errors.includes(f))) setAddDoctorTab('personal');
+      else if (['department', 'qualification', 'experience', 'regNo'].some(f => errors.includes(f))) setAddDoctorTab('professional');
+      else setAddDoctorTab('working_hours');
+      
+      const msg = errors.includes('photo') ? 'Profile photo is required *' : 'Please fill required fields correctly *';
+      return setModalError(msg);
     }
     setInvalidFields([]);
 
     const clinicId = localStorage.getItem('clinicId');
-    
     const docPayload = {
       clinicId,
       name: newDoctor.name.startsWith('Dr.') ? newDoctor.name : `Dr. ${newDoctor.name}`,
@@ -254,7 +344,7 @@ useEffect(() => {
         setAddDoctorTab('personal');
         setIsNewDept(false);
         setNewDeptName('');
-        setModalError('');
+        showNotification(newDoctor._id ? 'Profile Updated' : 'Doctor Added', 'success');
       } else {
         const errData = await response.json();
         setModalError(errData.error || 'Failed to save doctor.');
@@ -265,11 +355,12 @@ useEffect(() => {
   };
 
   const generateSlots = (doc, dateStr) => {
-    const docAppts = data.appointments?.filter(a => 
-      (a.doctorId === doc._id || a.doctorId === doc.id) && 
-      a.date === dateStr && 
-      a.status !== 'Cancelled'
-    ) || [];
+    const docAppts = (data.appointments || []).filter(a => {
+      const apptDoctorId = a.doctorId && typeof a.doctorId === 'object' ? a.doctorId._id : a.doctorId;
+      return String(apptDoctorId) === String(doc._id) && 
+             a.date === dateStr && 
+             a.status !== 'Cancelled';
+    });
     
     const isWithinShift = (time) => {
       const isMorning = time >= (doc.morningStart || '09:00') && time < (doc.morningEnd || '13:00');
@@ -320,7 +411,7 @@ useEffect(() => {
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2.5 mt-0.5">
               <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-500 text-[13px] flex-shrink-0 overflow-hidden">
-                {typeof doc.photo === 'string' && doc.photo.length > 2 ? <img src={doc.photo} alt="Doc" className="w-full h-full object-cover"/> : <Building2 size={16} className="text-slate-400" />}
+                {typeof doc.photo === 'string' && doc.photo.length > 50 ? <img src={doc.photo} alt="Doc" className="w-full h-full object-cover"/> : <Building2 size={16} className="text-slate-400" />}
               </div>
               <div>
                 <h4 className="font-bold text-[13px] text-slate-800 leading-tight">{doc.name}</h4>
@@ -379,7 +470,6 @@ useEffect(() => {
           <div className={`flex items-center gap-1.5 ${colorClass}`}>
             <Icon size={14} />
             <h3 className="text-[11px] font-bold uppercase tracking-wider">{title}</h3>
-            {/* Count shown only if not loading OR we have items */}
             <span className="ml-1.5 text-[10px] text-slate-400 font-normal">
                 {(!loading || items.length > 0) ? `(${items.length})` : ''}
             </span>
@@ -389,7 +479,6 @@ useEffect(() => {
         
         {isExpanded && (
           <div className="flex-1 overflow-y-auto bg-slate-50/50 p-2 space-y-1.5 scrollbar-hide relative">
-            {/* --- UI FIX: SKELETON LOADER --- */}
             {loading && items.length === 0 ? (
                 <DoctorSkeleton />
             ) : (
@@ -401,16 +490,25 @@ useEffect(() => {
     );
   };
 
-  // --- REMOVED BLOCKING LOADING RETURN ---
-
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col relative">
+      {/* NOTIFICATION TOAST */}
+      {notification && (
+        <div className={`fixed top-6 right-6 z-[100] px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 bg-white border-l-4 ${notification.type === 'success' ? 'border-teal-500 text-teal-800' : 'border-red-500 text-red-800'}`}>
+          {notification.type === 'success' ? <CheckIcon size={20} className="text-teal-500" /> : <AlertCircle size={20} className="text-red-500" />}
+          <span className="text-[13px] font-bold">{notification.message}</span>
+        </div>
+      )}
+
       <ModuleHeader 
         title="Doctors" 
         searchVal={searchQuery} 
         onSearch={setSearchQuery} 
         onFilterClick={() => setIsFilterModalOpen(true)} 
         hasFilter={deptFilter} 
+        notifications={notificationStack} 
+        onClearAll={handleClearNotifications} 
+        onDismiss={handleDismissNotification} 
       />
 
       <div className="flex-1 flex flex-col landscape:flex-row min-h-0 p-2 gap-2">
@@ -444,9 +542,10 @@ useEffect(() => {
 
       <FAB icon={Plus} onClick={() => { setIsNewDept(false); setNewDeptName(''); setIsAddDoctorModalOpen(true); }} />
 
+      {/* FILTER MODAL */}
       <Modal isOpen={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)} title="Filter Doctors" footer={
           <div className="flex gap-2">
-             <button onClick={() => { setDeptFilter(''); setIsFilterModalOpen(false); }} className="flex-1 py-1.5 text-[15px] text-slate-600 font-medium">Clear</button>
+             <button onClick={() => { setDeptFilter(''); setIsFilterModalOpen(false); }} className="flex-1 py-1.5 text-[15px] text-slate-600 font-medium border border-slate-200 rounded-lg bg-white">Clear</button>
              <button onClick={() => setIsFilterModalOpen(false)} className="flex-1 bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium">Apply</button>
           </div>
         }>
@@ -460,6 +559,7 @@ useEffect(() => {
         </div>
       </Modal>
 
+      {/* ADD/EDIT DOCTOR MODAL */}
       <Modal 
         isOpen={isAddDoctorModalOpen} 
         onClose={() => {
@@ -516,15 +616,13 @@ useEffect(() => {
               <div className="space-y-2.5 animate-fadeIn">
                 <div className="flex justify-center mb-1">
                   <label className="relative cursor-pointer group">
-                    <div className="w-14 h-14 rounded-full bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden hover:bg-slate-200 transition-colors">
+                    <div className={`w-14 h-14 rounded-full bg-slate-100 border-2 border-dashed flex items-center justify-center overflow-hidden hover:bg-slate-200 transition-colors ${invalidFields.includes('photo') ? 'border-red-500 bg-red-50' : 'border-slate-300'}`}>
                       {newDoctor.photoUrl ? (
                         <img src={newDoctor.photoUrl} alt="Preview" className="w-full h-full object-cover" />
-                      ) : newDoctor._id && typeof newDoctor.photo === 'string' && newDoctor.photo.length > 2 ? (
+                      ) : newDoctor._id && typeof newDoctor.photo === 'string' && newDoctor.photo.length > 50 ? (
                         <img src={newDoctor.photo} alt="Doc" className="w-full h-full object-cover"/>
-                      ) : newDoctor._id && typeof newDoctor.photo !== 'string' && newDoctor.photo ? (
-                        newDoctor.photo
                       ) : (
-                        <div className="flex flex-col items-center text-slate-400">
+                        <div className={`flex flex-col items-center ${invalidFields.includes('photo') ? 'text-red-500' : 'text-slate-400'}`}>
                            <Plus size={16} />
                            <span className="text-[8px] font-bold mt-0.5 uppercase">Photo <span className="text-red-500">*</span></span>
                         </div>
@@ -535,23 +633,18 @@ useEffect(() => {
                       accept="image/*" 
                       capture="environment"
                       className="hidden" 
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          const url = URL.createObjectURL(e.target.files[0]);
-                          setNewDoctor({...newDoctor, photoUrl: url});
-                        }
-                      }} 
+                      onChange={handlePhotoInput} 
                     />
                   </label>
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Full Name <span className="text-red-500">*</span></label>
-                  <input type="text" placeholder="e.g. Sarah Smith" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('name') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.name} onChange={e => setNewDoctor({...newDoctor, name: e.target.value})} />
+                  <input type="text" placeholder="e.g. Sarah Smith" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('name') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.name} onChange={handleNameInput} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Phone <span className="text-red-500">*</span></label>
-                    <input type="tel" placeholder="Mobile number" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('phone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.phone} onChange={e => setNewDoctor({...newDoctor, phone: e.target.value})} />
+                    <input type="tel" maxLength={10} placeholder="Mobile number" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('phone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.phone} onChange={handlePhoneInput} />
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Gender <span className="text-red-500">*</span></label>
@@ -604,16 +697,16 @@ useEffect(() => {
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Qualifications <span className="text-red-500">*</span></label>
-                  <input type="text" placeholder="e.g. MBBS, MD" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('qualification') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.qualification} onChange={e => setNewDoctor({...newDoctor, qualification: e.target.value})} />
+                  <input type="text" placeholder="e.g. MBBS, MD" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('qualification') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.qualification} onChange={handleQualificationInput} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Experience (Yrs) <span className="text-red-500">*</span></label>
-                    <input type="number" placeholder="Years" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('experience') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.experience} onChange={e => setNewDoctor({...newDoctor, experience: e.target.value})} />
+                    <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Experience (Months) <span className="text-red-500">*</span></label>
+                    <input type="number" placeholder="Months" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('experience') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.experience} onChange={handleExperienceInput} />
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Reg. Number <span className="text-red-500">*</span></label>
-                    <input type="text" placeholder="Medical Reg No." className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('regNo') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.regNo} onChange={e => setNewDoctor({...newDoctor, regNo: e.target.value})} />
+                    <input type="text" maxLength={20} placeholder="Medical Reg No." className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('regNo') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.regNo} onChange={e => setNewDoctor({...newDoctor, regNo: e.target.value})} />
                   </div>
                 </div>
               </div>
@@ -666,18 +759,59 @@ useEffect(() => {
         </div>
       </Modal>
 
-      <Modal isOpen={activeModal?.type === 'deactivate'} onClose={() => { setActiveModal(null); setModalError(''); }} title="Deactivate Doctor" footer={
-          <button onClick={confirmDeactivation} className="w-full bg-red-600 text-white py-1.5 rounded-lg text-[15px] font-medium">Confirm Deactivation</button>
-        }>
+      {/* UPDATE STATUS MODAL (REUSED FOR DEACTIVATE / REACTIVATE) */}
+      <Modal 
+        isOpen={activeModal?.type === 'status_change'} 
+        onClose={() => { setActiveModal(null); setModalError(''); setReason(''); setCustomReason(''); }} 
+        title={activeModal?.subType === 'activate' ? 'Reactivate Doctor' : 'Deactivate Doctor'} 
+        footer={
+          <button onClick={confirmStatusChange} className={`w-full py-1.5 rounded-lg text-[15px] font-medium text-white ${activeModal?.subType === 'activate' ? 'bg-teal-600' : 'bg-red-600'}`}>
+            {activeModal?.subType === 'activate' ? 'Confirm Activation' : 'Confirm Deactivation'}
+          </button>
+        }
+      >
         <div className="space-y-3">
           <AlertMessage message={modalError} />
-          <div className="bg-amber-50 p-2 rounded-lg flex gap-2 text-amber-800 text-[13px]"><AlertTriangle size={16} className="shrink-0" /><p>This action blocks new appointments.</p></div>
+          
+          {/* Dynamic Warning Message */}
+          <div className={`p-2 rounded-lg flex gap-2 text-[13px] ${activeModal?.subType === 'activate' ? 'bg-teal-50 text-teal-800' : 'bg-amber-50 text-amber-800'}`}>
+             <AlertTriangle size={16} className="shrink-0" />
+             <p>{activeModal?.subType === 'activate' ? 'This action will allow new appointments.' : 'This action blocks new appointments.'}</p>
+          </div>
+
           <div>
             <label className="block text-[13px] font-bold text-slate-700 mb-1">Reason</label>
             <select className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50" value={reason} onChange={(e) => setReason(e.target.value)}>
-              <option value="">Select Reason...</option><option value="resigned">Resigned</option><option value="leave">Long Leave</option>
+              <option value="">Select Reason...</option>
+              {activeModal?.subType === 'activate' ? (
+                  <>
+                    <option value="Returned from Leave">Returned from Leave</option>
+                    <option value="Re-joined">Re-joined</option>
+                    <option value="Others">Others</option>
+                  </>
+              ) : (
+                  <>
+                    <option value="Resigned">Resigned</option>
+                    <option value="Long Leave">Long Leave</option>
+                    <option value="Others">Others</option>
+                  </>
+              )}
             </select>
           </div>
+
+          {/* Conditional Remarks Box */}
+          {reason === 'Others' && (
+             <div className="animate-fadeIn">
+                <label className="block text-[13px] font-bold text-slate-700 mb-1">Remarks</label>
+                <textarea 
+                  className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 outline-none focus:ring-1 focus:ring-teal-500" 
+                  rows="3"
+                  placeholder="Enter specific details..."
+                  value={customReason}
+                  onChange={(e) => setCustomReason(e.target.value)}
+                />
+             </div>
+          )}
         </div>
       </Modal>
 
@@ -685,7 +819,7 @@ useEffect(() => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <label className="text-[13px] font-bold text-slate-700">Select Date</label>
-            <input type="date" className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[13px] focus:ring-1 focus:ring-teal-500" value={calendarDate} onChange={(e) => setCalendarDate(e.target.value)} />
+            <input type="date" min={new Date().toISOString().split('T')[0]} className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[13px] focus:ring-1 focus:ring-teal-500" value={calendarDate} onChange={(e) => setCalendarDate(e.target.value)} />
           </div>
           <div>
             <h4 className="text-[11px] font-bold text-slate-500 uppercase mb-2">Available & Booked Slots</h4>

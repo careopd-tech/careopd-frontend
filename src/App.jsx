@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import { DateProvider } from './context/DateContext'; // <--- Provider Import
 import API_BASE_URL from './config'; 
 import Layout from './components/layout/Layout';
 
-// --- INSTANT IMPORTS ---
+// --- MODULE IMPORTS ---
 import Auth from './modules/Auth';
 import Appointments from './modules/Appointments';
 import Doctors from './modules/Doctors';
@@ -10,9 +11,7 @@ import Patients from './modules/Patients';
 import Settings from './modules/Settings';
 
 const App = () => {
-  // --- FIX 1: NO FLASH ON REFRESH ---
-  // By passing a function () => check, React runs this logic BEFORE the first render.
-  // The app will boot up directly in 'authenticated' mode if the ID exists.
+  // --- AUTH STATE ---
   const [authState, setAuthState] = useState(() => {
     return localStorage.getItem('clinicId') ? 'authenticated' : 'login';
   });
@@ -33,7 +32,6 @@ const App = () => {
     localStorage.clear(); 
     setAuthState('login');
     setActiveTab('appointments');
-    // Clear sensitive data from memory immediately
     setData({ appointments: [], doctors: [], patients: [], clinic: {}, notifications: [] });
   };
 
@@ -52,16 +50,17 @@ const App = () => {
   }
 
   // --- RENDER ---
-  // If not authenticated, show Auth screen
   if (authState !== 'authenticated') {
     return <Auth authState={authState} setAuthState={setAuthState} />;
   }
 
-  // If authenticated, show the App Layout
+  // WRAP APP IN DATE PROVIDER
   return (
-    <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
+    <DateProvider>
+      <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
         {content}
-    </Layout>
+      </Layout>
+    </DateProvider>
   );
 };
 
