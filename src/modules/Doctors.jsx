@@ -354,7 +354,7 @@ const Doctors = ({ data, setData }) => {
     }
   };
 
-  const generateSlots = (doc, dateStr) => {
+const generateSlots = (doc, dateStr) => {
     const docAppts = (data.appointments || []).filter(a => {
       const apptDoctorId = a.doctorId && typeof a.doctorId === 'object' ? a.doctorId._id : a.doctorId;
       return String(apptDoctorId) === String(doc._id) && 
@@ -362,12 +362,27 @@ const Doctors = ({ data, setData }) => {
              a.status !== 'Cancelled';
     });
     
+    // --- NEW: Helper to convert "02:00 PM" to "14:00" for accurate math ---
+    const convertTo24Hour = (timeStr) => {
+      if (!timeStr || !timeStr.includes('M')) return timeStr; // Fallback if already 24h
+      const [time, modifier] = timeStr.split(' ');
+      let [hours, minutes] = time.split(':');
+      if (hours === '12') {
+        hours = modifier === 'AM' ? '00' : '12';
+      } else if (modifier === 'PM') {
+        hours = (parseInt(hours, 10) + 12).toString();
+      }
+      return `${hours.padStart(2, '0')}:${minutes}`;
+    };
+
     const isWithinShift = (time) => {
-      const isMorning = time >= (doc.morningStart || '09:00') && time < (doc.morningEnd || '13:00');
-      const isEvening = time >= (doc.eveningStart || '17:00') && time < (doc.eveningEnd || '21:00');
+      const time24 = convertTo24Hour(time); // Convert slot for comparison
+      const isMorning = time24 >= (doc.morningStart || '09:00') && time24 < (doc.morningEnd || '13:00');
+      const isEvening = time24 >= (doc.eveningStart || '17:00') && time24 < (doc.eveningEnd || '21:00');
       return isMorning || isEvening;
     };
 
+    // Filter slots to only show times within the Doctor's shifts
     return TIME_SLOTS.filter(isWithinShift).map(t => {
        const appt = docAppts.find(a => a.time === t);
        return {

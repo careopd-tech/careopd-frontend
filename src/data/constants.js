@@ -1,6 +1,7 @@
-export const TIME_SLOTS = [
-  "09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30", "10:45", 
-  "11:00", "11:15", "11:30", "11:45", "12:00", "12:15", "12:30", "12:45",
-  "17:00", "17:15", "17:30", "17:45", "18:00", "18:15", "18:30", "18:45",
-  "19:00", "19:15", "19:30", "19:45", "20:00", "20:15", "20:30", "20:45"
-];
+
+// Generates an array from "00:00" to "23:45" automatically
+export const TIME_SLOTS = Array.from({ length: 24 * 4 }).map((_, i) => {
+  const hours = Math.floor(i / 4).toString().padStart(2, '0');
+  const minutes = ((i % 4) * 15).toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+});

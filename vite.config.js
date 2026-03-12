@@ -12,7 +12,7 @@ export default defineConfig({
       registerType: 'autoUpdate', // Automatically updates the app when you push new code
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'], 
       manifest: {
-        name: 'CareOPD Clinic Management',
+        name: 'CareOPD',
         short_name: 'CareOPD',
         description: 'SaaS platform for clinics and doctors',
         theme_color: '#0d9488', // Teal color to match your UI
