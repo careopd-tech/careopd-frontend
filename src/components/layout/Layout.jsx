@@ -10,9 +10,9 @@ const navItems = [
 
 const Layout = ({ activeTab, setActiveTab, children }) => {
   return (
-    <div className="h-screen bg-slate-50 font-sans text-slate-900 flex overflow-hidden">
+    <div className="h-dvh bg-slate-50 font-sans text-slate-900 flex overflow-hidden">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-200 h-screen sticky top-0">
+      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-200 h-dvh sticky top-0">
         <div className="p-4 flex items-center gap-3 border-b border-slate-100">
            <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white font-bold text-[15px]">C</div>
            <span className="font-bold text-[19px] tracking-tight text-slate-800">CareOPD</span>
@@ -31,7 +31,7 @@ const Layout = ({ activeTab, setActiveTab, children }) => {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+      <main className="flex-1 flex flex-col h-dvh overflow-hidden">
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
            {children}
         </div>

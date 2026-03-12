@@ -87,7 +87,7 @@ const Appointments = ({ data, setData }) => {
 
   // Forms
   const [newAppt, setNewAppt] = useState({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate });
-  const [newPatientDetails, setNewPatientDetails] = useState({ name: '', phone: '', age: '', gender: 'M', address: '' });
+  const [newPatientDetails, setNewPatientDetails] = useState({ firstName: '', middleName: '', lastName: '', phone: '', age: '', gender: 'M', address: '' });
   const [rescheduleData, setRescheduleData] = useState({ date: '', time: '' });
   const [modalError, setModalError] = useState('');
   const [invalidFields, setInvalidFields] = useState([]);
@@ -459,14 +459,67 @@ const Appointments = ({ data, setData }) => {
   const clearFilters = () => { setActiveFilters({ dateFrom: '', dateTo: '', doctorId: '', status: [] }); setTempFilters({ dateFrom: '', dateTo: '', doctorId: '', status: [] }); setIsFilterModalOpen(false); };
   const hasActiveFilters = activeFilters.dateFrom !== '' || activeFilters.dateTo !== '' || activeFilters.doctorId !== '' || activeFilters.status.length > 0;
 
+  // --- INPUT HANDLERS ---
+  const handlePatientNameInput = (field, value) => {
+    // 1. Strict: Letters and Dot ONLY. (Removed \s to ban spaces)
+    let cleanVal = value.replace(/[^a-zA-Z.]/g, ''); 
+
+    // 2. Strict "One Dot" Rule: If more than 1 dot exists, block the input
+    if ((cleanVal.match(/\./g) || []).length > 1) {
+        return; 
+    }
+
+    setNewPatientDetails(prev => ({ ...prev, [field]: cleanVal }));
+  };
+
+  const handlePatientPhoneInput = (value) => {
+    // Numbers only, max 10
+    const cleanVal = value.replace(/\D/g, '').slice(0, 10); 
+    setNewPatientDetails(prev => ({ ...prev, phone: cleanVal }));
+  };
+
+const handlePatientAgeInput = (value) => {
+    // 1. Remove non-digits and limit to 3 chars
+    let cleanVal = value.replace(/\D/g, '').slice(0, 3);
+
+    // 2. Remove leading zeros (Prevents "0", "05", etc.)
+    // If the user types "0", it effectively becomes an empty string
+    if (cleanVal.startsWith('0')) {
+        cleanVal = cleanVal.replace(/^0+/, ''); 
+    }
+
+    setNewPatientDetails(prev => ({ ...prev, age: cleanVal }));
+  };
+
+const handlePatientAddressInput = (value) => {
+    let cleanVal = value
+      // 1. Allow: Alphanumeric, Space, Dot, Hyphen, Underscore, Comma, Hash, Forward Slash
+      // Note: We escape the hyphen \- and the forward slash \/
+      .replace(/[^a-zA-Z0-9\s.\-_,#\/&']/g, '') 
+
+      // 2. Remove Leading Spaces
+      .replace(/^\s+/g, '')
+
+      // 3. Collapse multiple spaces to single
+      .replace(/\s\s+/g, ' ')
+
+      // 4. Collapse multiple special chars to single (e.g., prevents "St..", ",,", "##")
+      // This matches any of the chars in the group, if repeated, and replaces with the first instance
+      .replace(/([.,_#\-\/])\1+/g, '$1');
+
+    setNewPatientDetails(prev => ({ ...prev, address: cleanVal }));
+  };
+
   // --- ACTIONS ---
   const handleAddAppointment = async () => { 
     setModalError('');
     let errors = [];
     if (!newAppt.patientId) errors.push('patientId');
     if (newAppt.patientId === 'add_new') {
-      if (!newPatientDetails.name) errors.push('newPatientName');
-      if (!newPatientDetails.phone) errors.push('newPatientPhone');
+      if (!newPatientDetails.firstName) errors.push('newPatientName'); // Check First Name
+      if (!newPatientDetails.phone || newPatientDetails.phone.length < 10) errors.push('newPatientPhone');
+      if (!newPatientDetails.age) errors.push('newPatientAge');
+      if (!newPatientDetails.address) errors.push('newPatientAddress');
     }
     if (!newAppt.doctorId) errors.push('doctorId');
     if (!newAppt.date) errors.push('date');
@@ -478,10 +531,22 @@ const Appointments = ({ data, setData }) => {
     if (checkPatientConflict(newAppt.patientId, newAppt.date, newAppt.time, rebookingApptId)) return setModalError('Conflict: Appointment exists.');
 
     setInvalidFields([]);
+    
+    // CONSTRUCT FULL NAME
+    // Logic: Put parts in an array, remove empty ones (filter), join with exactly 1 space.
+    const fullName = newAppt.patientId === 'add_new' 
+      ? [newPatientDetails.firstName, newPatientDetails.middleName, newPatientDetails.lastName]
+          .filter(Boolean) // Removes empty strings ("") or null/undefined
+          .join(' ')       // Joins remaining parts with a single space
+      : '';
+
     const payload = {
       clinicId: localStorage.getItem('clinicId'),
       patientId: newAppt.patientId, doctorId: newAppt.doctorId, time: newAppt.time, date: newAppt.date, type: 'Consultation', 
-      status: 'Scheduled', newPatientData: newAppt.patientId === 'add_new' ? newPatientDetails : null
+      status: 'Scheduled', newPatientData: newAppt.patientId === 'add_new' ? {
+          ...newPatientDetails,
+          name: fullName // Send combined name to API
+      } : null
     };
 
     try {
@@ -725,7 +790,7 @@ const Appointments = ({ data, setData }) => {
          <div className="space-y-4">
            <div><h4 className="text-[11px] font-bold text-slate-400 uppercase mb-2">Date Range</h4><div className="grid grid-cols-2 gap-2"><div><span className="text-[11px] font-bold text-teal-700 uppercase block mb-1">From</span><input type="date" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[13px]" value={tempFilters.dateFrom} onChange={(e) => setTempFilters({...tempFilters, dateFrom: e.target.value})} /></div><div><span className="text-[11px] font-bold text-teal-700 uppercase block mb-1">To</span><input type="date" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[13px]" value={tempFilters.dateTo} onChange={(e) => setTempFilters({...tempFilters, dateTo: e.target.value})} /></div></div></div>
            <div><h4 className="text-[11px] font-bold text-slate-400 uppercase mb-2">Doctor</h4><select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[13px]" value={tempFilters.doctorId} onChange={(e) => setTempFilters({...tempFilters, doctorId: e.target.value})}><option value="">All Doctors</option>{data.doctors.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}</select></div>
-           <div><h4 className="text-[11px] font-bold text-slate-400 uppercase mb-2">Status</h4><div className="flex flex-wrap gap-2">{['Scheduled', 'Completed', 'Cancelled', 'No-Show'].map(status => { const isSelected = tempFilters.status.includes(status); return (<button key={status} onClick={() => { let newStatus = isSelected ? tempFilters.status.filter(s => s !== status) : [...tempFilters.status, status]; if (['Scheduled', 'Completed', 'Cancelled', 'No-Show'].every(s => newStatus.includes(s))) { newStatus = []; } setTempFilters({...tempFilters, status: newStatus}); }} className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition-colors ${isSelected ? 'bg-teal-100 text-teal-800 border-teal-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>{status}</button>); })}</div></div>
+           {/* <div><h4 className="text-[11px] font-bold text-slate-400 uppercase mb-2">Status</h4><div className="flex flex-wrap gap-2">{['Scheduled', 'Completed', 'Cancelled', 'No-Show'].map(status => { const isSelected = tempFilters.status.includes(status); return (<button key={status} onClick={() => { let newStatus = isSelected ? tempFilters.status.filter(s => s !== status) : [...tempFilters.status, status]; if (['Scheduled', 'Completed', 'Cancelled', 'No-Show'].every(s => newStatus.includes(s))) { newStatus = []; } setTempFilters({...tempFilters, status: newStatus}); }} className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition-colors ${isSelected ? 'bg-teal-100 text-teal-800 border-teal-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>{status}</button>); })}</div></div> */}
          </div>
       </Modal>
 
@@ -733,7 +798,71 @@ const Appointments = ({ data, setData }) => {
          <div className="space-y-3">
             <AlertMessage message={modalError} />
             <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Patient <span className="text-red-500">*</span></label><select disabled={!!rebookingApptId} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 outline-none ${invalidFields.includes('patientId') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.patientId} onChange={(e) => setNewAppt({...newAppt, patientId: e.target.value})}><option value="">Select Patient</option>{!rebookingApptId && <option value="add_new" className="font-bold text-teal-600">+ Add New Patient</option>}{data.patients.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}</select></div>
-            {newAppt.patientId === 'add_new' && (<div className="p-3 bg-teal-50 rounded-lg border border-teal-100 space-y-2"><input type="text" placeholder="Full Name *" className={`w-full p-1.5 border rounded text-[13px] outline-none ${invalidFields.includes('newPatientName') ? 'border-red-500' : 'border-teal-200'}`} value={newPatientDetails.name} onChange={(e) => setNewPatientDetails({...newPatientDetails, name: e.target.value})} /><div className="grid grid-cols-2 gap-2"><input type="tel" placeholder="Phone *" className={`w-full p-1.5 border rounded text-[13px] outline-none ${invalidFields.includes('newPatientPhone') ? 'border-red-500' : 'border-teal-200'}`} value={newPatientDetails.phone} onChange={(e) => setNewPatientDetails({...newPatientDetails, phone: e.target.value})} /><div className="flex gap-1.5"><input type="number" placeholder="Age *" className={`w-1/2 p-1.5 border rounded text-[13px] outline-none ${invalidFields.includes('newPatientAge') ? 'border-red-500' : 'border-teal-200'}`} value={newPatientDetails.age} onChange={(e) => setNewPatientDetails({...newPatientDetails, age: e.target.value})} /><select className="w-1/2 p-1.5 border border-teal-200 rounded text-[13px]" value={newPatientDetails.gender} onChange={(e) => setNewPatientDetails({...newPatientDetails, gender: e.target.value})}><option value="M">M</option><option value="F">F</option><option value="O">O</option></select></div></div><input type="text" placeholder="Address" className="w-full p-1.5 border border-teal-200 rounded text-[13px] outline-none" value={newPatientDetails.address} onChange={(e) => setNewPatientDetails({...newPatientDetails, address: e.target.value})} /></div>)}
+            {newAppt.patientId === 'add_new' && (
+  <div className="p-3 bg-teal-50 rounded-lg border border-teal-100 space-y-2">
+    {/* SPLIT NAME INPUTS */}
+    <div className="grid grid-cols-3 gap-2">
+      <input 
+        type="text" 
+        placeholder="First Name *" 
+        className={`w-full p-1.5 border rounded text-[13px] outline-none ${invalidFields.includes('newPatientName') ? 'border-red-500' : 'border-teal-200'}`} 
+        value={newPatientDetails.firstName} 
+        onChange={(e) => handlePatientNameInput('firstName', e.target.value)} 
+      />
+      <input 
+        type="text" 
+        placeholder="Middle" 
+        className="w-full p-1.5 border border-teal-200 rounded text-[13px] outline-none" 
+        value={newPatientDetails.middleName} 
+        onChange={(e) => handlePatientNameInput('middleName', e.target.value)} 
+      />
+      <input 
+        type="text" 
+        placeholder="Last Name" 
+        className="w-full p-1.5 border border-teal-200 rounded text-[13px] outline-none" 
+        value={newPatientDetails.lastName} 
+        onChange={(e) => handlePatientNameInput('lastName', e.target.value)} 
+      />
+    </div>
+
+    {/* RESTRICTED PHONE & AGE */}
+    <div className="grid grid-cols-2 gap-2">
+      <input 
+        type="tel" 
+        placeholder="Phone *" 
+        className={`w-full p-1.5 border rounded text-[13px] outline-none ${invalidFields.includes('newPatientPhone') ? 'border-red-500' : 'border-teal-200'}`} 
+        value={newPatientDetails.phone} 
+        onChange={(e) => handlePatientPhoneInput(e.target.value)} 
+      />
+      <div className="flex gap-1.5">
+        <input 
+          type="tel" // usage of tel on age helps mobile keyboards
+          placeholder="Age *" 
+          className={`w-1/2 p-1.5 border rounded text-[13px] outline-none ${invalidFields.includes('newPatientAge') ? 'border-red-500' : 'border-teal-200'}`} 
+          value={newPatientDetails.age} 
+          onChange={(e) => handlePatientAgeInput(e.target.value)} 
+        />
+        <select 
+          className="w-1/2 p-1.5 border border-teal-200 rounded text-[13px]" 
+          value={newPatientDetails.gender} 
+          onChange={(e) => setNewPatientDetails({...newPatientDetails, gender: e.target.value})}
+        >
+          <option value="M">M</option><option value="F">F</option><option value="O">O</option>
+        </select>
+      </div>
+    </div>
+    <input 
+      type="text" 
+      placeholder="Address *" 
+      // 👇 The check here matches the string pushed above
+      className={`w-full p-1.5 border rounded text-[13px] outline-none ${
+        invalidFields.includes('newPatientAddress') ? 'border-red-500' : 'border-teal-200'
+      }`} 
+      value={newPatientDetails.address} 
+      onChange={(e) => handlePatientAddressInput(e.target.value)} 
+    />
+  </div>
+)}
             <div className="grid grid-cols-2 gap-2">
                 <div>
                     <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Department</label>
@@ -751,7 +880,7 @@ const Appointments = ({ data, setData }) => {
                     </select>
                 </div>
             </div>
-            <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Select Date <span className="text-red-500">*</span></label><input type="date" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 outline-none ${invalidFields.includes('date') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.date} onChange={(e) => setNewAppt({...newAppt, date: e.target.value, time: ''})} /></div>
+            <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Select Date <span className="text-red-500">*</span></label><input type="date" min={new Date().toISOString().split('T')[0]} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 outline-none ${invalidFields.includes('date') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.date} onChange={(e) => setNewAppt({...newAppt, date: e.target.value, time: ''})} /></div>
             <div>
                 <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Available Slots <span className="text-red-500">*</span></label>
                 <div className={`rounded-lg ${invalidFields.includes('time') ? 'border border-red-500 p-1' : ''}`}>
@@ -765,7 +894,7 @@ const Appointments = ({ data, setData }) => {
          <div className="space-y-3">
             {actionAppt && (<div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex items-center justify-between mb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Currently Scheduled:</span><span className="text-[13px] font-bold text-slate-700">{actionAppt.date} at {actionAppt.time}</span></div>)}
             <AlertMessage message={modalError} />
-            <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">New Date</label><input type="date" className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50" value={rescheduleData.date} onChange={(e) => setRescheduleData({...rescheduleData, date: e.target.value, time: ''})} /></div><div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Available Slots</label><TimeSlotPicker selectedTime={rescheduleData.time} onSelect={(t) => setRescheduleData({...rescheduleData, time: t})} doctor={getDoctorById(actionAppt?.doctorId)} date={rescheduleData.date} appointments={sections.today.concat(sections.previous, sections.upcoming).filter(a => a.doctorId === actionAppt?.doctorId && a.date === rescheduleData.date && a.status !== 'Cancelled')} /></div>
+            <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">New Date</label><input type="date" min={new Date().toISOString().split('T')[0]} className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50" value={rescheduleData.date} onChange={(e) => setRescheduleData({...rescheduleData, date: e.target.value, time: ''})} /></div><div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Available Slots</label><TimeSlotPicker selectedTime={rescheduleData.time} onSelect={(t) => setRescheduleData({...rescheduleData, time: t})} doctor={getDoctorById(actionAppt?.doctorId)} date={rescheduleData.date} appointments={sections.today.concat(sections.previous, sections.upcoming).filter(a => a.doctorId === actionAppt?.doctorId && a.date === rescheduleData.date && a.status !== 'Cancelled')} /></div>
          </div>
       </Modal>
 

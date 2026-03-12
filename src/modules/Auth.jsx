@@ -96,7 +96,7 @@ const Auth = ({ authState, setAuthState }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4">
+    <div className="min-h-dvh bg-slate-50 flex flex-col justify-center items-center p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-slate-100 animate-scaleIn">
         
         {/* Header/Logo Section */}
