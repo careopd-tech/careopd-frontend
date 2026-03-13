@@ -3,7 +3,6 @@ import { Clock } from 'lucide-react';
 import { TIME_SLOTS } from '../../data/constants';
 
 const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments }) => {
-  // 1. ORIGINAL FEATURE: Beautiful Empty State
   if (!doctor) {
     return (
       <div className="p-6 text-center border-2 border-dashed border-slate-100 rounded-xl bg-slate-50">
@@ -13,14 +12,12 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments }) 
     );
   }
 
-  // 2. NEW FEATURE: Get exact current time for "Expired" logic
   const todayStr = new Date().toISOString().split('T')[0];
   const isToday = date === todayStr;
   const now = new Date();
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
 
-  // Helper to safely parse both "14:00" and "02:00 PM" formats for math
   const parseTime = (timeStr) => {
     if (!timeStr) return { h: 0, m: 0, str24: '00:00' };
     let [time, modifier] = timeStr.split(' ');
@@ -31,7 +28,6 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments }) 
     return { h, m, str24 };
   };
 
-  // 3. ORIGINAL FEATURE (Upgraded): useMemo for Performance & Safe MongoDB ID checks
   const processedSlots = useMemo(() => {
     if (!date) return [];
 
@@ -40,10 +36,8 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments }) 
     const eStart = doctor.eveningStart || '17:00';
     const eEnd = doctor.eveningEnd || '21:00';
 
-    // Safe ID extraction
     const currentDocId = doctor._id || doctor.id;
 
-    // Pre-map booked times for fast lookup
     const bookedTimes = appointments
       .filter(a => String(a.doctorId) === String(currentDocId) && a.date === date && a.status !== 'Cancelled')
       .map(a => a.time);
@@ -53,12 +47,10 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments }) 
     TIME_SLOTS.forEach(t => {
       const { h, m, str24 } = parseTime(t);
 
-      // A. Shift Check (Is it inside working hours?)
       const isMorning = str24 >= mStart && str24 < mEnd;
       const isEvening = str24 >= eStart && str24 < eEnd;
 
       if (isMorning || isEvening) {
-        // B. Expiry Check (Has this time already passed today?)
         let isExpired = false;
         if (isToday) {
           if (h < currentHour || (h === currentHour && m <= currentMinute)) {
@@ -66,22 +58,26 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments }) 
           }
         }
 
-        // C. Booked Check
         const isBooked = bookedTimes.includes(t);
 
-        // D. Determine Final Status
         let status = 'Available';
-        if (isExpired) status = 'Elapsed';
+        if (isExpired) status = 'Passed';
         else if (isBooked) status = 'Booked';
 
-        result.push({ time: t, status });
+        // ISSUE 3 FIX: Identify if this is the original appointment time being rescheduled
+        let isCurrent = false;
+        if (isBooked && selectedTime === t) {
+          isCurrent = true;
+        }
+
+        result.push({ time: t, status, isCurrent });
       }
     });
 
     return result;
-  }, [doctor, date, appointments, isToday, currentHour, currentMinute]);
+  // Note: added selectedTime to dependency array so it re-evaluates 'isCurrent' when user clicks
+  }, [doctor, date, appointments, isToday, currentHour, currentMinute, selectedTime]); 
 
-  // 4. ORIGINAL FEATURE: Amber Warning for No Shifts
   if (processedSlots.length === 0) {
     return (
       <div className="p-4 text-center border border-amber-100 rounded-lg bg-amber-50">
@@ -94,18 +90,27 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments }) 
     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-56 overflow-y-auto p-1.5 border border-slate-100 rounded-lg bg-slate-50/50 scrollbar-hide">
       {processedSlots.map(slot => {
         const isSelected = selectedTime === slot.time;
-        const isDisabled = slot.status === 'Booked' || slot.status === 'Expired';
         
-        // 5. NEW FEATURE: Dynamic Styling exactly matching Doctors.jsx Calendar
+        // ISSUE 1 FIX: Properly disable 'Passed' slots, and Booked slots (unless it's the Current one)
+        const isDisabled = slot.status === 'Passed' || (slot.status === 'Booked' && !slot.isCurrent);
+        
         let colorClass = '';
-        if (isSelected) {
+        let label = slot.status;
+
+        // ISSUE 3 FIX: Show "Current" for pre-selected reschedule slot
+        if (slot.isCurrent) {
             colorClass = 'bg-teal-600 border-teal-600 text-white shadow-md ring-2 ring-teal-200';
+            label = 'Current';
+        } else if (isSelected) {
+            colorClass = 'bg-teal-600 border-teal-600 text-white shadow-md ring-2 ring-teal-200';
+            label = 'Selected';
         } else if (slot.status === 'Available') {
-            colorClass = 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 active:scale-95';
+            colorClass = 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 active:scale-95 cursor-pointer';
         } else if (slot.status === 'Booked') {
             colorClass = 'bg-blue-50 border-blue-200 text-blue-700 opacity-80 cursor-not-allowed';
-        } else if (slot.status === 'Elapsed') {
-            colorClass = 'bg-slate-50 border-slate-200 text-slate-400 opacity-60 cursor-not-allowed';
+        } else if (slot.status === 'Passed') {
+            // ISSUE 2 FIX: Darker Grey for Passed/Expired slots
+            colorClass = 'bg-slate-100 border-slate-300 text-slate-500 cursor-not-allowed shadow-inner';
         }
 
         return (
@@ -116,7 +121,7 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments }) 
             className={`flex flex-col items-center justify-center p-2 rounded-lg text-center transition-all border ${colorClass}`}
           >
             <span className="text-[11px] font-bold">{slot.time}</span>
-            <span className="text-[9px] mt-0.5">{isSelected ? 'Selected' : slot.status}</span>
+            <span className="text-[9px] mt-0.5">{label}</span>
           </button>
         );
       })}
