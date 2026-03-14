@@ -1,6 +1,7 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Search, SlidersHorizontal, Bell, X, CheckCircle, AlertCircle, Clock, 
+  Filter, Search, SlidersHorizontal, Bell, X, CheckCircle, AlertCircle, Clock, 
   User, LogOut, ChevronDown, Trash2 
 } from 'lucide-react';
 import MyAccountModal from '../profile/MyAccountModal';
@@ -14,6 +15,7 @@ const ModuleHeader = ({
   onFilterClick, 
   hasFilter,
   notifications = [],
+  onLogout,
   onClearAll, // NEW: Handler to clear list
   onDismiss   // NEW: Handler to remove single item
 }) => {
@@ -27,10 +29,7 @@ const ModuleHeader = ({
   const notifRef = useRef(null);
   const profileRef = useRef(null);
 
-  const handleLogout = () => {
-    localStorage.clear();
-    window.location.href = '/login';
-  };
+  
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -74,6 +73,15 @@ const ModuleHeader = ({
                 value={searchVal}
                 onChange={(e) => onSearch(e.target.value)}
               />
+              {searchVal && (
+    <button 
+      onClick={() => onSearch('')} 
+      className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full transition-colors"
+      aria-label="Clear search"
+    >
+      <X size={14} />
+    </button>
+  )}
             </div>
             <button 
               onClick={onFilterClick}
@@ -186,7 +194,7 @@ const ModuleHeader = ({
                       </button>
                       
                       <button 
-                        onClick={handleLogout}
+                        onClick={onLogout}
                         className="w-full text-left px-3 py-2.5 text-[13px] font-bold text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-3 transition-colors mt-1"
                       >
                         <LogOut size={15} /> Sign Out

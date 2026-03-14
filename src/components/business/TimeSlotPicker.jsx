@@ -44,11 +44,19 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments }) 
 
     const result = [];
 
+    // --- NEW: Smart Shift Checker (Handles Overnight Shifts) ---
+    const checkShift = (slotTime, start, end) => {
+      if (start < end) return slotTime >= start && slotTime < end; // Normal Shift
+      if (start > end) return slotTime >= start || slotTime < end; // Overnight Shift
+      return false;
+    };
+
     TIME_SLOTS.forEach(t => {
       const { h, m, str24 } = parseTime(t);
 
-      const isMorning = str24 >= mStart && str24 < mEnd;
-      const isEvening = str24 >= eStart && str24 < eEnd;
+      // A. Shift Check (Is it inside working hours?)
+      const isMorning = checkShift(str24, mStart, mEnd);
+      const isEvening = checkShift(str24, eStart, eEnd);
 
       if (isMorning || isEvening) {
         let isExpired = false;

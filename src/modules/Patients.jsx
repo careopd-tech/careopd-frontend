@@ -27,7 +27,7 @@ const PatientSkeleton = () => (
   </div>
 );
 
-const Patients = ({ data, setData }) => {
+const Patients = ({ data, setData, onLogout }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
@@ -337,6 +337,7 @@ useEffect(() => {
         onSearch={setSearchQuery} 
         onFilterClick={() => setIsFilterModalOpen(true)} 
         hasFilter={typeFilter !== '' || dateRange.from || dateRange.to} 
+        onLogout={onLogout}
       />
 
       <div className="flex-1 flex flex-col landscape:flex-row min-h-0 p-2 gap-2">

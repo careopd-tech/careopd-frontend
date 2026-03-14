@@ -12,11 +12,16 @@ import TimeSlotPicker from '../components/business/TimeSlotPicker';
 import { useGlobalDate } from '../context/DateContext'; 
 import API_BASE_URL from '../config';
 
-const Appointments = ({ data, setData }) => {
+const Appointments = ({ data, setData, onLogout }) => {
   // --- 1. CONTEXT & BASICS ---
   const dateContext = useGlobalDate();
   const safeCurrentDate = dateContext?.currentDate || new Date().toISOString().split('T')[0];
   const clinicId = localStorage.getItem('clinicId');
+
+  // --- NEW: 30-Day Window Boundary ---
+  const maxDateObj = new Date(safeCurrentDate);
+  maxDateObj.setDate(maxDateObj.getDate() + 30);
+  const maxDateStr = maxDateObj.toISOString().split('T')[0];
 
   // --- 2. STATE MANAGEMENT ---
   const [searchQuery, setSearchQuery] = useState('');
@@ -193,10 +198,12 @@ const Appointments = ({ data, setData }) => {
       const dashboardPromise = Promise.all([
           fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=snapshot&date=${safeCurrentDate}`),
           fetch(`${API_BASE_URL}/api/doctors/${clinicId}`),
-          fetch(`${API_BASE_URL}/api/patients/${clinicId}`)
-        ]).then(async ([snapshotRes, docsRes, patsRes]) => {
-            if (snapshotRes.ok && docsRes.ok && patsRes.ok) {
-                const [snapshot, docs, pats] = await Promise.all([snapshotRes.json(), docsRes.json(), patsRes.json()]);
+          fetch(`${API_BASE_URL}/api/patients/${clinicId}`),
+          // 👇 1. ADD THIS NEW FETCH TO THE PROMISE ARRAY
+          fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments`)
+        ]).then(async ([snapshotRes, docsRes, patsRes, calRes]) => {
+            if (snapshotRes.ok && docsRes.ok && patsRes.ok && calRes.ok) {
+                const [snapshot, docs, pats, calendar30] = await Promise.all([snapshotRes.json(), docsRes.json(), patsRes.json(), calRes.json()]);
                 
                 const activeSection = expandedSectionRef.current;
 
@@ -241,7 +248,7 @@ const Appointments = ({ data, setData }) => {
                 setSections(finalSections);
                 setMetaCounts({ previous: snapshot.counts?.previous || 0, upcoming: snapshot.counts?.upcoming || 0 });
                 setData(prev => ({ 
-                    ...prev, doctors: docs, patients: pats, appointments: updatedToday, counts: snapshot.counts, cachedSections: finalSections 
+                    ...prev, doctors: docs, patients: pats, appointments: updatedToday, counts: snapshot.counts, cachedSections: finalSections, calendar30: calendar30 
                 }));
             }
         });
@@ -720,6 +727,7 @@ const handlePatientAddressInput = (value) => {
         notifications={notificationStack} 
         onClearAll={handleClearNotifications} 
         onDismiss={handleDismissNotification} 
+        onLogout={onLogout}
       />
       
       <div className="flex-1 flex flex-col landscape:flex-row min-h-0 p-2 gap-2">
@@ -880,11 +888,11 @@ const handlePatientAddressInput = (value) => {
                     </select>
                 </div>
             </div>
-            <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Select Date <span className="text-red-500">*</span></label><input type="date" min={new Date().toISOString().split('T')[0]} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 outline-none ${invalidFields.includes('date') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.date} onChange={(e) => setNewAppt({...newAppt, date: e.target.value, time: ''})} /></div>
+            <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Select Date <span className="text-red-500">*</span></label><input type="date" min={new Date().toISOString().split('T')[0]} max={maxDateStr} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 outline-none ${invalidFields.includes('date') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.date} onChange={(e) => setNewAppt({...newAppt, date: e.target.value, time: ''})} /></div>
             <div>
                 <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Available Slots <span className="text-red-500">*</span></label>
                 <div className={`rounded-lg ${invalidFields.includes('time') ? 'border border-red-500 p-1' : ''}`}>
-                    <TimeSlotPicker selectedTime={newAppt.time} onSelect={(t) => setNewAppt({...newAppt, time: t})} doctor={getDoctorById(newAppt.doctorId)} date={newAppt.date} appointments={sections.today.concat(sections.previous, sections.upcoming).filter(a => a.doctorId === newAppt.doctorId && a.date === newAppt.date && a.status !== 'Cancelled')} />
+                    <TimeSlotPicker selectedTime={newAppt.time} onSelect={(t) => setNewAppt({...newAppt, time: t})} doctor={getDoctorById(newAppt.doctorId)} date={newAppt.date} appointments={data.calendar30 || []} />
                 </div>
             </div>
          </div>
@@ -894,7 +902,7 @@ const handlePatientAddressInput = (value) => {
          <div className="space-y-3">
             {actionAppt && (<div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex items-center justify-between mb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Currently Scheduled:</span><span className="text-[13px] font-bold text-slate-700">{actionAppt.date} at {actionAppt.time}</span></div>)}
             <AlertMessage message={modalError} />
-            <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">New Date</label><input type="date" min={new Date().toISOString().split('T')[0]} className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50" value={rescheduleData.date} onChange={(e) => setRescheduleData({...rescheduleData, date: e.target.value, time: ''})} /></div><div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Available Slots</label><TimeSlotPicker selectedTime={rescheduleData.time} onSelect={(t) => setRescheduleData({...rescheduleData, time: t})} doctor={getDoctorById(actionAppt?.doctorId)} date={rescheduleData.date} appointments={sections.today.concat(sections.previous, sections.upcoming).filter(a => a.doctorId === actionAppt?.doctorId && a.date === rescheduleData.date && a.status !== 'Cancelled')} /></div>
+            <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">New Date</label><input type="date" min={new Date().toISOString().split('T')[0]} max={maxDateStr}className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50" value={rescheduleData.date} onChange={(e) => setRescheduleData({...rescheduleData, date: e.target.value, time: ''})} /></div><div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Available Slots</label><TimeSlotPicker selectedTime={rescheduleData.time} onSelect={(t) => setRescheduleData({...rescheduleData, time: t})} doctor={getDoctorById(actionAppt?.doctorId)} date={rescheduleData.date} appointments={data.calendar30 || []} /></div>
          </div>
       </Modal>
 

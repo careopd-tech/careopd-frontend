@@ -28,13 +28,23 @@ const DoctorSkeleton = () => (
   </div>
 );
 
-const Doctors = ({ data, setData }) => {
+const Doctors = ({ data, setData, onLogout }) => {
   const [activeModal, setActiveModal] = useState(null);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isAddDoctorModalOpen, setIsAddDoctorModalOpen] = useState(false);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
-  const [calendarDate, setCalendarDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  // --- ADD THESE 4 LINES ---
+  const todayStr = new Date().toISOString().split('T')[0];
+  const maxDateObj = new Date();
+  maxDateObj.setDate(maxDateObj.getDate() + 30);
+  const maxDateStr = maxDateObj.toISOString().split('T')[0];
+  
+  // Update this to use the todayStr for cleaner code
+  const [calendarDate, setCalendarDate] = useState(todayStr);
+
+
   const [addDoctorTab, setAddDoctorTab] = useState('personal');
   const [modalError, setModalError] = useState('');
   const [invalidFields, setInvalidFields] = useState([]);
@@ -67,6 +77,8 @@ const Doctors = ({ data, setData }) => {
 
   const defaultDoctorState = {
     _id: null,
+    // Split Name Fields (UI Only)
+    firstName: '', middleName: '', lastName: '',
     name: '', phone: '', email: '', gender: 'M', address: '',
     department: '', qualification: '', experience: '', regNo: '',
     morningStart: '09:00', morningEnd: '13:00', eveningStart: '17:00', eveningEnd: '21:00',
@@ -74,6 +86,17 @@ const Doctors = ({ data, setData }) => {
   };
 
   const [newDoctor, setNewDoctor] = useState(defaultDoctorState);
+
+  // --- NEW: Handle Name Parts with Validation ---
+  const handleDocNameInput = (field, value) => {
+    // 1. Strict: Letters and Dot ONLY. No spaces.
+    let cleanVal = value.replace(/[^a-zA-Z.]/g, ''); 
+
+    // 2. Strict "One Dot" Rule
+    if ((cleanVal.match(/\./g) || []).length > 1) return;
+
+    setNewDoctor(prev => ({ ...prev, [field]: cleanVal }));
+  };
 
   // --- NOTIFICATION HELPERS ---
   const showNotification = (shortMessage, type = 'success', detailedMessage = null) => {
@@ -110,7 +133,7 @@ const Doctors = ({ data, setData }) => {
           setData(prev => ({
             ...prev,
             doctors: docs,
-            appointments: appts
+            calendar30: appts
           }));
         }
       } catch (err) {
@@ -138,7 +161,7 @@ const Doctors = ({ data, setData }) => {
     else {
        // STRICT VALIDATION: Check for active appointments (Today or Future)
        const todayStr = new Date().toISOString().split('T')[0];
-       const hasAppointments = (data.appointments || []).some(a => {
+       const hasAppointments = (data.calendar30 || []).some(a => {
            // Handle Populated vs String ID
            const apptDocId = a.doctorId && typeof a.doctorId === 'object' ? a.doctorId._id : a.doctorId;
            return String(apptDocId) === String(doctor._id) && 
@@ -196,11 +219,34 @@ const Doctors = ({ data, setData }) => {
   };
 
   const handleEditDoctor = (doc) => {
+    // 1. Remove "Dr." prefix and trim
+    const rawName = doc.name.replace(/^Dr\.\s*/, '').trim();
+    
+    // 2. Split by spaces
+    const parts = rawName.split(' ');
+    
+    let fName = '', mName = '', lName = '';
+
+    if (parts.length === 1) {
+       fName = parts[0];
+    } else if (parts.length === 2) {
+       fName = parts[0];
+       lName = parts[1];
+    } else if (parts.length > 2) {
+       fName = parts[0];
+       lName = parts[parts.length - 1]; // Last part is Last Name
+       mName = parts.slice(1, -1).join(' '); // Everything in between is Middle
+    }
+
     setNewDoctor({
       ...defaultDoctorState,
       ...doc,
-      name: doc.name.replace(/^Dr\.\s*/, '')
+      firstName: fName,
+      middleName: mName,
+      lastName: lName,
+      name: rawName // Keep legacy for reference
     });
+
     setIsNewDept(false);
     setNewDeptName('');
     setInvalidFields([]);
@@ -254,12 +300,21 @@ const Doctors = ({ data, setData }) => {
     setModalError('');
     let errors = [];
     
+    // CONSTRUCT FULL NAME (Merge 3 fields)
+    const fullName = [newDoctor.firstName, newDoctor.middleName, newDoctor.lastName]
+      .filter(Boolean)
+      .join(' ');
+
     // Validate Photo
     if ((!newDoctor.photo || newDoctor.photo.length < 50) && !newDoctor.photoUrl) {
         errors.push('photo');
     }
 
-    if (!newDoctor.name) errors.push('name');
+    // 2. Validate Name Parts
+    if (!newDoctor.firstName) errors.push('firstName');
+    if (!newDoctor.lastName) errors.push('lastName');
+    // We check the constructed name just in case, but specific fields are better for UI feedback
+    if (!fullName) errors.push('name');
     if (!newDoctor.phone || newDoctor.phone.length < 10) errors.push('phone');
     
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -281,7 +336,7 @@ const Doctors = ({ data, setData }) => {
     if (errors.length > 0) {
       setInvalidFields(errors);
       if (errors.includes('photo')) setAddDoctorTab('personal');
-      else if (['name', 'phone', 'email', 'address'].some(f => errors.includes(f))) setAddDoctorTab('personal');
+      else if (['firstName', 'lastName', 'phone', 'email', 'address'].some(f => errors.includes(f))) setAddDoctorTab('personal');
       else if (['department', 'qualification', 'experience', 'regNo'].some(f => errors.includes(f))) setAddDoctorTab('professional');
       else setAddDoctorTab('working_hours');
       
@@ -293,7 +348,8 @@ const Doctors = ({ data, setData }) => {
     const clinicId = localStorage.getItem('clinicId');
     const docPayload = {
       clinicId,
-      name: newDoctor.name.startsWith('Dr.') ? newDoctor.name : `Dr. ${newDoctor.name}`,
+      // Add "Dr." prefix automatically to the merged string
+      name: `Dr. ${fullName}`,
       phone: newDoctor.phone,
       email: newDoctor.email,
       gender: newDoctor.gender,
@@ -355,7 +411,7 @@ const Doctors = ({ data, setData }) => {
   };
 
 const generateSlots = (doc, dateStr) => {
-    const docAppts = (data.appointments || []).filter(a => {
+    const docAppts = (data.calendar30 || []).filter(a => {
       const apptDoctorId = a.doctorId && typeof a.doctorId === 'object' ? a.doctorId._id : a.doctorId;
       return String(apptDoctorId) === String(doc._id) && 
              a.date === dateStr && 
@@ -364,21 +420,32 @@ const generateSlots = (doc, dateStr) => {
     
     // --- NEW: Helper to convert "02:00 PM" to "14:00" for accurate math ---
     const convertTo24Hour = (timeStr) => {
-      if (!timeStr || !timeStr.includes('M')) return timeStr; // Fallback if already 24h
-      const [time, modifier] = timeStr.split(' ');
-      let [hours, minutes] = time.split(':');
-      if (hours === '12') {
-        hours = modifier === 'AM' ? '00' : '12';
-      } else if (modifier === 'PM') {
-        hours = (parseInt(hours, 10) + 12).toString();
-      }
-      return `${hours.padStart(2, '0')}:${minutes}`;
+    if (!timeStr || !timeStr.includes('M')) return timeStr; // Fallback if already 24h
+    
+    const [time, modifier] = timeStr.split(' ');
+    // Convert to numbers immediately for safe math
+    let [h, m] = time.split(':').map(Number); 
+    
+    // The only two rules you ever need for 12-hour to 24-hour conversion:
+    if (modifier === 'PM' && h !== 12) h += 12;
+    if (modifier === 'AM' && h === 12) h = 0;
+    
+    // Convert back to zero-padded strings (e.g., 9 -> "09")
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+
+    // --- NEW: Smart Shift Checker (Handles Overnight Shifts) ---
+    const checkShift = (slotTime, start, end) => {
+      if (!start || !end) return false;
+      if (start < end) return slotTime >= start && slotTime < end; // Normal Shift
+      if (start > end) return slotTime >= start || slotTime < end; // Overnight Shift
+      return false;
     };
 
     const isWithinShift = (time) => {
-      const time24 = convertTo24Hour(time); // Convert slot for comparison
-      const isMorning = time24 >= (doc.morningStart || '09:00') && time24 < (doc.morningEnd || '13:00');
-      const isEvening = time24 >= (doc.eveningStart || '17:00') && time24 < (doc.eveningEnd || '21:00');
+      const time24 = convertTo24Hour(time); 
+      const isMorning = checkShift(time24, doc.morningStart || '09:00', doc.morningEnd || '13:00');
+      const isEvening = checkShift(time24, doc.eveningStart || '17:00', doc.eveningEnd || '21:00');
       return isMorning || isEvening;
     };
 
@@ -524,6 +591,7 @@ const generateSlots = (doc, dateStr) => {
         notifications={notificationStack} 
         onClearAll={handleClearNotifications} 
         onDismiss={handleDismissNotification} 
+        onLogout={onLogout}
       />
 
       <div className="flex-1 flex flex-col landscape:flex-row min-h-0 p-2 gap-2">
@@ -653,8 +721,33 @@ const generateSlots = (doc, dateStr) => {
                   </label>
                 </div>
                 <div>
+                  {/* NEW: Split Name Inputs */}
+                <div>
                   <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Full Name <span className="text-red-500">*</span></label>
-                  <input type="text" placeholder="e.g. Sarah Smith" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('name') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.name} onChange={handleNameInput} />
+                  <div className="grid grid-cols-3 gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="First *" 
+                      className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('firstName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} 
+                      value={newDoctor.firstName} 
+                      onChange={(e) => handleDocNameInput('firstName', e.target.value)} 
+                    />
+                    <input 
+                      type="text" 
+                      placeholder="Middle" 
+                      className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:ring-1 focus:ring-teal-500 outline-none" 
+                      value={newDoctor.middleName} 
+                      onChange={(e) => handleDocNameInput('middleName', e.target.value)} 
+                    />
+                    <input 
+                      type="text" 
+                      placeholder="Last *" 
+                      className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('lastName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} 
+                      value={newDoctor.lastName} 
+                      onChange={(e) => handleDocNameInput('lastName', e.target.value)} 
+                    />
+                  </div>
+                </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -834,7 +927,7 @@ const generateSlots = (doc, dateStr) => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <label className="text-[13px] font-bold text-slate-700">Select Date</label>
-            <input type="date" min={new Date().toISOString().split('T')[0]} className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[13px] focus:ring-1 focus:ring-teal-500" value={calendarDate} onChange={(e) => setCalendarDate(e.target.value)} />
+           <input type="date" min={todayStr} max={maxDateStr} className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[13px] focus:ring-1 focus:ring-teal-500" value={calendarDate} onChange={(e) => setCalendarDate(e.target.value)} />
           </div>
           <div>
             <h4 className="text-[11px] font-bold text-slate-500 uppercase mb-2">Available & Booked Slots</h4>
