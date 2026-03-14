@@ -10,14 +10,14 @@ const navItems = [
 
 const Layout = ({ activeTab, setActiveTab, children }) => {
   return (
-    <div className="h-dvh bg-slate-50 font-sans text-slate-900 flex overflow-hidden">
+    <div className="fixed inset-0 bg-slate-50 font-sans text-slate-900 flex overflow-hidden">
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-200 h-dvh sticky top-0">
         <div className="p-4 flex items-center gap-3 border-b border-slate-100">
            <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white font-bold text-[15px]">C</div>
            <span className="font-bold text-[19px] tracking-tight text-slate-800">CareOPD</span>
         </div>
-        <nav className="flex-1 p-3 space-y-1.5">
+        <nav className="flex-1 p-3 space-y-1.5 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
            {navItems.map(item => (
              <button 
                 key={item.id} 
