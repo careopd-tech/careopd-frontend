@@ -10,7 +10,7 @@ const navItems = [
 
 const Layout = ({ activeTab, setActiveTab, children }) => {
   return (
-    <div className="fixed inset-0 bg-slate-50 font-sans text-slate-900 flex overflow-hidden">
+    <div className="h-dvh bg-slate-50 font-sans text-slate-900 flex overflow-hidden overscroll-none">
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-200 h-dvh sticky top-0">
         <div className="p-4 flex items-center gap-3 border-b border-slate-100">
