@@ -59,6 +59,7 @@ const Appointments = ({ data, setData, onLogout }) => {
 
   // UI States
   const [batchLoading, setBatchLoading] = useState({ upcoming: false, previous: false });
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(() => {
       if (data.cachedSections) return false;
       return !data.appointments || data.appointments.length === 0;
@@ -538,7 +539,7 @@ const handlePatientAddressInput = (value) => {
     if (checkPatientConflict(newAppt.patientId, newAppt.date, newAppt.time, rebookingApptId)) return setModalError('Conflict: Appointment exists.');
 
     setInvalidFields([]);
-    
+    setIsSubmitting(true);
     // CONSTRUCT FULL NAME
     // Logic: Put parts in an array, remove empty ones (filter), join with exactly 1 space.
     const fullName = newAppt.patientId === 'add_new' 
@@ -581,26 +582,38 @@ const handlePatientAddressInput = (value) => {
         setModalError(result.errorMessage || result.error || "Failed to save appointment.");
       }
     } catch (e) { setModalError("Server error."); }
+    finally { setIsSubmitting(false); }
   };
   
   const confirmCancel = async () => { 
-      if (!actionAppt) return;
-      await fetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({status: 'Cancelled'})});
-      await fetchAllData(true); 
-      setIsCancelModalOpen(false); 
-      showNotification('Appointment Cancelled', 'error', `Appointment Cancelled for ${getPatientName(actionAppt.patientId)} scheduled on ${actionAppt.date} at ${actionAppt.time}`);
-      setActionAppt(null); 
-  };
+  if (!actionAppt) return;
+  setIsSubmitting(true);
+  try {
+    await fetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({status: 'Cancelled'})});
+    await fetchAllData(true); 
+    setIsCancelModalOpen(false); 
+    showNotification('Appointment Cancelled', 'error', `Appointment Cancelled for ${getPatientName(actionAppt.patientId)} scheduled on ${actionAppt.date} at ${actionAppt.time}`);
+    setActionAppt(null); 
+  } finally {
+    setIsSubmitting(false);
+  }
+};
   
   const confirmReschedule = async () => { 
-      if (!rescheduleData.date || !rescheduleData.time) return setModalError('Select date & time');
-      if (!validateFutureDate(rescheduleData.date, rescheduleData.time)) return setModalError('Cannot reschedule to the past.');
-      await fetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({date: rescheduleData.date, time: rescheduleData.time, status: 'Scheduled'})});
-      await fetchAllData(true); 
-      setIsRescheduleModalOpen(false); 
-      showNotification('Appointment Rescheduled', 'success', `Appointment Rescheduled for ${getPatientName(actionAppt.patientId)} to ${rescheduleData.date} at ${rescheduleData.time}`);
-      setActionAppt(null); 
-  };
+  if (!rescheduleData.date || !rescheduleData.time) return setModalError('Select date & time');
+  if (!validateFutureDate(rescheduleData.date, rescheduleData.time)) return setModalError('Cannot reschedule to the past.');
+  
+  setIsSubmitting(true);
+  try {
+    await fetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}`, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({date: rescheduleData.date, time: rescheduleData.time, status: 'Scheduled'})});
+    await fetchAllData(true); 
+    setIsRescheduleModalOpen(false); 
+    showNotification('Appointment Rescheduled', 'success', `Appointment Rescheduled for ${getPatientName(actionAppt.patientId)} to ${rescheduleData.date} at ${rescheduleData.time}`);
+    setActionAppt(null); 
+  } finally {
+    setIsSubmitting(false);
+  }
+};
   
   const handleRebook = (appt) => { 
     const doc = getDoctorById(appt.doctorId);
@@ -802,7 +815,16 @@ const handlePatientAddressInput = (value) => {
          </div>
       </Modal>
 
-      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setRebookingApptId(null); setModalError(''); setInvalidFields([]); setNewAppt({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate }); setNewPatientDetails({ name: '', phone: '', age: '', gender: 'M', address: '' }); }} title={rebookingApptId ? "ReBook Appointment" : "New Appointment"} footer={<button onClick={handleAddAppointment} className="w-full bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium">Confirm Booking</button>}>
+      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setRebookingApptId(null); setModalError(''); setInvalidFields([]); setNewAppt({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate }); setNewPatientDetails({ name: '', phone: '', age: '', gender: 'M', address: '' }); }} title={rebookingApptId ? "ReBook Appointment" : "New Appointment"} 
+      footer={
+  <button 
+    onClick={handleAddAppointment} 
+    disabled={isSubmitting}
+    className="w-full bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+  >
+    {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Confirming...</> : 'Confirm Booking'}
+  </button>
+}>
          <div className="space-y-3">
             <AlertMessage message={modalError} />
             <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Patient <span className="text-red-500">*</span></label><select disabled={!!rebookingApptId} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 outline-none ${invalidFields.includes('patientId') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.patientId} onChange={(e) => setNewAppt({...newAppt, patientId: e.target.value})}><option value="">Select Patient</option>{!rebookingApptId && <option value="add_new" className="font-bold text-teal-600">+ Add New Patient</option>}{data.patients.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}</select></div>
@@ -898,7 +920,15 @@ const handlePatientAddressInput = (value) => {
          </div>
       </Modal>
 
-      <Modal isOpen={isRescheduleModalOpen} onClose={() => { setIsRescheduleModalOpen(false); setActionAppt(null); }} title="Reschedule" footer={<button onClick={confirmReschedule} className="w-full bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium">Update Appointment</button>}>
+      <Modal isOpen={isRescheduleModalOpen} onClose={() => { setIsRescheduleModalOpen(false); setActionAppt(null); }} title="Reschedule" footer={
+  <button 
+    onClick={confirmReschedule} 
+    disabled={isSubmitting}
+    className="w-full bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+  >
+    {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Updating...</> : 'Update Appointment'}
+  </button>
+}>
          <div className="space-y-3">
             {actionAppt && (<div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex items-center justify-between mb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Currently Scheduled:</span><span className="text-[13px] font-bold text-slate-700">{actionAppt.date} at {actionAppt.time}</span></div>)}
             <AlertMessage message={modalError} />
@@ -906,7 +936,14 @@ const handlePatientAddressInput = (value) => {
          </div>
       </Modal>
 
-      <Modal isOpen={isCancelModalOpen} onClose={() => { setIsCancelModalOpen(false); setActionAppt(null); }} title="Cancel Appointment" footer={<div className="flex gap-2"><button onClick={() => setIsCancelModalOpen(false)} className="flex-1 py-1.5 text-slate-600 border rounded-lg bg-white">Keep it</button><button onClick={confirmCancel} className="flex-1 bg-red-600 text-white py-1.5 rounded-lg">Yes, Cancel</button></div>}><div className="text-[13px] text-slate-600">Are you sure you want to cancel?</div></Modal>
+      <Modal isOpen={isCancelModalOpen} onClose={() => { setIsCancelModalOpen(false); setActionAppt(null); }} title="Cancel Appointment" footer={
+  <div className="flex gap-2">
+    <button onClick={() => setIsCancelModalOpen(false)} disabled={isSubmitting} className="flex-1 py-1.5 text-slate-600 border rounded-lg bg-white disabled:opacity-50">Keep it</button>
+    <button onClick={confirmCancel} disabled={isSubmitting} className="flex-1 bg-red-600 text-white py-1.5 rounded-lg flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed">
+      {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Cancelling...</> : 'Yes, Cancel'}
+    </button>
+  </div>
+}><div className="text-[13px] text-slate-600">Are you sure you want to cancel?</div></Modal>
     </div>
   );
 };
