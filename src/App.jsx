@@ -3,7 +3,7 @@ import { DateProvider } from './context/DateContext';
 import API_BASE_URL from './config'; 
 import Layout from './components/layout/Layout';
 
-// --- MODULE IMPORTS ---
+// --- MODULE IMPORTS (Unified) ---
 import Auth from './modules/Auth';
 import Appointments from './modules/Appointments';
 import Doctors from './modules/Doctors';
@@ -11,36 +11,26 @@ import Patients from './modules/Patients';
 import Settings from './modules/Settings';
 
 const App = () => {
-  // --- BOOT STATE ---
-  // This prevents the PWA layout jerk by holding the render for a split second 
-  // until React, CSS, and Fonts are fully hydrated in the browser.
   const [isBooting, setIsBooting] = useState(true);
 
-  // --- AUTH STATE ---
+  // --- AUTH & ROLE STATE ---
   const [authState, setAuthState] = useState(() => {
     return localStorage.getItem('clinicId') ? 'authenticated' : 'login';
   });
-
-  // Default to appointments tab
-  const [activeTab, setActiveTab] = useState('appointments');
   
-  // GLOBAL STATE CONTAINER
-  const [data, setData] = useState({
-    appointments: [],
-    doctors: [],
-    patients: [],
-    clinic: {},
-    notifications: [] 
+  const [userRole, setUserRole] = useState(() => {
+    return localStorage.getItem('userRole') || 'admin';
   });
 
-  // --- SMOOTH MOUNT EFFECT ---
+  // UNIFIED: Everyone defaults to the Appointments (Queue) module
+  const [activeTab, setActiveTab] = useState('appointments');
+  
+  const [data, setData] = useState({
+    appointments: [], doctors: [], patients: [], clinic: {}, notifications: [] 
+  });
+
   useEffect(() => {
-    // 150ms is the UI design sweet-spot. It's fast enough that the user doesn't 
-    // feel a delay, but slow enough to let the browser paint the layout smoothly.
-    const timer = setTimeout(() => {
-      setIsBooting(false);
-    }, 150); 
-    
+    const timer = setTimeout(() => setIsBooting(false), 150); 
     return () => clearTimeout(timer);
   }, []);
 
@@ -48,18 +38,19 @@ const App = () => {
     localStorage.clear(); 
     setAuthState('login');
     setActiveTab('appointments');
+    setUserRole('admin'); 
     setData({ appointments: [], doctors: [], patients: [], clinic: {}, notifications: [] });
   };
 
-  // --- EARLY RETURN FOR BOOTING ---
-  if (isBooting) {
-    // Returning null allows the plain HTML/CSS spinner inside public/index.html 
-    // to stay on screen, perfectly bridging the gap from the OS splash screen!
-    return null; 
+  if (isBooting) return null; 
+
+  if (authState !== 'authenticated') {
+    return <Auth authState={authState} setAuthState={setAuthState} setUserRole={setUserRole} />;
   }
 
-  // --- VIEW ROUTING ---
+  // --- UNIFIED ROUTING ---
   let content;
+  
   if (activeTab === 'appointments') {
     content = <Appointments data={data} setData={setData} onLogout={handleLogout}/>;
   } else if (activeTab === 'doctors') {
@@ -72,15 +63,9 @@ const App = () => {
     content = <div className="p-10 text-slate-400">Tab "{activeTab}" not found.</div>;
   }
 
-  // --- RENDER ---
-  if (authState !== 'authenticated') {
-    return <Auth authState={authState} setAuthState={setAuthState} />;
-  }
-
-  // WRAP APP IN DATE PROVIDER
   return (
     <DateProvider>
-      <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
+      <Layout activeTab={activeTab} setActiveTab={setActiveTab} userRole={userRole}>
         {content}
       </Layout>
     </DateProvider>

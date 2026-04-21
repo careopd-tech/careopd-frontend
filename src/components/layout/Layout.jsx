@@ -1,14 +1,29 @@
 import React from 'react';
-import { Calendar, Stethoscope, Users, Settings } from 'lucide-react';
+import { Calendar, Stethoscope, Users, Settings, Activity } from 'lucide-react';
 
-const navItems = [
-  { id: 'appointments', label: 'Appointments', mobileLabel: 'Appts', icon: Calendar },
-  { id: 'doctors', label: 'Doctors', icon: Stethoscope },
-  { id: 'patients', label: 'Patients', icon: Users },
-  { id: 'settings', label: 'Settings', icon: Settings },
-];
+const Layout = ({ activeTab, setActiveTab, userRole, children }) => {
+  // DYNAMIC NAVIGATION BASED ON ROLE
+  const getNavItems = () => {
+    if (userRole === 'doctor') {
+      return [
+        // Maps securely to the Appointments.jsx module under the hood
+        { id: 'appointments', label: 'Queue & Schedule', mobileLabel: 'Queue', icon: Activity },
+        { id: 'patients', label: 'My Patients', mobileLabel: 'Patients', icon: Users },
+        { id: 'settings', label: 'Settings', mobileLabel: 'Settings', icon: Settings },
+      ];
+    }
+    
+    // Default Admin Navigation
+    return [
+      { id: 'appointments', label: 'Appointments', mobileLabel: 'Appts', icon: Calendar },
+      { id: 'doctors', label: 'Doctors', mobileLabel: 'Doctors', icon: Stethoscope },
+      { id: 'patients', label: 'Patients', mobileLabel: 'Patients', icon: Users },
+      { id: 'settings', label: 'Settings', mobileLabel: 'Settings', icon: Settings },
+    ];
+  };
 
-const Layout = ({ activeTab, setActiveTab, children }) => {
+  const currentNavItems = getNavItems();
+
   return (
     <div className="h-dvh bg-slate-50 font-sans text-slate-900 flex overflow-hidden overscroll-none">
       {/* Desktop Sidebar */}
@@ -18,7 +33,7 @@ const Layout = ({ activeTab, setActiveTab, children }) => {
            <span className="font-bold text-[19px] tracking-tight text-slate-800">CareOPD</span>
         </div>
         <nav className="flex-1 p-3 space-y-1.5 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-           {navItems.map(item => (
+           {currentNavItems.map(item => (
              <button 
                 key={item.id} 
                 onClick={() => setActiveTab(item.id)} 
@@ -38,7 +53,7 @@ const Layout = ({ activeTab, setActiveTab, children }) => {
 
         {/* Mobile Bottom Nav */}
         <nav className="flex-none md:hidden bg-white border-t border-slate-200 flex justify-around p-1.5 pb-safe z-30 shadow-lg">
-           {navItems.map(item => (
+           {currentNavItems.map(item => (
              <button 
                 key={item.id} 
                 onClick={() => setActiveTab(item.id)} 

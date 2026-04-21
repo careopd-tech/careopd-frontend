@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
-import { Mail, KeyRound, Eye, EyeOff, CheckCircle, ArrowLeft, Loader2 } from 'lucide-react'; // Added Loader2
+import { Mail, KeyRound, Eye, EyeOff, CheckCircle, ArrowLeft, Loader2 } from 'lucide-react';
 import AlertMessage from '../components/ui/AlertMessage';
 import API_BASE_URL from '../config';
 
-const Auth = ({ authState, setAuthState }) => {
+// FIXED: Added setUserRole to props matching App.jsx
+const Auth = ({ authState, setAuthState, setUserRole }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   
-  // --- NEW: Loading State ---
   const [isLoading, setIsLoading] = useState(false);
-  
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [invalidFields, setInvalidFields] = useState([]);
@@ -21,7 +20,6 @@ const Auth = ({ authState, setAuthState }) => {
     setError('');
     setSuccess('');
     
-    // 1. Validation Logic
     let errors = [];
     if (authState === 'login') {
       if (!email) errors.push('email');
@@ -38,8 +36,6 @@ const Auth = ({ authState, setAuthState }) => {
       return setError('Please fill all required details marked with *');
     }
     setInvalidFields([]);
-
-    // 2. Start Loading
     setIsLoading(true);
 
     try {
@@ -53,18 +49,30 @@ const Auth = ({ authState, setAuthState }) => {
         const result = await response.json();
 
         if (response.ok && result.user) {
+          // --- NEW: Setup the Personas in LocalStorage ---
           localStorage.setItem('user', JSON.stringify(result.user));
           localStorage.setItem('clinicId', result.user.clinicId._id || result.user.clinicId);
           localStorage.setItem('userName', result.user.name);
+          
+          // Securely map the role and doctorId for RBAC UI logic
+          localStorage.setItem('userRole', result.user.role);
+          if (result.user.doctorId) {
+             localStorage.setItem('doctorId', result.user.doctorId);
+          } else {
+             localStorage.removeItem('doctorId');
+          }
+          
           if (result.token) localStorage.setItem('token', result.token);
           
+          // Update React State
+          if (setUserRole) setUserRole(result.user.role);
           setAuthState('authenticated');
+
         } else {
           setError(result.error || 'Login failed. Please check your credentials.');
         }
       } 
       else if (authState === 'forgot') {
-        // API call simulation
         await new Promise(resolve => setTimeout(resolve, 1500)); 
         setSuccess('If an account exists, a reset link has been sent to your email.');
         setTimeout(() => setAuthState('reset'), 2000); 
@@ -72,7 +80,7 @@ const Auth = ({ authState, setAuthState }) => {
       else if (authState === 'reset') {
         if (password !== confirmPassword) {
            setError('Passwords do not match.');
-           setIsLoading(false); // Stop loader here immediately
+           setIsLoading(false); 
            return;
         }
         if (password.length < 6) {
@@ -81,7 +89,6 @@ const Auth = ({ authState, setAuthState }) => {
            return;
         }
         
-        // API call simulation
         await new Promise(resolve => setTimeout(resolve, 1500));
         setSuccess('Password set successfully!');
         setTimeout(() => setAuthState('login'), 1500);
@@ -90,7 +97,6 @@ const Auth = ({ authState, setAuthState }) => {
       console.log("Fetch error:", err);
       setError('Failed to connect to the CareOPD server. Is it running?');
     } finally {
-      // 3. Stop Loading (Always runs, success or fail)
       setIsLoading(false);
     }
   };

@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
+import PatientHistoryList, { filterValidHistory, getUiStatus, getStatusStyling } from '../components/ui/PatientHistoryList';
 import { 
-  Plus, ChevronDown, Edit2, Loader2, CheckCircle, AlertCircle, Users, X, History, Clock
+  Plus, ChevronDown, Edit2, Loader2, CheckCircle, AlertCircle, Users, X, History, Clock,
+  Activity, FileText, Pill, FlaskConical
 } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import FAB from '../components/ui/FAB';
@@ -8,7 +10,60 @@ import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import API_BASE_URL from '../config';
 
-// --- PATIENT SKELETON LOADER ---
+
+
+
+
+  
+
+// Note: I included data & setData in the props so App.jsx stays perfectly happy
+const Patients = ({ data, setData, onLogout }) => {
+  const clinicId = localStorage.getItem('clinicId');
+  const userRole = localStorage.getItem('userRole') || 'admin';
+  const doctorId = localStorage.getItem('doctorId') || '';
+
+  const rbacQuery = `&userRole=${userRole}&doctorId=${doctorId}`;
+
+  // --- STATE MANAGEMENT ---
+  const [patients, setPatients] = useState([]);
+  const [totalPatients, setTotalPatients] = useState(0);
+  const [page, setPage] = useState(1);
+  const [stats, setStats] = useState({ total: 0, new: 0, returning: 0, noVisit: 0 });
+  
+  const [loading, setLoading] = useState(true);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [dateRange, setDateRange] = useState({ from: '', to: '' });
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const hasActiveFilters = typeFilter !== '' || dateRange.from || dateRange.to || searchQuery !== '';
+
+  // Notifications
+  const [notification, setNotification] = useState(null);
+  const [notificationStack, setNotificationStack] = useState(() => {
+    try { const saved = localStorage.getItem('pat_notifications'); return saved ? JSON.parse(saved) : []; } catch (e) { return []; }
+  });
+  useEffect(() => { localStorage.setItem('pat_notifications', JSON.stringify(notificationStack)); }, [notificationStack]);
+
+  // --- ADD THIS STATE ---
+  const [selectedPastVisit, setSelectedPastVisit] = useState(null);
+  // --- ADD THIS HELPER (For the Deep-Dive Modal) ---
+  const getFormattedUnit = (med) => {
+    if (med.duration === 'Custom') return med.quantity;
+    let unit = '';
+    const nameLower = (med.name || '').toLowerCase();
+    if (nameLower.startsWith('tab') || nameLower.includes(' tab')) unit = 'Tab';
+    else if (nameLower.startsWith('cap') || nameLower.includes(' cap')) unit = 'Cap';
+    else if (nameLower.startsWith('syp') || nameLower.includes('syrup')) unit = 'ml';
+    else if (nameLower.includes('drop')) unit = 'Drop';
+    else if (nameLower.startsWith('inj') || nameLower.includes('injection')) unit = 'Amp';
+    const hasLetters = /[a-zA-Z]/.test(med.quantity || '');
+    return hasLetters ? med.quantity : `${med.quantity} ${unit}`.trim();
+  };
+  // --- PATIENT SKELETON LOADER ---
 const PatientSkeleton = () => (
   <div className="space-y-3 animate-pulse">
     {[1, 2, 3, 4].map((i) => (
@@ -27,44 +82,12 @@ const PatientSkeleton = () => (
   </div>
 );
 
-const Patients = ({ data, setData, onLogout }) => {
-  const clinicId = localStorage.getItem('clinicId');
-
-  // --- 1. LOCAL CACHE INITIALIZATION ---
-  // Instead of starting empty, we instantly pull from the App.jsx global cache!
-  const [patients, setPatients] = useState(() => data?.patients || []);
-  const [stats, setStats] = useState(() => data?.stats || { total: data?.patients?.length || 0, new: 0, returning: 0, noVisit: 0 });
-  const [totalPatients, setTotalPatients] = useState(() => data?.stats?.total || data?.patients?.length || 0);
-  
-  // If we already have cached patients, skip the loading skeleton entirely!
-  const [loading, setLoading] = useState(() => !(data && data.patients && data.patients.length > 0));
-  
-  const [page, setPage] = useState(1);
-  const [isFetchingMore, setIsFetchingMore] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
-
-  // Filters
-  const [searchQuery, setSearchQuery] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [dateRange, setDateRange] = useState({ from: '', to: '' });
-  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-  const hasActiveFilters = typeFilter !== '' || dateRange.from || dateRange.to || searchQuery !== '';
-
-  // Notifications
-  const [notification, setNotification] = useState(null);
-  const [notificationStack, setNotificationStack] = useState(() => {
-    try { const saved = localStorage.getItem('pat_notifications'); return saved ? JSON.parse(saved) : []; } catch (e) { return []; }
-  });
-  useEffect(() => { localStorage.setItem('pat_notifications', JSON.stringify(notificationStack)); }, [notificationStack]);
-
   // Modal States
   const [isAddPatientModalOpen, setIsAddPatientModalOpen] = useState(false);
   const [addPatientTab, setAddPatientTab] = useState('demographics');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState('');
   const [invalidFields, setInvalidFields] = useState([]);
-  
-  // History Modal States
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedHistoryPatient, setSelectedHistoryPatient] = useState(null);
   const [patientHistory, setPatientHistory] = useState([]);
@@ -76,15 +99,13 @@ const Patients = ({ data, setData, onLogout }) => {
   };
   const [newPatient, setNewPatient] = useState(defaultPatientState);
 
-  // Refs for debouncing & safe async access
+  // Refs for debouncing
   const searchTimeoutRef = useRef(null);
   const queryRef = useRef(searchQuery);
   const typeRef = useRef(typeFilter);
-  const dateRef = useRef(dateRange);
 
   useEffect(() => { queryRef.current = searchQuery; }, [searchQuery]);
   useEffect(() => { typeRef.current = typeFilter; }, [typeFilter]);
-  useEffect(() => { dateRef.current = dateRange; }, [dateRange]);
 
   // --- NOTIFICATION HELPERS ---
   const showNotification = (shortMessage, type = 'success', detailedMessage = null) => {
@@ -97,53 +118,44 @@ const Patients = ({ data, setData, onLogout }) => {
   const handleClearNotifications = () => setNotificationStack([]);
   const handleDismissNotification = (id) => setNotificationStack(prev => prev.filter(n => n.id !== id));
 
-  // --- 2. DATA FETCHING & SILENT REFRESH ---
+  // --- DATA FETCHING ---
   const fetchPatientData = async (targetPage = 1, isBackgroundSync = false) => {
     if (!clinicId) return;
     
-    // Only show loading states if we don't have cache, OR if the user is actively searching
     if (targetPage === 1 && !isBackgroundSync) {
        if (queryRef.current) setIsSearching(true);
-       else if (patients.length === 0) setLoading(true); 
+       else setLoading(true);
     }
 
     try {
       const promises = [];
       
-      // Fetch Stats (Snapshot)
+      // 1. Fetch Stats (Snapshot) - WITH FAILSAFES
       promises.push(
-        fetch(`${API_BASE_URL}/api/patients/${clinicId}?mode=snapshot`)
+        fetch(`${API_BASE_URL}/api/patients/${clinicId}?mode=snapshot${rbacQuery}`)
           .then(res => res.json())
           .then(resData => {
              if (resData && resData.stats) {
                  setStats(resData.stats);
-                 // SILENT CACHE UPDATE: Push stats to global App.jsx state
-                 if (setData) setData(prev => ({ ...prev, stats: resData.stats }));
              }
           })
           .catch(() => console.log("Stats fetch failed quietly"))
       );
 
-      // Fetch List
-      let url = `${API_BASE_URL}/api/patients/${clinicId}?mode=list&page=${targetPage}&limit=20`;
+      // 2. Fetch List
+      let url = `${API_BASE_URL}/api/patients/${clinicId}?mode=list&page=${targetPage}&limit=20${rbacQuery}`;
       if (queryRef.current) url += `&query=${queryRef.current}`;
       if (typeRef.current) url += `&type=${typeRef.current}`;
-      if (dateRef.current.from) url += `&dateFrom=${dateRef.current.from}`;
-      if (dateRef.current.to) url += `&dateTo=${dateRef.current.to}`;
+      if (dateRange.from) url += `&dateFrom=${dateRange.from}`;
+      if (dateRange.to) url += `&dateTo=${dateRange.to}`;
 
       promises.push(
         fetch(url)
           .then(res => res.json())
           .then(resData => {
             const incomingPatients = Array.isArray(resData.data) ? resData.data : [];
-            
             if (targetPage === 1) {
               setPatients(incomingPatients);
-              
-              // SILENT CACHE UPDATE: If no filters are active, update the global App.jsx cache!
-              if (!queryRef.current && !typeRef.current && !dateRef.current.from && setData) {
-                 setData(prev => ({ ...prev, patients: incomingPatients }));
-              }
             } else {
               setPatients(prev => {
                 const existingIds = new Set(prev.map(p => p._id));
@@ -170,7 +182,7 @@ const Patients = ({ data, setData, onLogout }) => {
   // Initial load & Polling
   useEffect(() => {
     fetchPatientData(1);
-    const interval = setInterval(() => fetchPatientData(page, true), 60000); // Silent refresh every 60s
+    const interval = setInterval(() => fetchPatientData(page, true), 60000);
     return () => clearInterval(interval);
   }, [typeFilter, dateRange]); 
 
@@ -238,8 +250,17 @@ const Patients = ({ data, setData, onLogout }) => {
 
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patPayload) });
       if (res.ok) {
-        await fetchPatientData(1); // Refresh list
+        await fetchPatientData(1);
         
+        // This instantly tells the Appointments page to update its dropdown!
+        if (setData) {
+          const allPatsRes = await fetch(`${API_BASE_URL}/api/patients/${clinicId}?tag=patients`);
+          if (allPatsRes.ok) {
+             const freshPats = await allPatsRes.json();
+             setData(prev => ({ ...prev, patients: freshPats }));
+          }
+        }
+
         setIsAddPatientModalOpen(false);
         setNewPatient(defaultPatientState);
         setAddPatientTab('demographics');
@@ -256,12 +277,12 @@ const Patients = ({ data, setData, onLogout }) => {
     setSelectedHistoryPatient(p);
     setIsHistoryModalOpen(true);
     setIsHistoryLoading(true);
-    
     try {
       const res = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=history&patientId=${p._id}`);
       if (res.ok) {
         const data = await res.json();
-        setPatientHistory(data);
+        // Filter out future/active visits
+        setPatientHistory(filterValidHistory(data)); 
       }
     } catch (err) {
       console.error("Failed to fetch history", err);
@@ -275,10 +296,10 @@ const Patients = ({ data, setData, onLogout }) => {
       return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  const renderPatientCard = (p) => {
-    if (!p) return null; // Ultimate failsafe
+const renderPatientCard = (p) => {
+    if (!p) return null; // Failsafe
     return (
-      <div key={p._id || Math.random()} className="p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col md:flex-row gap-2 bg-white hover:border-teal-50 transition-colors">
+      <div key={p._id} className="p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col md:flex-row gap-2 bg-white hover:border-teal-50 transition-colors">
         <div className="flex-1 min-w-0">
           <div className="flex justify-between items-start mb-1.5">
             <div className="flex items-center gap-1.5 mt-0.5">
@@ -344,6 +365,7 @@ const Patients = ({ data, setData, onLogout }) => {
         </div>
 
         {/* Main List Area */}
+        {/* Main List Area */}
         <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
             
             {/* MATCHED APPOINTMENTS SEARCH HEADER */}
@@ -376,7 +398,7 @@ const Patients = ({ data, setData, onLogout }) => {
                  <div className="space-y-1.5">
                    {patients.map(renderPatientCard)}
                    
-                   {/* LOAD MORE BUTTON */}
+                   {/* MATCHED APPOINTMENTS LOAD MORE BUTTON */}
                    {patients.length < totalPatients && (
                       <button 
                         onClick={handleLoadMore} 
@@ -399,7 +421,9 @@ const Patients = ({ data, setData, onLogout }) => {
         </div>
       </div>
 
-      <FAB icon={Plus} onClick={() => { setNewPatient(defaultPatientState); setAddPatientTab('demographics'); setIsAddPatientModalOpen(true); }} />
+      {userRole === 'admin' && (
+        <FAB icon={Plus} onClick={() => { setNewPatient(defaultPatientState); setAddPatientTab('demographics'); setIsAddPatientModalOpen(true); }} />
+      )}
 
       <Modal isOpen={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)} title="Advanced Filters" footer={<div className="flex gap-2"><button onClick={() => { setDateRange({ from: '', to: '' }); setIsFilterModalOpen(false); }} className="flex-1 py-1.5 text-[15px] text-slate-600 font-medium border border-slate-200 rounded-lg bg-white">Clear</button><button onClick={() => setIsFilterModalOpen(false)} className="flex-1 bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium">Apply Filters</button></div>}>
         <div className="space-y-3">
@@ -452,42 +476,28 @@ const Patients = ({ data, setData, onLogout }) => {
         isOpen={isHistoryModalOpen} 
         onClose={() => { setIsHistoryModalOpen(false); setPatientHistory([]); setSelectedHistoryPatient(null); }} 
         title={`Visit History: ${selectedHistoryPatient?.name || ''}`} 
-        footer={<button onClick={() => setIsHistoryModalOpen(false)} className="w-full bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors py-1.5 rounded-lg text-[15px] font-medium">Close</button>}
+        footer={<button onClick={() => setIsHistoryModalOpen(false)} className="w-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors py-1.5 rounded-lg text-[15px] font-medium">Close</button>}
       >
-        <div className="min-h-[250px] max-h-[400px] overflow-y-auto pr-1 scrollbar-hide">
-          {isHistoryLoading ? (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-2">
-               <Loader2 size={24} className="animate-spin text-blue-600" />
-               <span className="text-[12px] font-medium">Loading timeline...</span>
-            </div>
-          ) : patientHistory.length > 0 ? (
-            <div className="space-y-3 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
-              {patientHistory.map((appt, idx) => {
-                 const isCompleted = appt.status === 'Completed' || appt.status === 'Done';
-                 const isCancelled = appt.status === 'Cancelled';
-                 return (
-                   <div key={appt._id || idx} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                     <div className={`flex items-center justify-center w-6 h-6 rounded-full border-2 border-white shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow-sm ${isCompleted ? 'bg-green-500' : isCancelled ? 'bg-red-500' : 'bg-blue-500'} z-10`}>
-                       <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-                     </div>
-                     <div className="w-[calc(100%-2.5rem)] md:w-[calc(50%-1.5rem)] p-3 rounded-xl border border-slate-100 bg-white shadow-sm">
-                       <div className="flex items-center justify-between mb-1">
-                          <span className="text-[11px] font-bold text-slate-800">{appt.date} • {appt.time}</span>
-                          <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${isCompleted ? 'bg-green-50 text-green-700' : isCancelled ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'}`}>{appt.status}</span>
-                       </div>
-                       <p className="text-[11px] text-slate-500 mt-1">{appt.type || 'Consultation'} w/ <span className="font-bold text-slate-700">{appt.doctorId?.name || 'Unknown Doctor'}</span></p>
-                     </div>
-                   </div>
-                 )
-              })}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-               <History size={32} className="mb-2 opacity-20" />
-               <span className="text-[13px] font-medium text-slate-500">No appointment history found.</span>
-               <span className="text-[11px] mt-1">This patient hasn't booked any visits yet.</span>
-            </div>
-          )}
+        {/* Added pb-8 for spacing, and robust CSS selectors to hide the scrollbar across all browsers */}
+        <div className="h-[55vh] min-h-[400px] overflow-y-auto pr-2 pb-8 -mx-2 px-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+             <PatientHistoryList 
+                historyData={patientHistory} 
+                isLoading={isHistoryLoading} 
+                layout="vertical" 
+                // The Lazy Loader: Fires if the doctor clicks a card that lacks deep-dive details
+                onFetchDetails={async (visitId) => {
+                    try {
+                        const res = await fetch(`${API_BASE_URL}/api/appointments/details/${visitId}`); // Assuming you have an endpoint for this
+                        if (res.ok) {
+                            const detailedData = await res.json();
+                            // Update the specific visit in state with the newly fetched details
+                            setPatientHistory(prev => prev.map(v => v._id === visitId ? { ...v, ...detailedData } : v));
+                        }
+                    } catch (e) {
+                        console.error("Failed to lazy load visit details", e);
+                    }
+                }} 
+             />
         </div>
       </Modal>
     </div>

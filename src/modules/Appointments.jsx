@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
 import {
   Calendar, CalendarCheck, History, Plus, Clock, RefreshCw,
-  ChevronDown, CalendarDays, CheckCircle, AlertCircle, Loader2, X, Search
+  ChevronDown, CalendarDays, CheckCircle, AlertCircle, Loader2, X, Search, Activity
 } from 'lucide-react';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
@@ -12,11 +12,20 @@ import TimeSlotPicker from '../components/business/TimeSlotPicker';
 import { useGlobalDate } from '../context/DateContext';
 import API_BASE_URL from '../config';
 
+// --- ADDED: IMPORT THE EMR PAD ---
+import ConsultationPad from '../components/doctor/ConsultationPad';
+
 const Appointments = ({ data, setData, onLogout }) => {
   // --- 1. CONTEXT & BASICS ---
   const dateContext = useGlobalDate();
   const safeCurrentDate = dateContext?.currentDate || new Date().toISOString().split('T')[0];
   const clinicId = localStorage.getItem('clinicId');
+  const userRole = localStorage.getItem('userRole') || 'admin';
+  const doctorId = localStorage.getItem('doctorId') || '';
+  const rbacQuery = `&userRole=${userRole}&doctorId=${doctorId}`;
+  
+  // --- ADDED: RBAC HELPER ---
+  const isAdmin = userRole === 'admin';
 
   // --- NEW: 30-Day Window Boundary ---
   const maxDateObj = new Date(safeCurrentDate);
@@ -78,6 +87,10 @@ const Appointments = ({ data, setData, onLogout }) => {
   const [notification, setNotification] = useState(null);
   const [actionAppt, setActionAppt] = useState(null);
 
+  // --- ADDED: EMR FULL SCREEN MODAL STATE ---
+  const [isConsultationPadOpen, setIsConsultationPadOpen] = useState(false);
+  const [activeConsultationAppt, setActiveConsultationAppt] = useState(null);
+
   // --- NOTIFICATION STATE (PERSISTENT) ---
   const [notificationStack, setNotificationStack] = useState(() => {
     try {
@@ -98,7 +111,7 @@ const Appointments = ({ data, setData, onLogout }) => {
   const [modalError, setModalError] = useState('');
   const [invalidFields, setInvalidFields] = useState([]);
   const [patientSearchQuery, setPatientSearchQuery] = useState('');
-  const [isPatientDropdownOpen, setIsPatientDropdownOpen] = useState(false); // <--- ADD THIS
+  const [isPatientDropdownOpen, setIsPatientDropdownOpen] = useState(false);
 
   // Refs
   const previousListRef = useRef(null);
@@ -189,7 +202,7 @@ const Appointments = ({ data, setData, onLogout }) => {
     return true;
   });
 
-  // --- 6. DATA FETCHING (RESTORED SMART REFRESH) ---
+  // --- 6. DATA FETCHING ---
   const fetchAllData = async (forceSync = false, overrideQuery = undefined) => {
     if (!clinicId) return;
     const isNewSearch = overrideQuery !== undefined;
@@ -199,35 +212,29 @@ const Appointments = ({ data, setData, onLogout }) => {
     try {
       const promises = [];
       const dashboardPromise = Promise.all([
-        fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=snapshot&date=${safeCurrentDate}`),
+        fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=snapshot&date=${safeCurrentDate}${rbacQuery}`),
         fetch(`${API_BASE_URL}/api/doctors/${clinicId}`),
         fetch(`${API_BASE_URL}/api/patients/${clinicId}`),
-        // 👇 1. ADD THIS NEW FETCH TO THE PROMISE ARRAY
-        fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments`)
+        fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments${rbacQuery}`)
       ]).then(async ([snapshotRes, docsRes, patsRes, calRes]) => {
         if (snapshotRes.ok && docsRes.ok && patsRes.ok && calRes.ok) {
           const [snapshot, docs, pats, calendar30] = await Promise.all([snapshotRes.json(), docsRes.json(), patsRes.json(), calRes.json()]);
 
           const activeSection = expandedSectionRef.current;
 
-          // RESTORED: Smart Refresh Logic with Strict Guards
           const syncGroup = async (group, serverCount) => {
-            // GUARD: Only sync if the user is actively viewing this section
             if (activeSection !== group) return sectionsRef.current[group];
 
             const currentList = sectionsRef.current[group];
-
-            // SMART SYNC: If Server says 19, but Local has 18, triggers heal.
             const needsSync = serverCount !== currentList.length || (forceSync && activeSection === group);
 
             if (needsSync) {
               const currentPages = Math.ceil((currentList.length || 1) / 20);
               const limit = Math.max(currentPages * 20, 20);
 
-              const res = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=batch&group=${group}&page=1&limit=${limit}&date=${safeCurrentDate}`);
+              const res = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=batch&group=${group}&page=1&limit=${limit}&date=${safeCurrentDate}${rbacQuery}`);
               if (res.ok) {
                 let list = await res.json();
-                // Sort 'Previous' Ascending (Oldest -> Newest)
                 if (group === 'previous') {
                   list.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
                 }
@@ -262,7 +269,7 @@ const Appointments = ({ data, setData, onLogout }) => {
         const currentPagesLoaded = isNewSearch ? 1 : searchPageRef.current;
         const limitToFetch = Math.max(20, currentPagesLoaded * 20);
 
-        const searchPromise = fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=search&query=${currentQuery}&page=1&limit=${limitToFetch}`)
+        const searchPromise = fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=search&query=${currentQuery}&page=1&limit=${limitToFetch}${rbacQuery}`)
           .then(res => res.json())
           .then(data => {
             const results = Array.isArray(data) ? data : (data.data || []);
@@ -294,14 +301,12 @@ const Appointments = ({ data, setData, onLogout }) => {
   // --- SCROLL MANAGEMENT ---
   useLayoutEffect(() => {
     if (expandedSection === 'previous' && previousListRef.current) {
-      // SCENARIO 1: "Load Older" was clicked (Prepend Data)
       if (previousScrollHeightRef.current > 0) {
         const newScrollHeight = previousListRef.current.scrollHeight;
         const heightDifference = newScrollHeight - previousScrollHeightRef.current;
         previousListRef.current.scrollTop += heightDifference;
         previousScrollHeightRef.current = 0;
       }
-      // SCENARIO 2: Initial Open
       else if (!hasSnappedToBottomRef.current && sections.previous.length > 0) {
         previousListRef.current.scrollTop = previousListRef.current.scrollHeight;
         hasSnappedToBottomRef.current = true;
@@ -321,7 +326,6 @@ const Appointments = ({ data, setData, onLogout }) => {
 
     setSearchQuery(val);
 
-    // Collapse sections immediately to stop background syncing in fetchAllData
     if (val) {
       setExpandedSection('today');
     }
@@ -338,7 +342,6 @@ const Appointments = ({ data, setData, onLogout }) => {
   const fetchBatch = async (group) => {
     if (!clinicId || batchLoading[group]) return;
 
-    // FIX: Capture Scroll Position FIRST to ensure Anti-Jerk works
     if (group === 'previous' && previousListRef.current) {
       previousScrollHeightRef.current = previousListRef.current.scrollHeight;
     }
@@ -349,20 +352,18 @@ const Appointments = ({ data, setData, onLogout }) => {
       const currentLen = currentList.length;
       let pageToFetch, limitToFetch;
 
-      // Smart Gap-Healing Logic for Load More
       if (currentLen % 20 !== 0) {
         pageToFetch = 1;
         limitToFetch = Math.ceil(currentLen / 20) * 20;
       } else {
-        pageToFetch = (currentLen / 20) + 1; // Explicit Page calculation
+        pageToFetch = (currentLen / 20) + 1;
         limitToFetch = 20;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=batch&group=${group}&page=${pageToFetch}&limit=${limitToFetch}&date=${safeCurrentDate}`);
+      const response = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=batch&group=${group}&page=${pageToFetch}&limit=${limitToFetch}&date=${safeCurrentDate}${rbacQuery}`);
       if (response.ok) {
         const newItems = await response.json();
 
-        // 1. REFRESH MODE (Healed the list)
         if (pageToFetch === 1 && limitToFetch >= 20) {
           if (group === 'previous') {
             newItems.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
@@ -375,18 +376,19 @@ const Appointments = ({ data, setData, onLogout }) => {
           setData(d => ({ ...d, cachedSections: nextSections }));
           setPages(prev => ({ ...prev, [group]: Math.ceil(newItems.length / 20) + 1 }));
         }
-        // 2. APPEND MODE (Load Older)
         else if (newItems.length > 0) {
-          // Explicit Sort (Oldest -> Newest)
           if (group === 'previous') {
             newItems.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
           }
 
+          const existingIds = new Set(sectionsRef.current[group].map(item => item._id));
+          const uniqueNewItems = newItems.filter(item => !existingIds.has(item._id));
+
           const nextSections = {
             ...sectionsRef.current,
             [group]: group === 'previous'
-              ? [...newItems, ...sectionsRef.current.previous] // Prepend Oldest
-              : [...sectionsRef.current.upcoming, ...newItems] // Append Future
+              ? [...uniqueNewItems, ...sectionsRef.current.previous] 
+              : [...sectionsRef.current.upcoming, ...uniqueNewItems] 
           };
           setSections(nextSections);
           setData(d => ({ ...d, cachedSections: nextSections }));
@@ -401,12 +403,16 @@ const Appointments = ({ data, setData, onLogout }) => {
     setIsSearchLoadingMore(true);
     try {
       const nextPage = searchPage + 1;
-      const response = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=search&query=${searchQuery}&page=${nextPage}&limit=20`);
+      const response = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=search&query=${searchQuery}&page=${nextPage}&limit=20${rbacQuery}`);
       const data = await response.json();
       const newItems = Array.isArray(data) ? data : (data.data || []);
 
       if (newItems.length > 0) {
-        setSearchResults(prev => [...prev, ...newItems]);
+        setSearchResults(prev => {
+          const existingIds = new Set(prev.map(item => item._id));
+          const uniqueNewItems = newItems.filter(item => !existingIds.has(item._id));
+          return [...prev, ...uniqueNewItems];
+        });
         setSearchPage(nextPage);
       }
     } catch (err) { console.error("Search Error:", err); }
@@ -417,7 +423,6 @@ const Appointments = ({ data, setData, onLogout }) => {
     if (expandedSection === id) setExpandedSection(null);
     else {
       setExpandedSection(id);
-      // Only fetch if empty. 'Smart Refresh' handles the count mismatches in fetchAllData.
       if (id === 'previous' && sections.previous.length === 0 && metaCounts.previous > 0) fetchBatch(id);
       if (id === 'upcoming' && sections.upcoming.length === 0 && metaCounts.upcoming > 0) fetchBatch(id);
     }
@@ -471,50 +476,31 @@ const Appointments = ({ data, setData, onLogout }) => {
 
   // --- INPUT HANDLERS ---
   const handlePatientNameInput = (field, value) => {
-    // 1. Strict: Letters and Dot ONLY. (Removed \s to ban spaces)
     let cleanVal = value.replace(/[^a-zA-Z.]/g, '');
-
-    // 2. Strict "One Dot" Rule: If more than 1 dot exists, block the input
     if ((cleanVal.match(/\./g) || []).length > 1) {
       return;
     }
-
     setNewPatientDetails(prev => ({ ...prev, [field]: cleanVal }));
   };
 
   const handlePatientPhoneInput = (value) => {
-    // Numbers only, max 10
     const cleanVal = value.replace(/\D/g, '').slice(0, 10);
     setNewPatientDetails(prev => ({ ...prev, phone: cleanVal }));
   };
 
   const handlePatientAgeInput = (value) => {
-    // 1. Remove non-digits and limit to 3 chars
     let cleanVal = value.replace(/\D/g, '').slice(0, 3);
-
-    // 2. Remove leading zeros (Prevents "0", "05", etc.)
-    // If the user types "0", it effectively becomes an empty string
     if (cleanVal.startsWith('0')) {
       cleanVal = cleanVal.replace(/^0+/, '');
     }
-
     setNewPatientDetails(prev => ({ ...prev, age: cleanVal }));
   };
 
   const handlePatientAddressInput = (value) => {
     let cleanVal = value
-      // 1. Allow: Alphanumeric, Space, Dot, Hyphen, Underscore, Comma, Hash, Forward Slash
-      // Note: We escape the hyphen \- and the forward slash \/
       .replace(/[^a-zA-Z0-9\s.\-_,#\/&']/g, '')
-
-      // 2. Remove Leading Spaces
       .replace(/^\s+/g, '')
-
-      // 3. Collapse multiple spaces to single
       .replace(/\s\s+/g, ' ')
-
-      // 4. Collapse multiple special chars to single (e.g., prevents "St..", ",,", "##")
-      // This matches any of the chars in the group, if repeated, and replaces with the first instance
       .replace(/([.,_#\-\/])\1+/g, '$1');
 
     setNewPatientDetails(prev => ({ ...prev, address: cleanVal }));
@@ -526,7 +512,7 @@ const Appointments = ({ data, setData, onLogout }) => {
     let errors = [];
     if (!newAppt.patientId) errors.push('patientId');
     if (newAppt.patientId === 'add_new') {
-      if (!newPatientDetails.firstName) errors.push('newPatientName'); // Check First Name
+      if (!newPatientDetails.firstName) errors.push('newPatientName'); 
       if (!newPatientDetails.phone || newPatientDetails.phone.length < 10) errors.push('newPatientPhone');
       if (!newPatientDetails.age) errors.push('newPatientAge');
       if (!newPatientDetails.address) errors.push('newPatientAddress');
@@ -542,12 +528,10 @@ const Appointments = ({ data, setData, onLogout }) => {
 
     setInvalidFields([]);
     setIsSubmitting(true);
-    // CONSTRUCT FULL NAME
-    // Logic: Put parts in an array, remove empty ones (filter), join with exactly 1 space.
     const fullName = newAppt.patientId === 'add_new'
       ? [newPatientDetails.firstName, newPatientDetails.middleName, newPatientDetails.lastName]
-        .filter(Boolean) // Removes empty strings ("") or null/undefined
-        .join(' ')       // Joins remaining parts with a single space
+        .filter(Boolean) 
+        .join(' ')      
       : '';
 
     const payload = {
@@ -555,7 +539,7 @@ const Appointments = ({ data, setData, onLogout }) => {
       patientId: newAppt.patientId, doctorId: newAppt.doctorId, time: newAppt.time, date: newAppt.date, type: 'Consultation',
       status: 'Scheduled', newPatientData: newAppt.patientId === 'add_new' ? {
         ...newPatientDetails,
-        name: fullName // Send combined name to API
+        name: fullName 
       } : null
     };
 
@@ -624,6 +608,41 @@ const Appointments = ({ data, setData, onLogout }) => {
     setIsAddModalOpen(true);
   };
 
+  // --- ADDED: EMR SAVE HANDLER ---
+  const handleCompleteConsultation = async (apptId, prescriptionData, finalStatus) => {
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        clinicId: clinicId,
+        appointmentId: apptId,
+        patientId: activeConsultationAppt.patientId?._id || activeConsultationAppt.patientId,
+        doctorId: activeConsultationAppt.doctorId?._id || activeConsultationAppt.doctorId,
+        status: finalStatus,
+        prescriptionData: prescriptionData 
+      };
+
+      const res = await fetch(`${API_BASE_URL}/api/prescriptions/complete-consultation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        setIsConsultationPadOpen(false);
+        setActiveConsultationAppt(null);
+        fetchAllData(true); // Refresh queue
+        showNotification('Consultation Completed', 'success', `Status updated to ${finalStatus}.`);
+      } else {
+        const errorData = await res.json();
+        alert(`Error: ${errorData.error}`);
+      }
+    } catch (err) {
+      console.error("Error saving consultation", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // --- RENDER HELPERS ---
   const renderAppointmentCard = (appt) => {
     const uiStatus = getUiStatus(appt);
@@ -631,6 +650,9 @@ const Appointments = ({ data, setData, onLogout }) => {
     const isCompleted = uiStatus === 'Completed';
     const isNoShow = uiStatus === 'No-Show';
     const showActions = !isCancelled && !isCompleted && !isNoShow;
+
+    // --- ADDED: SECURITY CHECK FOR CONSULT BUTTON ---
+    const isTreatingPhysician = (userRole === 'doctor') || (userRole === 'admin' && doctorId && String(appt.doctorId) === String(doctorId));
 
     return (
       <div key={appt._id} className={`p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col md:flex-row gap-2 ${isCancelled || isNoShow ? 'bg-slate-50 opacity-90' : 'bg-white'}`}>
@@ -648,13 +670,35 @@ const Appointments = ({ data, setData, onLogout }) => {
         </div>
         {showActions && (
           <div className="flex flex-row md:flex-col gap-1.5 border-t md:border-t-0 md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 justify-end flex-shrink-0 md:w-32">
-            <button onClick={() => { setActionAppt(appt); setIsCancelModalOpen(true); }} className="flex-1 md:flex-none w-full h-7 text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg whitespace-nowrap">Cancel</button>
-            <button onClick={() => { setActionAppt(appt); setRescheduleData({ date: appt.date, time: appt.time }); setIsRescheduleModalOpen(true); }} className="flex-1 md:flex-none w-full h-7 text-[10px] font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap"><CalendarDays size={12} /> Reschedule</button>
+            {/* ADDED: ADMIN SECURITY LOCK */}
+            {isAdmin && (
+              <>
+                <button onClick={() => { setActionAppt(appt); setIsCancelModalOpen(true); }} className="flex-1 md:flex-none w-full h-7 text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg whitespace-nowrap">Cancel</button>
+                <button onClick={() => { setActionAppt(appt); setRescheduleData({ date: appt.date, time: appt.time }); setIsRescheduleModalOpen(true); }} className="flex-1 md:flex-none w-full h-7 text-[10px] font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap"><CalendarDays size={12} /> Reschedule</button>
+              </>
+            )}
+
+            {/* ADDED: DOCTOR SECURITY LOCK */}
+            {isTreatingPhysician && (
+              <button 
+                onClick={() => {
+                  const pObj = (data.patients || []).find(p => String(p._id) === String(appt.patientId));
+                  setActiveConsultationAppt({ ...appt, patientId: pObj || { name: 'Unknown Patient' } });
+                  setIsConsultationPadOpen(true);
+                }} 
+                className="flex-1 md:flex-none w-full h-7 text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors shadow-sm"
+              >
+                <Activity size={14} /> Consult
+              </button>
+            )}
           </div>
         )}
         {(isCancelled || isNoShow) && (
           <div className="flex flex-row md:flex-col gap-1.5 border-t md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 justify-end flex-shrink-0 md:w-32">
-            <button onClick={() => handleRebook(appt)} className="flex-1 md:flex-none w-full h-7 text-[10px] font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm rounded-lg flex items-center justify-center gap-1 whitespace-nowrap"><RefreshCw size={12} /> ReBook</button>
+            {/* ADDED: ADMIN SECURITY LOCK */}
+            {isAdmin && (
+              <button onClick={() => handleRebook(appt)} className="flex-1 md:flex-none w-full h-7 text-[10px] font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm rounded-lg flex items-center justify-center gap-1 whitespace-nowrap"><RefreshCw size={12} /> ReBook</button>
+            )}
           </div>
         )}
       </div>
@@ -732,9 +776,10 @@ const Appointments = ({ data, setData, onLogout }) => {
         </div>
       )}
 
+      {/* ADDED: DYNAMIC TITLE BASED ON ROLE */}
       <ModuleHeader
-        title="Appointments"
-        shortTitle="Appts"
+        title={isAdmin ? "Appointments" : "Queue & Schedule"}
+        shortTitle={isAdmin ? "Appts" : "Queue"}
         searchVal={searchQuery}
         onSearch={handleSearchInput}
         onFilterClick={openFilterModal}
@@ -807,7 +852,57 @@ const Appointments = ({ data, setData, onLogout }) => {
         </div>
       </div>
 
-      <FAB icon={Plus} onClick={() => { setRebookingApptId(null); setIsAddModalOpen(true); }} />
+      {/* ADDED: ADMIN SECURITY LOCK FOR CREATING APPOINTMENTS */}
+      {isAdmin && (
+        <FAB icon={Plus} onClick={() => { setRebookingApptId(null); setIsAddModalOpen(true); }} />
+      )}
+
+      {/* --- ADDED: EMR FULL-SCREEN OVERLAY --- */}
+      {isConsultationPadOpen && activeConsultationAppt && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 flex items-center justify-center md:p-6 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-50 w-full h-full md:rounded-2xl shadow-2xl flex flex-col overflow-hidden max-w-6xl mx-auto border border-slate-200">
+             
+             {/* EMR Header */}
+             <div className="px-3 md:px-5 h-14 border-b border-slate-200 flex justify-between items-center bg-white shadow-sm z-10 flex-shrink-0">
+                 <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold text-lg">
+                       {activeConsultationAppt.patientId?.name?.charAt(0) || 'U'}
+                    </div>
+                    <div>
+                      <h2 className="text-[16px] md:text-lg font-bold text-slate-800 leading-tight">
+                         {activeConsultationAppt.patientId?.name || 'Unknown Patient'}
+                      </h2>
+                      <p className="text-[11px] md:text-xs text-slate-500 font-medium">
+                         {activeConsultationAppt.patientId?.gender || 'U'} • {activeConsultationAppt.patientId?.age ? `${activeConsultationAppt.patientId.age} Yrs` : 'Age Unknown'} 
+                         <span className="mx-2 text-slate-300">|</span> 
+                         {activeConsultationAppt.time}
+                      </p>
+                    </div>
+                 </div>
+                 
+                 <button 
+                    onClick={() => {
+                        setIsConsultationPadOpen(false);
+                        setActiveConsultationAppt(null);
+                    }} 
+                    className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors flex items-center gap-2"
+                 >
+                    <span className="text-[11px] font-bold hidden md:inline">Close</span>
+                    <X size={18} />
+                 </button>
+             </div>
+             
+             {/* EMR Body */}
+             <div className="flex-1 overflow-hidden relative">
+                 <ConsultationPad 
+                    activeAppt={activeConsultationAppt} 
+                    onComplete={handleCompleteConsultation} 
+                    isSubmitting={isSubmitting} 
+                 />
+             </div>
+          </div>
+        </div>
+      )}
 
       <Modal isOpen={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)} title="Filter Appointments" footer={<div className="flex gap-2"><button onClick={clearFilters} className="flex-1 py-1.5 text-[15px] text-slate-600 font-medium border border-slate-200 rounded-lg bg-white">Clear</button><button onClick={applyActiveFilters} className="flex-1 bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium">Apply</button></div>}>
         <div className="space-y-4">
@@ -830,121 +925,98 @@ const Appointments = ({ data, setData, onLogout }) => {
         <div className="space-y-3">
           <AlertMessage message={modalError} />
           <div>
+            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Patient <span className="text-red-500">*</span></label>
             {newAppt.patientId ? (
-              <div className={`flex items-center justify-between p-2.5 border rounded-lg bg-slate-50 shadow-inner ${invalidFields.includes('patientId') ? 'border-red-500' : 'border-slate-200'}`}>
-                {/* --- SELECTED PATIENT BADGE --- */}
-                <div className="flex items-center gap-2">
-                  {newAppt.patientId === 'add_new' ? (
-                    <span className="text-[13px] font-bold text-teal-600 flex items-center gap-1.5"><Plus size={16} /> New Patient Entry</span>
-                  ) : (
-                    <div>
-                      <div className="text-[13px] font-bold text-slate-800">{getPatientName(newAppt.patientId)}</div>
-                      <div className="text-[10px] text-slate-500">Selected Patient</div>
-                    </div>
+               <div className={`flex items-center justify-between p-2.5 border rounded-lg bg-slate-50 shadow-inner ${invalidFields.includes('patientId') ? 'border-red-500' : 'border-slate-200'}`}>
+                  {/* --- SELECTED PATIENT BADGE --- */}
+                  <div className="flex items-center gap-2">
+                     {newAppt.patientId === 'add_new' ? (
+                        <span className="text-[13px] font-bold text-teal-600 flex items-center gap-1.5"><Plus size={16}/> New Patient Entry</span>
+                     ) : (
+                        <div>
+                          <div className="text-[13px] font-bold text-slate-800">{getPatientName(newAppt.patientId)}</div>
+                          <div className="text-[10px] text-slate-500">Selected Patient</div>
+                        </div>
+                     )}
+                  </div>
+                  {/* Hide the change button if we are strictly Rebooking */}
+                  {!rebookingApptId && (
+                    <button 
+                      type="button" 
+                      onClick={() => { setNewAppt({...newAppt, patientId: ''}); setPatientSearchQuery(''); setIsPatientDropdownOpen(false); }} 
+                      className="text-[11px] font-bold text-slate-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
+                    >
+                      Change
+                    </button>
                   )}
-                </div>
-                {/* Hide the change button if we are strictly Rebooking */}
-                {!rebookingApptId && (
-                  <button
-                    type="button"
-                    onClick={() => { setNewAppt({ ...newAppt, patientId: '' }); setPatientSearchQuery(''); }}
-                    className="text-[11px] font-bold text-slate-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
-                  >
-                    Change
-                  </button>
-                )}
-              </div>
+               </div>
             ) : (
-              <div>
-              <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Patient <span className="text-red-500">*</span></label>
-              
-              {newAppt.patientId ? (
-                 <div className={`flex items-center justify-between p-2.5 border rounded-lg bg-slate-50 shadow-inner ${invalidFields.includes('patientId') ? 'border-red-500' : 'border-slate-200'}`}>
-                    {/* --- SELECTED PATIENT BADGE --- */}
-                    <div className="flex items-center gap-2">
-                       {newAppt.patientId === 'add_new' ? (
-                          <span className="text-[13px] font-bold text-teal-600 flex items-center gap-1.5"><Plus size={16}/> New Patient Entry</span>
-                       ) : (
-                          <div>
-                            <div className="text-[13px] font-bold text-slate-800">{getPatientName(newAppt.patientId)}</div>
-                            <div className="text-[10px] text-slate-500">Selected Patient</div>
-                          </div>
-                       )}
-                    </div>
-                    {/* Hide the change button if we are strictly Rebooking */}
-                    {!rebookingApptId && (
-                      <button 
-                        type="button" 
-                        onClick={() => { setNewAppt({...newAppt, patientId: ''}); setPatientSearchQuery(''); setIsPatientDropdownOpen(false); }} 
-                        className="text-[11px] font-bold text-slate-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
-                      >
-                        Change
-                      </button>
-                    )}
-                 </div>
-              ) : (
+               <div className="relative">
+                 {/* --- SEARCH BAR & DROPDOWN --- */}
                  <div className="relative">
-                   {/* --- SEARCH BAR & DROPDOWN --- */}
-                   <div className="relative">
-                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                     <input
-                        type="text"
-                        placeholder="Search by name or phone..."
-                        value={patientSearchQuery}
-                        onFocus={() => setIsPatientDropdownOpen(true)}
-                        onBlur={() => setTimeout(() => setIsPatientDropdownOpen(false), 200)} // 200ms delay allows clicks on the dropdown to register first
-                        onChange={e => {
-                            setPatientSearchQuery(e.target.value);
-                            setIsPatientDropdownOpen(true);
-                        }}
-                        className={`w-full pl-9 pr-3 py-2 border rounded-lg text-[13px] outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all ${invalidFields.includes('patientId') ? 'border-red-500' : 'border-slate-200 bg-slate-50'}`}
-                     />
-                   </div>
-                   
-                   {/* The Floating List (Controlled by Focus) */}
-                   {isPatientDropdownOpen && (
-                     <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-[220px] overflow-y-auto">
-                        
-                        {/* Fixed "Create New" Button at the top */}
-                        <button
-                          type="button"
-                          onClick={() => { setNewAppt({...newAppt, patientId: 'add_new'}); setPatientSearchQuery(''); setIsPatientDropdownOpen(false); }}
-                          className="w-full text-left px-3 py-2.5 text-[13px] font-bold text-teal-600 hover:bg-teal-50 flex items-center gap-2 border-b border-slate-100 transition-colors sticky top-0 bg-white/95 backdrop-blur-sm z-10"
-                        >
-                          <div className="bg-teal-100 p-1 rounded-md"><Plus size={14} className="text-teal-700" /></div> Create New Patient
-                        </button>
-                        
-                        {/* Patient List (ONLY SHOWS WHEN TYPING) */}
-                        {patientSearchQuery.length > 0 && data.patients
-                          .filter(p => 
-                            (p.name || '').toLowerCase().includes(patientSearchQuery.toLowerCase()) || 
-                            (p.phone || '').includes(patientSearchQuery)
-                          )
-                          .slice(0, 30)
-                          .map(p => (
-                           <button
-                             key={p._id}
-                             type="button"
-                             onClick={() => { setNewAppt({...newAppt, patientId: p._id}); setPatientSearchQuery(''); setIsPatientDropdownOpen(false); }}
-                             className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors flex justify-between items-center group"
-                           >
-                             <div>
-                               <div className="font-bold text-[13px] text-slate-700 group-hover:text-teal-700">{p.name}</div>
-                               <div className="text-[10px] text-slate-400">{p.phone}</div>
-                             </div>
-                             <div className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">Select</div>
-                           </button>
-                        ))}
-                        
-                        {/* Empty State */}
-                        {patientSearchQuery !== '' && data.patients.filter(p => (p.name || '').toLowerCase().includes(patientSearchQuery.toLowerCase()) || (p.phone || '').includes(patientSearchQuery)).length === 0 && (
-                           <div className="p-4 text-center text-slate-400 text-[11px]">No matching patients found.</div>
-                        )}
-                     </div>
-                   )}
+                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                   <input
+                      type="text"
+                      placeholder="Search by name or phone..."
+                      value={patientSearchQuery}
+                      onFocus={() => setIsPatientDropdownOpen(true)}
+                      onBlur={() => setTimeout(() => setIsPatientDropdownOpen(false), 200)}
+                      onChange={e => {
+                          setPatientSearchQuery(e.target.value);
+                          setIsPatientDropdownOpen(true);
+                      }}
+                      className={`w-full pl-9 pr-3 py-2 border rounded-lg text-[13px] outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all ${invalidFields.includes('patientId') ? 'border-red-500' : 'border-slate-200 bg-slate-50'}`}
+                   />
                  </div>
-              )}
-            </div>
+                 
+                 {/* The Floating List */}
+                 {isPatientDropdownOpen && (
+                   <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-[220px] overflow-y-auto">
+                      <button
+                        type="button"
+                        onMouseDown={(e) => { 
+                            e.preventDefault(); 
+                            setNewAppt({...newAppt, patientId: 'add_new'}); 
+                            setPatientSearchQuery(''); 
+                            setIsPatientDropdownOpen(false); 
+                        }}
+                        className="w-full text-left px-3 py-2.5 text-[13px] font-bold text-teal-600 hover:bg-teal-50 flex items-center gap-2 border-b border-slate-100 transition-colors sticky top-0 bg-white/95 backdrop-blur-sm z-10"
+                      >
+                        <div className="bg-teal-100 p-1 rounded-md"><Plus size={14} className="text-teal-700" /></div> Create New Patient
+                      </button>
+                      
+                      {patientSearchQuery.length > 0 && data.patients
+                        .filter(p => 
+                          (p.name || '').toLowerCase().includes(patientSearchQuery.toLowerCase()) || 
+                          (p.phone || '').includes(patientSearchQuery)
+                        )
+                        .slice(0, 30)
+                        .map(p => (
+                         <button
+                           key={p._id}
+                           type="button"
+                           onMouseDown={(e) => { 
+                               e.preventDefault(); 
+                               setNewAppt({...newAppt, patientId: p._id}); 
+                               setPatientSearchQuery(''); 
+                               setIsPatientDropdownOpen(false); 
+                           }}
+                           className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors flex justify-between items-center group"
+                         >
+                           <div>
+                             <div className="font-bold text-[13px] text-slate-700 group-hover:text-teal-700">{p.name}</div>
+                             <div className="text-[10px] text-slate-400">{p.phone}</div>
+                           </div>
+                           <div className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">Select</div>
+                         </button>
+                      ))}
+                      
+                      {patientSearchQuery !== '' && data.patients.filter(p => (p.name || '').toLowerCase().includes(patientSearchQuery.toLowerCase()) || (p.phone || '').includes(patientSearchQuery)).length === 0 && (
+                         <div className="p-4 text-center text-slate-400 text-[11px]">No matching patients found.</div>
+                      )}
+                   </div>
+                 )}
+               </div>
             )}
           </div>
           {newAppt.patientId === 'add_new' && (
