@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Mail, KeyRound, Eye, EyeOff, CheckCircle, ArrowLeft, Loader2 } from 'lucide-react';
 import AlertMessage from '../components/ui/AlertMessage';
 import API_BASE_URL from '../config';
@@ -14,6 +14,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [invalidFields, setInvalidFields] = useState([]);
+  const [otp, setOtp] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -27,6 +28,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
     } else if (authState === 'forgot') {
       if (!email) errors.push('email');
     } else if (authState === 'reset') {
+      if (!otp || otp.length !== 6) errors.push('otp');
       if (!password) errors.push('password');
       if (!confirmPassword) errors.push('confirmPassword');
     }
@@ -73,9 +75,16 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
         }
       } 
       else if (authState === 'forgot') {
-        await new Promise(resolve => setTimeout(resolve, 1500)); 
-        setSuccess('If an account exists, a reset link has been sent to your email.');
-        setTimeout(() => setAuthState('reset'), 2000); 
+        const response = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        
+        // We intentionally don't check response.ok to prevent email enumeration
+        // but we still await it to ensure the request completes.
+        setSuccess('A 6-digit OTP has been sent to your email. Please check your inbox.');
+        setAuthState('reset'); // Transition to OTP verification screen
       }
       else if (authState === 'reset') {
         if (password !== confirmPassword) {
@@ -89,9 +98,26 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
            return;
         }
         
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        setSuccess('Password set successfully!');
-        setTimeout(() => setAuthState('login'), 1500);
+        const response = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, otp, newPassword: password })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          setSuccess('Password updated successfully! Redirecting...');
+          setTimeout(() => {
+            setAuthState('login');
+            setSuccess('Password updated successfully');
+            setOtp('');
+            setPassword('');
+            setConfirmPassword('');
+          }, 2000);
+        } else {
+          setError(result.error || 'Invalid or expired OTP. Please try again.');
+        }
       }
     } catch (err) {
       console.log("Fetch error:", err);
@@ -113,12 +139,12 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
           <h2 className="text-2xl font-bold text-slate-800 text-center leading-tight">
             {authState === 'login' && 'Welcome to CareOPD'}
             {authState === 'forgot' && 'Recover Account'}
-            {authState === 'reset' && 'Set Secure Password'}
+            {authState === 'reset' && 'Verify OTP & Reset'}
           </h2>
           <p className="text-slate-500 text-sm mt-1.5 text-center">
             {authState === 'login' && 'Sign in to access your administrative dashboard.'}
-            {authState === 'forgot' && 'Enter your email to receive a password reset link.'}
-            {authState === 'reset' && 'Set your first-time password or reset an existing one.'}
+            {authState === 'forgot' && 'Enter your email to receive a 6-digit OTP.'}
+            {authState === 'reset' && 'Enter the OTP sent to your email and set a new password.'}
           </p>
         </div>
 
@@ -148,6 +174,25 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
                   onChange={e => setEmail(e.target.value)}
                 />
               </div>
+            </div>
+          )}
+
+          {authState === 'reset' && (
+            <div>
+              <label className="block text-[12px] font-bold text-slate-600 mb-1.5 uppercase tracking-wide">6-Digit OTP <span className="text-red-500">*</span></label>
+              <div className="relative">
+                <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input 
+                  type="text" 
+                  maxLength={6}
+                  placeholder="123456" 
+                  disabled={isLoading} 
+                  className={`w-full pl-9 pr-3 py-2.5 bg-slate-50 border rounded-xl text-[14px] transition-all outline-none tracking-widest disabled:opacity-50 disabled:cursor-not-allowed ${invalidFields.includes('otp') ? 'border-red-500 focus:ring-2 focus:ring-red-500' : 'border-slate-200 focus:ring-2 focus:ring-teal-500'}`}
+                  value={otp}
+                  onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+                />
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1.5 font-medium">Sent to: <span className="text-teal-600">{email}</span></p>
             </div>
           )}
 
@@ -211,19 +256,23 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
           {/* UPDATED SUBMIT BUTTON */}
           <button 
             type="submit" 
-            disabled={isLoading}
+            disabled={isLoading || (authState === 'reset' && (!otp || !password || !confirmPassword))}
             className="w-full bg-teal-600 text-white py-2.5 rounded-xl text-[15px] font-bold hover:bg-teal-700 shadow-md hover:shadow-lg transition-all active:scale-[0.98] mt-2 flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <>
                 <Loader2 size={18} className="animate-spin" />
-                <span>Signing In...</span>
+                <span>
+                  {authState === 'login' && 'Signing In...'}
+                  {authState === 'forgot' && 'Sending OTP...'}
+                  {authState === 'reset' && 'Verifying...'}
+                </span>
               </>
             ) : (
               <>
                 {authState === 'login' && 'Sign In'}
-                {authState === 'forgot' && 'Send Reset Link'}
-                {authState === 'reset' && 'Save Password'}
+                {authState === 'forgot' && 'Send OTP'}
+                {authState === 'reset' && 'Verify and Update'}
               </>
             )}
           </button>
