@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { DateProvider } from './context/DateContext'; 
 import API_BASE_URL from './config'; 
 import Layout from './components/layout/Layout';
+import UpdatePrompt from './components/ui/UpdatePrompt';
+
 
 // --- MODULE IMPORTS (Unified) ---
 import Auth from './modules/Auth';
@@ -64,11 +66,14 @@ const App = () => {
   }
 
   return (
-    <DateProvider>
-      <Layout activeTab={activeTab} setActiveTab={setActiveTab} userRole={userRole}>
-        {content}
-      </Layout>
-    </DateProvider>
+    <>
+      <UpdatePrompt />
+      <DateProvider>
+        <Layout activeTab={activeTab} setActiveTab={setActiveTab} userRole={userRole}>
+          {content}
+        </Layout>
+      </DateProvider>
+    </>
   );
 };
 
