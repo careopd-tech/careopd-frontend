@@ -87,6 +87,9 @@ const PatientHistoryList = ({
                     let hasPermission = false;
                     if (loggedInRole === 'doctor') hasPermission = true; 
                     else if (loggedInDoctorId) hasPermission = visitDocId === String(loggedInDoctorId);
+                    
+                    const isOwnConsultation = loggedInDoctorId ? (visitDocId === String(loggedInDoctorId)) : false;
+                    const hideDoctorName = isOwnConsultation && uiStatus !== 'No Show' && uiStatus !== 'No-Show';
 
                     return (
                         <button 
@@ -100,7 +103,9 @@ const PatientHistoryList = ({
                             title={!hasPermission ? "HIPAA Restriction: You are not the attending doctor for this visit." : "View details"}
                         >
                             <span className={`text-[11px] font-bold ${isLatest ? 'text-teal-800' : 'text-slate-700'}`}>{visit.date}</span>
-                            <span className="text-[9px] text-slate-500 truncate w-full text-left">Dr. {visit.doctorId?.name || 'Unknown'}</span>
+                            {!hideDoctorName && (
+                                <span className="text-[9px] text-slate-500 truncate w-full text-left">Dr. {visit.doctorId?.name?.replace(/^Dr\.\s*/i, '') || 'Unknown'}</span>
+                            )}
                             <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded tracking-wider uppercase mt-0.5 border ${styling.badge}`}>{uiStatus}</span>
                         </button>
                     );
@@ -132,7 +137,7 @@ const PatientHistoryList = ({
 
     // --- VERTICAL LAYOUT (For Patients Page / History Timeline) ---
     return (
-        <div className="relative before:absolute before:inset-0 before:left-[15px] md:before:left-1/2 md:before:-translate-x-1/2 before:w-0.5 before:bg-slate-200 space-y-4 py-2 pr-1">
+        <div className="relative before:absolute before:inset-0 before:left-[15px] md:before:left-1/2 md:before:-translate-x-1/2 before:w-0.5 before:bg-slate-200 space-y-4 py-0 pr-1">
             {historyData.map((visit, idx) => {
                 const uiStatus = getUiStatus(visit);
                 const styling = getStatusStyling(uiStatus);
@@ -142,6 +147,7 @@ const PatientHistoryList = ({
                 // 1. Check HIPAA Permission & Ownership
                 const visitDocId = String(visit.doctorId?._id || visit.doctorId);
                 const isOwnConsultation = loggedInDoctorId ? (visitDocId === String(loggedInDoctorId)) : false;
+                const hideDoctorName = isOwnConsultation && uiStatus !== 'No Show' && uiStatus !== 'No-Show';
                 
                 let hasPermission = false;
                 if (loggedInRole === 'doctor') hasPermission = true; 
@@ -156,7 +162,7 @@ const PatientHistoryList = ({
                 return (
                     <div key={visit._id || idx} className="relative flex flex-col md:flex-row items-start justify-between md:justify-normal md:odd:flex-row-reverse group">
                         {/* Timeline Dot */}
-                        <div className={`absolute left-[15px] md:left-1/2 -translate-x-1/2 flex items-center justify-center w-6 h-6 rounded-full border-2 border-white ring-4 shadow-sm ${styling.dot} z-10`}>
+                        <div className={`absolute top-3 left-[15px] md:left-1/2 -translate-x-1/2 flex items-center justify-center w-6 h-6 rounded-full border-2 border-white ring-4 shadow-sm ${styling.dot} z-10`}>
                             <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
                         </div>
                         
@@ -168,16 +174,16 @@ const PatientHistoryList = ({
                             }
                         `}>
                             
-                            {/* Card Header (Clickable - 2 Row Layout) */}
+                            {/* Card Header (Clickable - 3 Row Layout) */}
                             <button 
                                 type="button"
                                 onClick={() => handleAccordionClick(visit, hasPermission)}
                                 disabled={!canExpand || isFetching}
-                                className={`w-full p-3 text-left focus:outline-none flex flex-col gap-2 ${canExpand ? 'cursor-pointer hover:bg-slate-50' : 'cursor-default'}`}
+                                className={`w-full p-3 text-left focus:outline-none flex flex-col ${canExpand ? 'cursor-pointer hover:bg-slate-50' : 'cursor-default'}`}
                                 title={!hasPermission ? "HIPAA Restriction: You are not the attending doctor." : (!hasValidStatus ? "No clinical notes for missed or cancelled visits." : "Click to view clinical notes")}
                             >
                                 {/* ROW 1: Date/Time & Status Badge */}
-                                <div className="flex items-center justify-between w-full">
+                                <div className={`flex items-center justify-between w-full ${hideDoctorName && canExpand ? 'mb-2' : (!hideDoctorName ? 'mb-1' : '')}`}>
                                     <span className={`text-[13px] font-bold ${canExpand ? 'text-slate-800' : 'text-slate-500'}`}>
                                         {visit.date} • {visit.time}
                                     </span>
@@ -186,30 +192,25 @@ const PatientHistoryList = ({
                                     </span>
                                 </div>
                                 
-                                {/* ROW 2: Context & Action Button */}
-                                <div className="flex items-center justify-between w-full min-h-[24px]">
-                                    
-                                    {/* Left Side: Dr. Name Logic */}
-                                    <div className="text-[11px] text-slate-500">
-                                        {/* Shows name for Admins, OR for Doctors viewing another doctor's shared patient */}
-                                        {(!isOwnConsultation || loggedInRole !== 'doctor') && (
-                                            <>Consultation w/ <span className={`font-bold ${canExpand ? 'text-slate-700' : 'text-slate-400'}`}>Dr. {visit.doctorId?.name || 'Unknown'}</span></>
-                                        )}
+                                {/* ROW 2: Context */}
+                                {!hideDoctorName && (
+                                    <div className={`text-[11px] text-slate-500 w-full ${canExpand ? 'mb-2' : ''}`}>
+                                        Consultation w/ <span className={`font-bold ${canExpand ? 'text-slate-700' : 'text-slate-400'}`}>Dr. {visit.doctorId?.name?.replace(/^Dr\.\s*/i, '') || 'Unknown'}</span>
                                     </div>
+                                )}
 
-                                    {/* Right Side: The Toggle Pill */}
+                                {/* ROW 3: Action Button */}
                                     {canExpand && (
-                                        <div className={`text-[10px] font-bold px-2.5 py-1 rounded-md transition-colors flex items-center gap-1.5 ml-auto border
-                                            ${isExpanded ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}
+                                        <div className={`w-full h-7 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 transition-colors
+                                            ${isExpanded ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}
                                         `}>
                                             {isFetching ? (
-                                                <><Loader2 size={12} className="animate-spin text-teal-600" /> Loading...</>
+                                                <><Loader2 size={12} className="animate-spin" /> Loading...</>
                                             ) : (
                                                 <>{isExpanded ? 'Hide Details' : 'View Details'}</>
                                             )}
                                         </div>
                                     )}
-                                </div>
                             </button>
 
                             {/* Card Body (The Deep Dive Details) */}

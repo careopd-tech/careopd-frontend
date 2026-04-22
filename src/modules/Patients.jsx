@@ -478,8 +478,7 @@ const renderPatientCard = (p) => {
         title={`Visit History: ${selectedHistoryPatient?.name || ''}`} 
         footer={<button onClick={() => setIsHistoryModalOpen(false)} className="w-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors py-1.5 rounded-lg text-[15px] font-medium">Close</button>}
       >
-        {/* Added pb-8 for spacing, and robust CSS selectors to hide the scrollbar across all browsers */}
-        <div className="h-[55vh] min-h-[400px] overflow-y-auto pr-2 pb-8 -mx-2 px-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        <div className="-mx-2 px-2">
              <PatientHistoryList 
                 historyData={patientHistory} 
                 isLoading={isHistoryLoading} 

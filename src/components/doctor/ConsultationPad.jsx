@@ -600,7 +600,10 @@ const ConsultationPad = ({ activeAppt, onComplete, isSubmitting }) => {
               <div>
                 <h2 className="text-[14px] font-bold text-slate-800">Past Visit Records</h2>
                 <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1.5 mt-0.5">
-                  {selectedPastVisit.date} • Dr. {selectedPastVisit.doctorId?.name || 'Unknown'}
+                  {selectedPastVisit.date} 
+                  {(String(selectedPastVisit.doctorId?._id || selectedPastVisit.doctorId) !== String(loggedInDoctorId) || getUiStatus(selectedPastVisit) === 'No Show' || getUiStatus(selectedPastVisit) === 'No-Show') && (
+                    <> • Dr. {selectedPastVisit.doctorId?.name?.replace(/^Dr\.\s*/i, '') || 'Unknown'}</>
+                  )}
                   {/* THIS IS THE NEW CODE */}
                   <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded tracking-wider uppercase border ${getStatusStyling(getUiStatus(selectedPastVisit)).badge}`}>
                     {getUiStatus(selectedPastVisit)}
