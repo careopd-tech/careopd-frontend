@@ -14,9 +14,16 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'] // Ensures all static assets are cached for offline use
       },
+      devOptions: {
+        enabled: true, // Enables the Service Worker during local `npm run dev` so you can test PWA installation
+        suppressWarnings: true // Hides the harmless "glob pattern doesn't match" warning during dev
+      },
       manifest: {
         name: 'CareOPD',
         short_name: 'CareOPD',
+        id: '/',
+        start_url: '/',
+        scope: '/',
         description: 'Mobile-First Clinic Management Platform',
         theme_color: '#0d9488', // Teal color to match your UI
         background_color: '#ffffff',
