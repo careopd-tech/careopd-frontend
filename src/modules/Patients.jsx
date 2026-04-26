@@ -25,10 +25,10 @@ const Patients = ({ data, setData, onLogout }) => {
   const rbacQuery = `&userRole=${userRole}&doctorId=${doctorId}`;
 
   // --- STATE MANAGEMENT ---
-  const [patients, setPatients] = useState([]);
-  const [totalPatients, setTotalPatients] = useState(0);
+  const [patients, setPatients] = useState(() => data.cachedPatients || []);
+  const [totalPatients, setTotalPatients] = useState(() => data.cachedPatientStats?.total || 0);
   const [page, setPage] = useState(1);
-  const [stats, setStats] = useState({ total: 0, new: 0, returning: 0, noVisit: 0 });
+  const [stats, setStats] = useState(() => data.cachedPatientStats || { total: 0, new: 0, returning: 0, noVisit: 0 });
   
   const [loading, setLoading] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
@@ -137,6 +137,7 @@ const PatientSkeleton = () => (
           .then(resData => {
              if (resData && resData.stats) {
                  setStats(resData.stats);
+                 
              }
           })
           .catch(() => console.log("Stats fetch failed quietly"))
@@ -156,6 +157,7 @@ const PatientSkeleton = () => (
             const incomingPatients = Array.isArray(resData.data) ? resData.data : [];
             if (targetPage === 1) {
               setPatients(incomingPatients);
+              
             } else {
               setPatients(prev => {
                 const existingIds = new Set(prev.map(p => p._id));
@@ -181,7 +183,8 @@ const PatientSkeleton = () => (
 
   // Initial load & Polling
   useEffect(() => {
-    fetchPatientData(1);
+    const isInitialBackgroundSync = !typeFilter && !dateRange.from && !dateRange.to && !searchQuery && (data.cachedPatients?.length > 0);
+    fetchPatientData(1, isInitialBackgroundSync);
     const interval = setInterval(() => fetchPatientData(page, true), 60000);
     return () => clearInterval(interval);
   }, [typeFilter, dateRange]); 
@@ -210,6 +213,11 @@ const PatientSkeleton = () => (
   const handlePatientNameInput = (field, value) => {
     let cleanVal = value.replace(/[^a-zA-Z.]/g, ''); 
     if ((cleanVal.match(/\./g) || []).length > 1) return; 
+    
+    if (cleanVal.length > 0) {
+      cleanVal = cleanVal.charAt(0).toUpperCase() + cleanVal.slice(1).toLowerCase();
+    }
+
     setNewPatient(prev => ({ ...prev, [field]: cleanVal }));
   };
 

@@ -73,6 +73,7 @@ const Appointments = ({ data, setData, onLogout }) => {
     if (data.cachedSections) return false;
     return !data.appointments || data.appointments.length === 0;
   });
+  const [loadError, setLoadError] = useState('');
 
   const [activeFilters, setActiveFilters] = useState({ dateFrom: '', dateTo: '', doctorId: '', status: [] });
   const [tempFilters, setTempFilters] = useState(activeFilters);
@@ -205,19 +206,39 @@ const Appointments = ({ data, setData, onLogout }) => {
   // --- 6. DATA FETCHING ---
   const fetchAllData = async (forceSync = false, overrideQuery = undefined) => {
     if (!clinicId) return;
+    setLoadError('');
     const isNewSearch = overrideQuery !== undefined;
     const currentQuery = isNewSearch ? overrideQuery : searchQueryRef.current;
     const isSearchMode = !!currentQuery && currentQuery.trim().length > 0;
 
     try {
       const promises = [];
-      const dashboardPromise = Promise.all([
-        fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=snapshot&date=${safeCurrentDate}${rbacQuery}`),
-        fetch(`${API_BASE_URL}/api/doctors/${clinicId}`),
-        fetch(`${API_BASE_URL}/api/patients/${clinicId}`),
-        fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments${rbacQuery}`)
-      ]).then(async ([snapshotRes, docsRes, patsRes, calRes]) => {
-        if (snapshotRes.ok && docsRes.ok && patsRes.ok && calRes.ok) {
+      const dashboardRequests = [
+        { key: 'appointments snapshot', url: `${API_BASE_URL}/api/appointments/${clinicId}?mode=snapshot&date=${safeCurrentDate}${rbacQuery}` },
+        { key: 'doctors', url: `${API_BASE_URL}/api/doctors/${clinicId}` },
+        { key: 'patients', url: `${API_BASE_URL}/api/patients/${clinicId}` },
+        { key: 'appointments calendar', url: `${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments${rbacQuery}` }
+      ];
+
+      const dashboardPromise = Promise.all(dashboardRequests.map(req => fetch(req.url))).then(async ([snapshotRes, docsRes, patsRes, calRes]) => {
+        const dashboardResponses = [snapshotRes, docsRes, patsRes, calRes];
+        const failedIndex = dashboardResponses.findIndex(res => !res.ok);
+
+        if (failedIndex !== -1) {
+          const failedRequest = dashboardRequests[failedIndex];
+          const failedResponse = dashboardResponses[failedIndex];
+          const body = await failedResponse.text().catch(() => '');
+          console.error('Dashboard API failed:', {
+            endpoint: failedRequest.key,
+            url: failedRequest.url,
+            status: failedResponse.status,
+            body
+          });
+          setLoadError(`${failedRequest.key} failed (${failedResponse.status}). ${body}`);
+          return;
+        }
+
+        {
           const [snapshot, docs, pats, calendar30] = await Promise.all([snapshotRes.json(), docsRes.json(), patsRes.json(), calRes.json()]);
 
           const activeSection = expandedSectionRef.current;
@@ -282,7 +303,10 @@ const Appointments = ({ data, setData, onLogout }) => {
       }
       await Promise.all(promises);
 
-    } catch (err) { console.error("Fetch Error:", err); }
+    } catch (err) {
+      console.error("Fetch Error:", err);
+      setLoadError(err.message || 'Failed to load appointment data.');
+    }
     finally { setLoading(false); setIsSearching(false); }
   };
 
@@ -480,6 +504,10 @@ const Appointments = ({ data, setData, onLogout }) => {
     if ((cleanVal.match(/\./g) || []).length > 1) {
       return;
     }
+
+    if (cleanVal.length > 0) {
+      cleanVal = cleanVal.charAt(0).toUpperCase() + cleanVal.slice(1).toLowerCase();
+    }
     setNewPatientDetails(prev => ({ ...prev, [field]: cleanVal }));
   };
 
@@ -575,7 +603,7 @@ const Appointments = ({ data, setData, onLogout }) => {
     if (!actionAppt) return;
     setIsSubmitting(true);
     try {
-      await fetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'Cancelled' }) });
+      await fetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clinicId, status: 'Cancelled' }) });
       await fetchAllData(true);
       setIsCancelModalOpen(false);
       showNotification('Appointment Cancelled', 'error', `Appointment Cancelled for ${getPatientName(actionAppt.patientId)} scheduled on ${actionAppt.date} at ${actionAppt.time}`);
@@ -591,7 +619,7 @@ const Appointments = ({ data, setData, onLogout }) => {
 
     setIsSubmitting(true);
     try {
-      await fetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: rescheduleData.date, time: rescheduleData.time, status: 'Scheduled' }) });
+      await fetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clinicId, date: rescheduleData.date, time: rescheduleData.time, status: 'Scheduled' }) });
       await fetchAllData(true);
       setIsRescheduleModalOpen(false);
       showNotification('Appointment Rescheduled', 'success', `Appointment Rescheduled for ${getPatientName(actionAppt.patientId)} to ${rescheduleData.date} at ${rescheduleData.time}`);
@@ -789,6 +817,11 @@ const Appointments = ({ data, setData, onLogout }) => {
         onDismiss={handleDismissNotification}
         onLogout={onLogout}
       />
+      {loadError && (
+        <div className="px-2 pt-2">
+          <AlertMessage message={loadError} />
+        </div>
+      )}
 
       <div className="flex-1 flex flex-col landscape:flex-row min-h-0 p-2 gap-2">
         <div className="flex-none landscape:w-20 pb-1 landscape:pb-0">

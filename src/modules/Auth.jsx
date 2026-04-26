@@ -16,6 +16,13 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
   const [invalidFields, setInvalidFields] = useState([]);
   const [otp, setOtp] = useState('');
 
+  const isValidLoginId = (value) => {
+    const trimmed = value.trim();
+    const isMobile = /^\d{10}$/.test(trimmed);
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed.toLowerCase());
+    return isMobile || isEmail;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -37,6 +44,12 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
       setInvalidFields(errors);
       return setError('Please fill all required details marked with *');
     }
+
+    if ((authState === 'login' || authState === 'forgot') && !isValidLoginId(email)) {
+      setInvalidFields(['email']);
+      return setError('Enter a valid 10-digit mobile number or email ID.');
+    }
+
     setInvalidFields([]);
     setIsLoading(true);
 
@@ -55,6 +68,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
           localStorage.setItem('user', JSON.stringify(result.user));
           localStorage.setItem('clinicId', result.user.clinicId._id || result.user.clinicId);
           localStorage.setItem('userName', result.user.name);
+          localStorage.setItem('userEmail', result.user.email || email.trim().toLowerCase());
           
           // Securely map the role and doctorId for RBAC UI logic
           localStorage.setItem('userRole', result.user.role);
@@ -75,15 +89,18 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
         }
       } 
       else if (authState === 'forgot') {
+        const recoveryContact = email.trim();
+        const isMobileRecovery = /^\d{10}$/.test(recoveryContact);
         const response = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email })
+          body: JSON.stringify({ email: recoveryContact })
         });
         
         // We intentionally don't check response.ok to prevent email enumeration
         // but we still await it to ensure the request completes.
-        setSuccess('A 6-digit OTP has been sent to your email. Please check your inbox.');
+        const recoveryContactType = isMobileRecovery ? 'mobile' : 'email id';
+        setSuccess(`A 6-digit OTP has been sent to your ${recoveryContactType}: ${recoveryContact}`);
         setAuthState('reset'); // Transition to OTP verification screen
       }
       else if (authState === 'reset') {
@@ -133,9 +150,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
         
         {/* Header/Logo Section */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 bg-teal-600 rounded-xl flex items-center justify-center text-white font-bold text-[24px] mb-4 shadow-sm">
-            C
-          </div>
+          <img src="/CareOPD-Logo.png" alt="CareOPD Logo" className="h-24 mb-2 object-contain" />
           <h2 className="text-2xl font-bold text-slate-800 text-center leading-tight">
             {authState === 'login' && 'Welcome to CareOPD'}
             {authState === 'forgot' && 'Recover Account'}
@@ -143,8 +158,8 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
           </h2>
           <p className="text-slate-500 text-sm mt-1.5 text-center">
             {authState === 'login' && 'Sign in to access your administrative dashboard.'}
-            {authState === 'forgot' && 'Enter your email to receive a 6-digit OTP.'}
-            {authState === 'reset' && 'Enter the OTP sent to your email and set a new password.'}
+            {authState === 'forgot' && 'We will send a 6-digit OTP to your registered contact.'}
+            {authState === 'reset' && 'Enter the OTP and set a new password.'}
           </p>
         </div>
 
@@ -160,14 +175,16 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {(authState === 'login' || authState === 'forgot') && (
             <div>
-              <label className="block text-[12px] font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Email Address <span className="text-red-500">*</span></label>
+              <label className="block text-[12px] font-bold text-slate-600 mb-1.5 uppercase tracking-wide">
+                Mobile Number / Email <span className="text-red-500">*</span>
+              </label>
               <div className="relative">
                 <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input 
-                  type="email" 
+                  type="text" 
                   name="email"
                   autoComplete="username"
-                  placeholder="admin@careopd.com" 
+                  placeholder={authState === 'forgot' ? 'registered mobile or email' : '10-digit number or email'} 
                   disabled={isLoading} 
                   className={`w-full pl-9 pr-3 py-2.5 bg-slate-50 border rounded-xl text-[14px] transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed ${invalidFields.includes('email') ? 'border-red-500 focus:ring-2 focus:ring-red-500' : 'border-slate-200 focus:ring-2 focus:ring-teal-500'}`}
                   value={email}
@@ -192,7 +209,6 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
                   onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
                 />
               </div>
-              <p className="text-[11px] text-slate-500 mt-1.5 font-medium">Sent to: <span className="text-teal-600">{email}</span></p>
             </div>
           )}
 
@@ -287,6 +303,15 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
           >
             <ArrowLeft size={14} /> Back to Login
           </button>
+        )}
+
+        {authState === 'login' && (
+          <div className="mt-6 text-center text-[13px] text-slate-500 font-medium">
+            Don't have an account?{' '}
+            <button type="button" onClick={() => { setAuthState('onboarding'); setError(''); setSuccess(''); setInvalidFields([]); }} className="text-teal-600 font-bold hover:text-teal-700 transition-colors">
+              Register
+            </button>
+          </div>
         )}
       </div>
 

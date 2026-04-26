@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, Save, User, Mail, Phone, Shield } from 'lucide-react';
 import Modal from '../ui/Modal'; 
+import AlertMessage from '../ui/AlertMessage';
 import API_BASE_URL from '../../config'; 
 
 const MyAccountModal = ({ isOpen, onClose }) => {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   
   // 1. Database State
   const [savedData, setSavedData] = useState({
@@ -18,17 +20,28 @@ const MyAccountModal = ({ isOpen, onClose }) => {
   // 2. Form State
   const [userData, setUserData] = useState(savedData);
 
+  const getSessionUser = () => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}');
+    } catch (err) {
+      return {};
+    }
+  };
+
   // --- FETCH USER DATA ON OPEN ---
   useEffect(() => {
     if (isOpen) {
       const fetchUserData = async () => {
-        const userStr = localStorage.getItem('user');
-        const userId = userStr ? JSON.parse(userStr)._id : null;
+        setError('');
+        
+        const clinicId = localStorage.getItem('clinicId');
+        if (!clinicId) return setError("Clinic ID missing.");
 
-        if (!userId) return;
+        const userId = getSessionUser()._id;
+        if (!userId) return setError("User session missing.");
 
         try {
-          const response = await fetch(`${API_BASE_URL}/api/users/${userId}`);
+          const response = await fetch(`${API_BASE_URL}/api/users/${userId}?clinicId=${clinicId}`);
           if (response.ok) {
             const data = await response.json();
             const formattedData = {
@@ -40,9 +53,12 @@ const MyAccountModal = ({ isOpen, onClose }) => {
             };
             setSavedData(formattedData);
             setUserData(formattedData);
+          } else {
+            const data = await response.json().catch(() => ({}));
+            setError(data.error || 'Failed to fetch user data.');
           }
         } catch (error) {
-          console.error("Failed to fetch user data");
+          setError('Server error occurred.');
         }
       };
 
@@ -58,14 +74,17 @@ const MyAccountModal = ({ isOpen, onClose }) => {
   const handleUpdate = async (e) => {
     e.preventDefault();
     
-    const userStr = localStorage.getItem('user');
-    const userId = userStr ? JSON.parse(userStr)._id : null;
-    if (!userId) return;
+    const clinicId = localStorage.getItem('clinicId');
+    if (!clinicId) return setError("Clinic ID missing.");
+
+    const lsUser = getSessionUser();
+    const userId = lsUser._id;
+    if (!userId) return setError("User session missing.");
 
     setLoading(true);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/${userId}?clinicId=${clinicId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -80,9 +99,11 @@ const MyAccountModal = ({ isOpen, onClose }) => {
         setSavedData(userData); // Sync local state
         
         // Update localStorage
-        const lsUser = JSON.parse(userStr);
         lsUser.name = updated.name;
+        lsUser.phone = updated.phone;
+        lsUser.photo = updated.photo;
         localStorage.setItem('user', JSON.stringify(lsUser));
+        localStorage.setItem('userName', updated.name);
         
         alert('Profile updated successfully');
       } else {
@@ -98,6 +119,7 @@ const MyAccountModal = ({ isOpen, onClose }) => {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="My Account">
       <div className="space-y-4">
+        <AlertMessage message={error} />
         
         {/* Photo Upload Logic */}
         <div className="flex justify-center mb-2">

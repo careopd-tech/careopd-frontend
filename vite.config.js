@@ -15,7 +15,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'] // Ensures all static assets are cached for offline use
       },
       devOptions: {
-        enabled: true, // Enables the Service Worker during local `npm run dev` so you can test PWA installation
+        enabled: false, // Avoid local dev reload loops from a sticky service worker cache
         suppressWarnings: true // Hides the harmless "glob pattern doesn't match" warning during dev
       },
       manifest: {

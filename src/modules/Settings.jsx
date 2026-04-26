@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Building2, MessageCircle, FileText, Plus, Edit2, ChevronDown, ChevronRight 
+  Building2, MessageCircle, FileText, Plus, Edit2, ChevronDown, ChevronRight, UserPlus
 } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import ModuleHeader from '../components/ui/ModuleHeader';
@@ -19,13 +19,25 @@ const DEFAULT_POLICIES = [
   { title: 'Consent Policy', text: 'By using our services, you consent to...' }
 ];
 
-const Settings = ({ data, setData }) => {
+const Settings = ({ data, setData, onLogout }) => {
   const [expandedSection, setExpandedSection] = useState('clinic');
   const [editModal, setEditModal] = useState(null);
   const [formData, setFormData] = useState({});
   const [modalError, setModalError] = useState('');
   const [invalidFields, setInvalidFields] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
+  const [upgradeData, setUpgradeData] = useState({
+    clinicName: '',
+    clinicalEstablishmentNo: '',
+    ceIssueDate: '',
+    registeringAuthority: '',
+    createAdmin: false,
+    adminName: '',
+    adminEmail: '',
+    adminPhone: '',
+    adminPassword: ''
+  });
 
   // --- 1. FETCH & SYNC DATA ---
   useEffect(() => {
@@ -56,6 +68,23 @@ const Settings = ({ data, setData }) => {
     setInvalidFields([]);
     setEditModal(config);
     setFormData(config.initialData || {});
+  };
+
+  const openUpgradeModal = () => {
+    setModalError('');
+    setInvalidFields([]);
+    setUpgradeData({
+      clinicName: '',
+      clinicalEstablishmentNo: '',
+      ceIssueDate: '',
+      registeringAuthority: '',
+      createAdmin: false,
+      adminName: '',
+      adminEmail: '',
+      adminPhone: '',
+      adminPassword: ''
+    });
+    setUpgradeModalOpen(true);
   };
 
   // --- 2. SAVE HANDLER ---
@@ -131,6 +160,74 @@ const Settings = ({ data, setData }) => {
     }
   };
 
+  const handleUpgradeToClinic = async () => {
+    setModalError('');
+    const errors = [];
+    const clinicName = upgradeData.clinicName.trim();
+    const clinicalEstablishmentNo = upgradeData.clinicalEstablishmentNo.trim();
+    const registeringAuthority = upgradeData.registeringAuthority.trim();
+    const adminName = upgradeData.adminName.trim();
+    const adminEmail = upgradeData.adminEmail.trim().toLowerCase();
+
+    if (!clinicName) errors.push('clinicName');
+    if (!clinicalEstablishmentNo) errors.push('clinicalEstablishmentNo');
+    if (!upgradeData.ceIssueDate) errors.push('ceIssueDate');
+    if (!registeringAuthority) errors.push('registeringAuthority');
+
+    if (upgradeData.createAdmin) {
+      if (!adminName) errors.push('adminName');
+      if (!adminEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) errors.push('adminEmail');
+      if (!upgradeData.adminPhone || upgradeData.adminPhone.length < 10) errors.push('adminPhone');
+      if (!upgradeData.adminPassword || upgradeData.adminPassword.length < 6) errors.push('adminPassword');
+    }
+
+    if (errors.length > 0) {
+      setInvalidFields(errors);
+      return setModalError('Please fill all required details correctly *');
+    }
+
+    const clinicId = localStorage.getItem('clinicId');
+    if (!clinicId) return setModalError('Clinic ID missing.');
+
+    try {
+      setLoading(true);
+      const payload = {
+        clinicId,
+        clinicName,
+        clinicalEstablishmentNo,
+        ceIssueDate: upgradeData.ceIssueDate,
+        registeringAuthority
+      };
+
+      if (upgradeData.createAdmin) {
+        payload.adminName = adminName;
+        payload.adminEmail = adminEmail;
+        payload.adminPhone = upgradeData.adminPhone;
+        payload.adminPassword = upgradeData.adminPassword;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/clinics/${clinicId}/upgrade-to-clinic`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        setData(prev => ({ ...prev, clinic: result.clinic }));
+        setUpgradeModalOpen(false);
+        setInvalidFields([]);
+      } else {
+        setModalError(result.error || 'Failed to upgrade practice.');
+      }
+    } catch (err) {
+      setModalError('Server connection error.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // --- RENDER HELPERS ---
   const SettingItem = ({ title, subtitle, onEdit }) => (
     <div 
@@ -185,10 +282,19 @@ const Settings = ({ data, setData }) => {
 
   const clinicTemplates = data.clinic?.templates || [];
   const clinicPolicies = data.clinic?.policies || [];
+  const savedUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}');
+    } catch (err) {
+      return {};
+    }
+  })();
+  const loggedInDoctorId = savedUser.doctorId || localStorage.getItem('doctorId');
+  const canUpgradeSolo = data.clinic?.type === 'Solo' || (!data.clinic?.type && Boolean(loggedInDoctorId));
 
   return (
     <div className="h-full flex flex-col bg-slate-50">
-      <ModuleHeader title="Settings" showSearch={false} />
+      <ModuleHeader title="Settings" showSearch={false} onLogout={onLogout} />
       
       {/* Container Padding: p-2 gap-2 to match other pages */}
       <div className="flex-1 flex flex-col min-h-0 p-2 gap-2 max-w-3xl mx-auto w-full">
@@ -207,6 +313,13 @@ const Settings = ({ data, setData }) => {
                 subtitle={data.clinic?.hours || '9 AM - 5 PM'} 
                 onEdit={() => openEdit({ title: 'Edit Operating Hours', type: 'single_input', inputLabel: 'Operating Hours', stateKey: 'hours', initialData: { value: data.clinic?.hours } })}
               />
+              {canUpgradeSolo && (
+                <SettingItem
+                  title="Upgrade Practice"
+                  subtitle="Convert solo doctor setup into a clinic workspace"
+                  onEdit={openUpgradeModal}
+                />
+              )}
             </>
           )}
           
@@ -284,6 +397,54 @@ const Settings = ({ data, setData }) => {
                </div>
              </>
            )}
+        </div>
+      </Modal>
+
+      <Modal isOpen={upgradeModalOpen} onClose={() => { setUpgradeModalOpen(false); setModalError(''); setInvalidFields([]); }} title="Add Establishment Details" footer={
+          <button onClick={handleUpgradeToClinic} disabled={loading} className="w-full bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70 hover:bg-teal-700 transition-colors">
+             {loading ? 'Upgrading...' : 'Upgrade to Clinic'}
+          </button>
+        }>
+        <div className="space-y-3">
+          <AlertMessage message={modalError} />
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Clinic Name <span className="text-red-500">*</span></label>
+            <input type="text" placeholder="CareOPD Medical Center" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('clinicName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.clinicName} onChange={e => setUpgradeData({...upgradeData, clinicName: e.target.value})} />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Clinical Establishment (CE) Number <span className="text-red-500">*</span></label>
+            <input type="text" placeholder="CE registration number" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('clinicalEstablishmentNo') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.clinicalEstablishmentNo} onChange={e => setUpgradeData({...upgradeData, clinicalEstablishmentNo: e.target.value})} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Date of Issue <span className="text-red-500">*</span></label>
+              <input type="date" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('ceIssueDate') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.ceIssueDate} onChange={e => setUpgradeData({...upgradeData, ceIssueDate: e.target.value})} />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Registering State Authority <span className="text-red-500">*</span></label>
+              <input type="text" placeholder="e.g. Delhi Health Authority" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('registeringAuthority') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.registeringAuthority} onChange={e => setUpgradeData({...upgradeData, registeringAuthority: e.target.value})} />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer">
+            <input type="checkbox" checked={upgradeData.createAdmin} onChange={e => setUpgradeData({...upgradeData, createAdmin: e.target.checked})} className="accent-teal-600" />
+            <UserPlus size={14} className="text-slate-500" />
+            <span className="text-[13px] font-bold text-slate-700">Create clinic admin</span>
+          </label>
+
+          {upgradeData.createAdmin && (
+            <div className="space-y-2 animate-fadeIn">
+              <input type="text" placeholder="Admin name *" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('adminName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminName} onChange={e => setUpgradeData({...upgradeData, adminName: e.target.value})} />
+              <input type="email" placeholder="Admin email *" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('adminEmail') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminEmail} onChange={e => setUpgradeData({...upgradeData, adminEmail: e.target.value})} />
+              <div className="grid grid-cols-2 gap-2">
+                <input type="tel" maxLength={10} placeholder="Admin phone *" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('adminPhone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminPhone} onChange={e => setUpgradeData({...upgradeData, adminPhone: e.target.value.replace(/\D/g, '')})} />
+                <input type="password" placeholder="Password *" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('adminPassword') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminPassword} onChange={e => setUpgradeData({...upgradeData, adminPassword: e.target.value})} />
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
 

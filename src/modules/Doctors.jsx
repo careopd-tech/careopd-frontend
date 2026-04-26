@@ -95,6 +95,10 @@ const Doctors = ({ data, setData, onLogout }) => {
     // 2. Strict "One Dot" Rule
     if ((cleanVal.match(/\./g) || []).length > 1) return;
 
+    if (cleanVal.length > 0) {
+      cleanVal = cleanVal.charAt(0).toUpperCase() + cleanVal.slice(1).toLowerCase();
+    }
+
     setNewDoctor(prev => ({ ...prev, [field]: cleanVal }));
   };
 
@@ -194,10 +198,11 @@ const Doctors = ({ data, setData, onLogout }) => {
     const targetStatus = activeModal.subType === 'activate' ? 'Available' : 'Inactive';
 
     try {
+      const clinicId = localStorage.getItem('clinicId');
       const response = await fetch(`${API_BASE_URL}/api/doctors/${activeModal.doctorId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: targetStatus, reason: finalReason })
+        body: JSON.stringify({ clinicId, status: targetStatus, reason: finalReason })
       });
 
       if (response.ok) {

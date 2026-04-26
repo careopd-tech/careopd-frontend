@@ -71,14 +71,16 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
       return setError('Password contains restricted characters.');
     }
 
-    const userStr = localStorage.getItem('user');
-    const userId = userStr ? JSON.parse(userStr)._id : null;
+    const clinicId = localStorage.getItem('clinicId');
+    if (!clinicId) return setError("Clinic ID missing.");
+
+    const userId = JSON.parse(localStorage.getItem('user'))._id;
     if (!userId) return setError("User session missing.");
 
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/users/${userId}/change-password`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/${userId}/change-password?clinicId=${clinicId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

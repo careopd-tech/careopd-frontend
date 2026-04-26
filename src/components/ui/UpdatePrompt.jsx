@@ -1,13 +1,26 @@
 import React from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 
+const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+let updateCheckIntervalId;
+
 function UpdatePrompt() {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
-    onRegistered(r) {
-      console.log('SW Registered');
+    onRegisteredSW(swScriptUrl, registration) {
+      console.log('SW Registered', swScriptUrl);
+
+      if (updateCheckIntervalId) {
+        window.clearInterval(updateCheckIntervalId);
+      }
+
+      if (registration) {
+        updateCheckIntervalId = window.setInterval(() => {
+          registration.update().catch((error) => console.log('SW update check failed', error));
+        }, UPDATE_CHECK_INTERVAL_MS);
+      }
     },
     onRegisterError(error) {
       console.log('SW registration error', error);

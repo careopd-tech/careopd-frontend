@@ -23,6 +23,16 @@ const ModuleHeader = ({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false); 
+  const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const displayName = savedUser.name || localStorage.getItem('userName') || 'User';
+  const displayEmail = savedUser.email || localStorage.getItem('userEmail') || '';
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0])
+    .join('')
+    .toUpperCase() || 'U';
 
   // Count unread (assuming all in list are 'new' until cleared, or logic can be added later)
   const unreadCount = notifications.length;
@@ -178,7 +188,7 @@ const ModuleHeader = ({
                 className="flex items-center gap-1.5 pl-1 pr-1 py-1 rounded-full hover:bg-slate-100 transition-colors outline-none"
               >
                  <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-[11px] font-bold border border-teal-200">
-                   AD
+                   {initials}
                  </div>
                  <ChevronDown size={12} className="text-slate-400 hidden md:block" />
               </button>
@@ -186,8 +196,8 @@ const ModuleHeader = ({
               {isProfileOpen && (
                 <div className={`${POPUP_CLASSES} w-50`}> {/* <-- explicitly w-50 here for tight fit */}
                     <div className="px-4 py-3 border-b border-slate-50 bg-slate-50/30">
-                      <p className="text-[13px] font-bold text-slate-800">Admin User</p>
-                      <p className="text-[10px] text-slate-400 truncate">admin@careopd.com</p>
+                      <p className="text-[13px] font-bold text-slate-800">{displayName}</p>
+                      {displayEmail && <p className="text-[10px] text-slate-400 truncate">{displayEmail}</p>}
                     </div>
                     
                     <div className="p-1">

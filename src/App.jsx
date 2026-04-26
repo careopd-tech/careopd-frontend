@@ -3,6 +3,7 @@ import { DateProvider } from './context/DateContext';
 import API_BASE_URL from './config'; 
 import Layout from './components/layout/Layout';
 import UpdatePrompt from './components/ui/UpdatePrompt';
+import Onboarding from './modules/Onboarding';
 
 
 // --- MODULE IMPORTS (Unified) ---
@@ -46,8 +47,19 @@ const App = () => {
 
   if (isBooting) return null; 
 
+  const renderWithUpdatePrompt = (content) => (
+    <>
+      <UpdatePrompt />
+      {content}
+    </>
+  );
+
+  if (authState === 'onboarding') {
+    return renderWithUpdatePrompt(<Onboarding setAuthState={setAuthState} />);
+  }
+
   if (authState !== 'authenticated') {
-    return <Auth authState={authState} setAuthState={setAuthState} setUserRole={setUserRole} />;
+    return renderWithUpdatePrompt(<Auth authState={authState} setAuthState={setAuthState} setUserRole={setUserRole} />);
   }
 
   // --- UNIFIED ROUTING ---
@@ -65,9 +77,8 @@ const App = () => {
     content = <div className="p-10 text-slate-400">Tab "{activeTab}" not found.</div>;
   }
 
-  return (
+  return renderWithUpdatePrompt(
     <>
-      <UpdatePrompt />
       <DateProvider>
         <Layout activeTab={activeTab} setActiveTab={setActiveTab} userRole={userRole}>
           {content}
