@@ -23,7 +23,14 @@ const ModuleHeader = ({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false); 
-  const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const savedUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}');
+    } catch (err) {
+      return {};
+    }
+  })();
+  const safeNotifications = Array.isArray(notifications) ? notifications : [];
   const displayName = savedUser.name || localStorage.getItem('userName') || 'User';
   const displayEmail = savedUser.email || localStorage.getItem('userEmail') || '';
   const initials = displayName
@@ -35,7 +42,7 @@ const ModuleHeader = ({
     .toUpperCase() || 'U';
 
   // Count unread (assuming all in list are 'new' until cleared, or logic can be added later)
-  const unreadCount = notifications.length;
+  const unreadCount = safeNotifications.length;
 
   const notifRef = useRef(null);
   const profileRef = useRef(null);
@@ -137,7 +144,7 @@ const ModuleHeader = ({
                       {/* CLEAR ALL BUTTON */}
                       <div className="flex items-center gap-2">
                         {unreadCount > 0 && (
-                            <button onClick={onClearAll} className="text-[10px] font-bold text-teal-600 hover:text-teal-700 hover:underline">
+                            <button onClick={() => onClearAll?.()} className="text-[10px] font-bold text-teal-600 hover:text-teal-700 hover:underline">
                                 Clear All
                             </button>
                         )}
@@ -146,11 +153,11 @@ const ModuleHeader = ({
                     </div>
                     
                     <div className="max-h-[300px] overflow-y-auto scrollbar-hide">
-                      {notifications.length === 0 ? (
+                      {safeNotifications.length === 0 ? (
                         <div className="p-6 text-center text-slate-400 text-[12px] italic">No new notifications</div>
                       ) : (
                         <div className="divide-y divide-slate-50">
-                          {notifications.map((notif) => (
+                          {safeNotifications.map((notif) => (
                             <div key={notif.id} className="p-3 hover:bg-slate-50 transition-colors flex gap-3 items-start group relative">
                                <div className={`mt-0.5 flex-shrink-0 ${notif.type === 'success' ? 'text-teal-500' : 'text-red-500'}`}>
                                  {notif.type === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
@@ -164,7 +171,7 @@ const ModuleHeader = ({
                                
                                {/* INDIVIDUAL DISMISS BUTTON */}
                                <button 
-                                 onClick={(e) => { e.stopPropagation(); onDismiss(notif.id); }}
+                                 onClick={(e) => { e.stopPropagation(); onDismiss?.(notif.id); }}
                                  className="absolute top-3 right-3 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                                >
                                  <X size={12} />

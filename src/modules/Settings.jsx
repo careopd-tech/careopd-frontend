@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Building2, MessageCircle, FileText, Plus, Edit2, ChevronDown, ChevronRight, UserPlus
+  Building2, MessageCircle, FileText, Plus, Edit2, ChevronDown, ChevronRight, UserPlus, Users, CheckCircle, AlertCircle
 } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import ModuleHeader from '../components/ui/ModuleHeader';
@@ -38,6 +38,56 @@ const Settings = ({ data, setData, onLogout }) => {
     adminPhone: '',
     adminPassword: ''
   });
+  const [accessUsers, setAccessUsers] = useState([]);
+  const [accessLoading, setAccessLoading] = useState(false);
+  const [accessModalOpen, setAccessModalOpen] = useState(false);
+  const [statusConfirmUser, setStatusConfirmUser] = useState(null);
+  const [statusRemark, setStatusRemark] = useState('');
+  const [notification, setNotification] = useState(null);
+  const [notificationStack, setNotificationStack] = useState(() => {
+    try {
+      const saved = localStorage.getItem('settings_notifications');
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [accessData, setAccessData] = useState({
+    name: '',
+    email: '',
+    phone: ''
+  });
+
+  const savedUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}');
+    } catch (err) {
+      return {};
+    }
+  })();
+  const canManageAccess = savedUser.accountRole === 'super_admin';
+
+  useEffect(() => {
+    localStorage.setItem('settings_notifications', JSON.stringify(notificationStack.slice(0, 30)));
+  }, [notificationStack]);
+
+  const showNotification = (shortMessage, type = 'success', detailedMessage = null) => {
+    setNotification({ message: shortMessage, type });
+    window.setTimeout(() => setNotification(null), 3000);
+
+    const newNotif = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      message: detailedMessage || shortMessage,
+      type,
+      timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setNotificationStack(prev => [newNotif, ...(Array.isArray(prev) ? prev : [])].slice(0, 30));
+  };
+
+  const handleClearNotifications = () => setNotificationStack([]);
+  const handleDismissNotification = (id) => setNotificationStack(prev => prev.filter(n => n.id !== id));
 
   // --- 1. FETCH & SYNC DATA ---
   useEffect(() => {
@@ -63,6 +113,38 @@ const Settings = ({ data, setData, onLogout }) => {
     fetchClinicSettings();
   }, [setData]);
 
+  useEffect(() => {
+    if (!canManageAccess) return;
+
+    const clinicId = localStorage.getItem('clinicId');
+    if (!clinicId) return;
+
+    const fetchAccessContext = async () => {
+      try {
+        setAccessLoading(true);
+        const [usersRes, doctorsRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/users?clinicId=${clinicId}&actorId=${savedUser._id}`),
+          fetch(`${API_BASE_URL}/api/doctors/${clinicId}`)
+        ]);
+
+        if (usersRes.ok) {
+          setAccessUsers(await usersRes.json());
+        }
+
+        if (doctorsRes.ok) {
+          const doctors = await doctorsRes.json();
+          setData(prev => ({ ...prev, doctors }));
+        }
+      } catch (err) {
+        console.error('Failed to load access settings', err);
+      } finally {
+        setAccessLoading(false);
+      }
+    };
+
+    fetchAccessContext();
+  }, [canManageAccess, savedUser._id, setData]);
+
   const openEdit = (config) => {
     setModalError('');
     setInvalidFields([]);
@@ -85,6 +167,13 @@ const Settings = ({ data, setData, onLogout }) => {
       adminPassword: ''
     });
     setUpgradeModalOpen(true);
+  };
+
+  const openAccessModal = () => {
+    setModalError('');
+    setInvalidFields([]);
+    setAccessData({ name: '', email: '', phone: '' });
+    setAccessModalOpen(true);
   };
 
   // --- 2. SAVE HANDLER ---
@@ -147,6 +236,7 @@ const Settings = ({ data, setData, onLogout }) => {
           const updatedClinic = await response.json();
           setData(prev => ({ ...prev, clinic: updatedClinic }));
           setEditModal(null);
+          showNotification('Settings Saved', 'success', `${editModal.title || 'Settings'} updated successfully.`);
         } else {
           setModalError("Failed to save changes.");
         }
@@ -218,6 +308,7 @@ const Settings = ({ data, setData, onLogout }) => {
         setData(prev => ({ ...prev, clinic: result.clinic }));
         setUpgradeModalOpen(false);
         setInvalidFields([]);
+        showNotification('Practice Upgraded', 'success', 'Solo doctor setup has been upgraded to a clinic workspace.');
       } else {
         setModalError(result.error || 'Failed to upgrade practice.');
       }
@@ -225,6 +316,132 @@ const Settings = ({ data, setData, onLogout }) => {
       setModalError('Server connection error.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateAccessUser = async () => {
+    setModalError('');
+    const errors = [];
+    const name = accessData.name.trim();
+    const email = accessData.email.trim().toLowerCase();
+    const phone = accessData.phone.trim();
+
+    if (!name) errors.push('name');
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('email');
+    if (!phone || phone.length !== 10) errors.push('phone');
+
+    if (errors.length > 0) {
+      setInvalidFields(errors);
+      return setModalError('Please fill all required details correctly *');
+    }
+
+    const clinicId = localStorage.getItem('clinicId');
+    if (!clinicId) return setModalError('Clinic ID missing.');
+
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clinicId,
+          actorId: savedUser._id,
+          name,
+          email,
+          phone,
+          role: 'clinic_admin'
+        })
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        setAccessUsers(prev => [...prev, result]);
+        setAccessModalOpen(false);
+        setInvalidFields([]);
+        showNotification('Admin Added', 'success', `Activation link sent to ${email}.`);
+      } else {
+        setModalError(result.error || 'Failed to create user.');
+      }
+    } catch (err) {
+      setModalError('Server connection error.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openStatusConfirm = (user) => {
+    setModalError('');
+    setStatusRemark('');
+    setStatusConfirmUser(user);
+  };
+
+  const closeStatusConfirm = () => {
+    setStatusConfirmUser(null);
+    setStatusRemark('');
+    setModalError('');
+  };
+
+  const handleToggleAccessUser = async (user = statusConfirmUser) => {
+    if (!user) return;
+    setModalError('');
+    const clinicId = localStorage.getItem('clinicId');
+    const nextStatus = user.status === 'Inactive' ? 'Active' : 'Inactive';
+    const expectedStatus = user.status === 'Inactive' && user.activationPending ? 'Pending' : nextStatus;
+
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/users/${user._id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId, actorId: savedUser._id, status: nextStatus, activationPending: Boolean(user.activationPending), remark: statusRemark.trim() })
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        setAccessUsers(prev => prev.map(item => item._id === result._id ? result : item));
+        setStatusConfirmUser(null);
+        setStatusRemark('');
+        showNotification(
+          expectedStatus === 'Pending' ? 'User Reactivated' : expectedStatus === 'Active' ? 'User Reactivated' : 'User Deactivated',
+          'success',
+          `${user.name || 'User'} has been marked as ${expectedStatus}.`
+        );
+      } else {
+        showNotification('Action Failed', 'error', result.error || 'Failed to update user status.');
+      }
+    } catch (err) {
+      showNotification('Connection Error', 'error', 'Server connection error.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetAccessUser = async (user) => {
+    setModalError('');
+    const clinicId = localStorage.getItem('clinicId');
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/users/${user._id}/reset-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId, actorId: savedUser._id })
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        showNotification(
+          user.status === 'Pending' ? 'Activation Link Sent' : 'Reset Link Sent',
+          'success',
+          result.message || (user.status === 'Pending' ? 'Activation link sent successfully.' : 'Password reset link sent successfully.')
+        );
+      } else {
+        showNotification('Action Failed', 'error', result.error || 'Failed to send password reset link.');
+      }
+    } catch (err) {
+      showNotification('Connection Error', 'error', 'Server connection error.');
     }
   };
 
@@ -282,19 +499,31 @@ const Settings = ({ data, setData, onLogout }) => {
 
   const clinicTemplates = data.clinic?.templates || [];
   const clinicPolicies = data.clinic?.policies || [];
-  const savedUser = (() => {
-    try {
-      return JSON.parse(localStorage.getItem('user') || '{}');
-    } catch (err) {
-      return {};
-    }
-  })();
   const loggedInDoctorId = savedUser.doctorId || localStorage.getItem('doctorId');
   const canUpgradeSolo = data.clinic?.type === 'Solo' || (!data.clinic?.type && Boolean(loggedInDoctorId));
+  const roleLabels = {
+    super_admin: 'Super Admin',
+    clinic_admin: 'Clinic Admin',
+    doctor: 'Doctor'
+  };
 
   return (
     <div className="h-full flex flex-col bg-slate-50">
-      <ModuleHeader title="Settings" showSearch={false} onLogout={onLogout} />
+      {notification && (
+        <div className={`fixed top-6 right-6 z-[100] px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 bg-white border-l-4 ${notification.type === 'success' ? 'border-teal-500 text-teal-800' : 'border-red-500 text-red-800'}`}>
+          {notification.type === 'success' ? <CheckCircle size={20} className="text-teal-500" /> : <AlertCircle size={20} className="text-red-500" />}
+          <span className="text-[13px] font-bold">{notification.message}</span>
+        </div>
+      )}
+
+      <ModuleHeader
+        title="Settings"
+        showSearch={false}
+        notifications={notificationStack}
+        onClearAll={handleClearNotifications}
+        onDismiss={handleDismissNotification}
+        onLogout={onLogout}
+      />
       
       {/* Container Padding: p-2 gap-2 to match other pages */}
       <div className="flex-1 flex flex-col min-h-0 p-2 gap-2 max-w-3xl mx-auto w-full">
@@ -320,6 +549,74 @@ const Settings = ({ data, setData, onLogout }) => {
                   onEdit={openUpgradeModal}
                 />
               )}
+            </>
+          )}
+
+          {canManageAccess && renderAccordion('access', 'Users & Access', Users, 'text-indigo-600',
+            <>
+              {accessLoading ? (
+                <div className="p-4 text-center text-[12px] text-slate-400 font-medium">Loading users...</div>
+              ) : accessUsers.length === 0 ? (
+                <div className="p-4 text-center text-[12px] text-slate-400 font-medium">No users found</div>
+              ) : (
+                accessUsers.map(user => {
+                  const linkedDoctor = data.doctors?.find(doc => String(doc._id) === String(user.doctorId));
+                  const isProtectedOwner = user.role === 'super_admin';
+                  return (
+                    <div key={user._id} className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="text-[13px] font-bold text-slate-800 truncate">{user.name}</h4>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                            user.status === 'Inactive'
+                              ? 'bg-slate-100 text-slate-500'
+                              : user.status === 'Pending'
+                                ? 'bg-amber-50 text-amber-700'
+                                : 'bg-teal-50 text-teal-700'
+                          }`}>
+                            {user.status || 'Active'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 truncate mt-0.5">{user.email} • {user.phone}</p>
+                        <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                          {roleLabels[user.role] || user.role}{linkedDoctor ? ` • ${linkedDoctor.name}` : ''}
+                        </p>
+                      </div>
+                      <div className="flex flex-col gap-1.5 flex-shrink-0">
+                        <button
+                          type="button"
+                          disabled={user.status === 'Inactive'}
+                          onClick={() => handleResetAccessUser(user)}
+                          className={`px-2.5 py-1.5 rounded-md text-[11px] font-bold transition-colors ${user.status === 'Inactive' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+                        >
+                          {user.status === 'Pending' ? 'Resend Activation' : 'Reset Password'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isProtectedOwner}
+                          onClick={() => openStatusConfirm(user)}
+                          className={`px-2.5 py-1.5 rounded-md text-[11px] font-bold transition-colors ${
+                            isProtectedOwner
+                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                              : user.status === 'Inactive'
+                                ? 'bg-green-50 text-green-700 hover:bg-green-100'
+                                : 'bg-red-50 text-red-600 hover:bg-red-100'
+                          }`}
+                        >
+                          {isProtectedOwner ? 'Owner' : user.status === 'Inactive' ? 'Reactivate' : 'Deactivate'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+
+              <button
+                onClick={openAccessModal}
+                className="w-full mt-1.5 py-2 text-[12px] font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100"
+              >
+                <UserPlus size={14} /> Add Admin
+              </button>
             </>
           )}
           
@@ -445,6 +742,105 @@ const Settings = ({ data, setData, onLogout }) => {
               </div>
             </div>
           )}
+        </div>
+      </Modal>
+
+      <Modal isOpen={accessModalOpen} onClose={() => { setAccessModalOpen(false); setModalError(''); setInvalidFields([]); }} title="Add Clinic Admin" footer={
+          <button onClick={handleCreateAccessUser} disabled={loading} className="w-full bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70 hover:bg-teal-700 transition-colors">
+             {loading ? 'Creating...' : 'Create Admin'}
+          </button>
+        }>
+        <div className="space-y-3">
+          <AlertMessage message={modalError} />
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Full Name <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              placeholder="Full name"
+              className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('name') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
+              value={accessData.name}
+              onChange={e => setAccessData({ ...accessData, name: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Email ID <span className="text-red-500">*</span></label>
+            <input
+              type="email"
+              placeholder="user@clinic.com"
+              className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('email') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
+              value={accessData.email}
+              onChange={e => setAccessData({ ...accessData, email: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Mobile Number <span className="text-red-500">*</span></label>
+            <input
+              type="tel"
+              maxLength={10}
+              placeholder="10-digit number"
+              className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('phone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
+              value={accessData.phone}
+              onChange={e => setAccessData({ ...accessData, phone: e.target.value.replace(/\D/g, '') })}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!statusConfirmUser}
+        onClose={closeStatusConfirm}
+        title={statusConfirmUser?.status === 'Inactive' ? 'Reactivate User' : 'Deactivate User'}
+        footer={
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={closeStatusConfirm}
+              disabled={loading}
+              className="w-full bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70 hover:bg-slate-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleAccessUser()}
+              disabled={loading}
+              className={`w-full text-white py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70 transition-colors ${
+                statusConfirmUser?.status === 'Inactive'
+                  ? 'bg-teal-600 hover:bg-teal-700'
+                  : 'bg-red-600 hover:bg-red-700'
+              }`}
+            >
+              {loading ? 'Updating...' : statusConfirmUser?.status === 'Inactive' ? 'Reactivate' : 'Deactivate'}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <AlertMessage message={modalError} />
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+            <p className="text-[13px] font-bold text-slate-800">{statusConfirmUser?.name}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">{statusConfirmUser?.email}</p>
+          </div>
+          <p className="text-[13px] text-slate-600 leading-relaxed">
+            {statusConfirmUser?.status === 'Inactive'
+              ? statusConfirmUser?.activationPending
+                ? 'This will restore the invite. The user will remain Pending until they open the activation link and set a password.'
+                : 'This will restore access for the selected user.'
+              : 'This will immediately block the selected user from signing in.'}
+          </p>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Remark</label>
+            <textarea
+              value={statusRemark}
+              onChange={e => setStatusRemark(e.target.value)}
+              placeholder="Optional reason or internal note"
+              className="w-full p-2 border border-slate-200 rounded-lg text-[13px] h-24 outline-none focus:ring-1 focus:ring-teal-500 resize-none"
+              disabled={loading}
+            />
+          </div>
         </div>
       </Modal>
 

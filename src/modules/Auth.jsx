@@ -15,6 +15,70 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
   const [success, setSuccess] = useState('');
   const [invalidFields, setInvalidFields] = useState([]);
   const [otp, setOtp] = useState('');
+  const [activationChecking, setActivationChecking] = useState(false);
+  const [activationBlocked, setActivationBlocked] = useState(false);
+  const [activationCompleted, setActivationCompleted] = useState(false);
+  const activationParams = new URLSearchParams(window.location.search);
+  const activationToken = activationParams.get('activate') || '';
+  const activationEmail = activationParams.get('email') || '';
+  const activationMode = activationParams.get('mode') === 'reset' ? 'reset' : 'activate';
+  const isLinkReset = authState === 'activate' && activationMode === 'reset';
+  const closeAuthFlow = () => {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setAuthState('login');
+    setError('');
+    setSuccess('');
+    setInvalidFields([]);
+    setPassword('');
+    setConfirmPassword('');
+    setActivationCompleted(false);
+  };
+  const closeActivationTab = () => {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    window.close();
+
+    window.setTimeout(() => {
+      if (!window.closed) closeAuthFlow();
+    }, 250);
+  };
+
+  useEffect(() => {
+    if (authState !== 'activate' || activationCompleted) {
+      setActivationBlocked(false);
+      setActivationChecking(false);
+      return;
+    }
+
+    const checkActivationLink = async () => {
+      setError('');
+      setActivationBlocked(false);
+
+      if (!activationEmail || !activationToken) {
+        setActivationBlocked(true);
+        setError(isLinkReset ? 'Invalid or expired password reset link.' : 'Invalid or expired activation link.');
+        return;
+      }
+
+      try {
+        setActivationChecking(true);
+        const query = new URLSearchParams({ email: activationEmail, token: activationToken });
+        const response = await fetch(`${API_BASE_URL}/api/auth/activation-link-status?${query.toString()}`);
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          setActivationBlocked(true);
+          setError(result.error || (isLinkReset ? 'Invalid or expired password reset link.' : 'Invalid or expired activation link.'));
+        }
+      } catch (err) {
+        setActivationBlocked(true);
+        setError('Failed to connect to the CareOPD server. Is it running?');
+      } finally {
+        setActivationChecking(false);
+      }
+    };
+
+    checkActivationLink();
+  }, [authState, activationEmail, activationToken, isLinkReset, activationCompleted]);
 
   const isValidLoginId = (value) => {
     const trimmed = value.trim();
@@ -27,6 +91,10 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+
+    if (authState === 'activate' && activationBlocked) {
+      return setError(isLinkReset ? 'Invalid or expired password reset link.' : "Account couldn't be activated at moment, contact clinic admin.");
+    }
     
     let errors = [];
     if (authState === 'login') {
@@ -34,8 +102,8 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
       if (!password) errors.push('password');
     } else if (authState === 'forgot') {
       if (!email) errors.push('email');
-    } else if (authState === 'reset') {
-      if (!otp || otp.length !== 6) errors.push('otp');
+    } else if (authState === 'reset' || authState === 'activate') {
+      if (authState === 'reset' && (!otp || otp.length !== 6)) errors.push('otp');
       if (!password) errors.push('password');
       if (!confirmPassword) errors.push('confirmPassword');
     }
@@ -55,6 +123,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
 
     try {
       if (authState === 'login') {
+        setActivationCompleted(false);
         const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -136,6 +205,43 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
           setError(result.error || 'Invalid or expired OTP. Please try again.');
         }
       }
+      else if (authState === 'activate') {
+        if (password !== confirmPassword) {
+           setError('Passwords do not match.');
+           setIsLoading(false);
+           return;
+        }
+        if (password.length < 6) {
+           setError('Password must be at least 6 characters.');
+           setIsLoading(false);
+           return;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/api/auth/activate-account`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: activationEmail, token: activationToken, newPassword: password, mode: activationMode })
+        });
+
+        const result = await response.json().catch(() => ({}));
+
+        if (response.ok) {
+          const completedMode = result.mode === 'reset' ? 'reset' : activationMode;
+          setActivationCompleted(true);
+          setActivationBlocked(false);
+          setError('');
+          setSuccess(completedMode === 'reset' ? 'Password reset successfully! Redirecting...' : 'Account activated successfully! Redirecting...');
+          window.history.replaceState({}, document.title, window.location.pathname);
+          setTimeout(() => {
+            setAuthState('login');
+            setSuccess(completedMode === 'reset' ? 'Password reset successfully. Please sign in with your new password.' : 'Account activated successfully. Please sign in.');
+            setPassword('');
+            setConfirmPassword('');
+          }, 1500);
+        } else {
+          setError(result.error || (isLinkReset ? 'Invalid or expired password reset link.' : 'Invalid or expired activation link.'));
+        }
+      }
     } catch (err) {
       console.log("Fetch error:", err);
       setError('Failed to connect to the CareOPD server. Is it running?');
@@ -143,6 +249,34 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
       setIsLoading(false);
     }
   };
+
+  if (authState === 'activate' && activationBlocked && !activationCompleted) {
+    return (
+      <div className="min-h-dvh bg-slate-50 flex flex-col justify-center items-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-slate-100 animate-scaleIn">
+          <div className="flex flex-col items-center mb-6">
+            <img src="/CareOPD-Logo.png" alt="CareOPD Logo" className="h-24 mb-2 object-contain" />
+            <h2 className="text-2xl font-bold text-slate-800 text-center leading-tight">CareOPD</h2>
+          </div>
+
+          <AlertMessage message={error || "Account couldn't be activated at moment, contact clinic admin."} />
+
+          <button
+            type="button"
+            onClick={closeActivationTab}
+            className="w-full bg-teal-600 text-white py-2.5 rounded-xl text-[15px] font-bold hover:bg-teal-700 shadow-md hover:shadow-lg transition-all active:scale-[0.98] mt-2"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="mt-8 text-center text-[12px] text-slate-400 font-medium">
+          &copy; {new Date().getFullYear()} CareOPD Systems. All rights reserved.
+          <p className="mt-1 text-[10px] text-slate-300 font-bold tracking-wider">v1.0.0</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-dvh bg-slate-50 flex flex-col justify-center items-center p-4">
@@ -155,11 +289,13 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
             {authState === 'login' && 'Welcome to CareOPD'}
             {authState === 'forgot' && 'Recover Account'}
             {authState === 'reset' && 'Verify OTP & Reset'}
+            {authState === 'activate' && (isLinkReset ? 'Reset Your Password' : 'Activate Your Account')}
           </h2>
           <p className="text-slate-500 text-sm mt-1.5 text-center">
             {authState === 'login' && 'Sign in to access your administrative dashboard.'}
             {authState === 'forgot' && 'We will send a 6-digit OTP to your registered contact.'}
             {authState === 'reset' && 'Enter the OTP and set a new password.'}
+            {authState === 'activate' && (isLinkReset ? `Set a new password for ${activationEmail}.` : `Create a password to activate ${activationEmail}.`)}
           </p>
         </div>
 
@@ -212,10 +348,17 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
             </div>
           )}
 
-          {(authState === 'login' || authState === 'reset') && (
+          {activationChecking && authState === 'activate' && (
+            <div className="bg-slate-50 text-slate-500 p-2.5 rounded-lg flex items-center gap-2 text-[12px] font-medium border border-slate-200">
+              <Loader2 size={14} className="animate-spin" />
+              <span>Checking account access...</span>
+            </div>
+          )}
+
+          {(authState === 'login' || authState === 'reset' || (authState === 'activate' && !activationBlocked && !activationChecking)) && (
             <div>
               <label className="block text-[12px] font-bold text-slate-600 mb-1.5 uppercase tracking-wide">
-                {authState === 'reset' ? 'New Password' : 'Password'} <span className="text-red-500">*</span>
+                {authState === 'reset' || authState === 'activate' ? 'New Password' : 'Password'} <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -239,7 +382,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
             </div>
           )}
 
-          {authState === 'reset' && (
+          {(authState === 'reset' || (authState === 'activate' && !activationBlocked && !activationChecking)) && (
             <div>
               <label className="block text-[12px] font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Confirm Password <span className="text-red-500">*</span></label>
               <div className="relative">
@@ -272,7 +415,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
           {/* UPDATED SUBMIT BUTTON */}
           <button 
             type="submit" 
-            disabled={isLoading || (authState === 'reset' && (!otp || !password || !confirmPassword))}
+            disabled={isLoading || activationChecking || activationBlocked || ((authState === 'reset' || authState === 'activate') && ((authState === 'reset' && !otp) || !password || !confirmPassword))}
             className="w-full bg-teal-600 text-white py-2.5 rounded-xl text-[15px] font-bold hover:bg-teal-700 shadow-md hover:shadow-lg transition-all active:scale-[0.98] mt-2 flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isLoading ? (
@@ -282,6 +425,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
                   {authState === 'login' && 'Signing In...'}
                   {authState === 'forgot' && 'Sending OTP...'}
                   {authState === 'reset' && 'Verifying...'}
+                  {authState === 'activate' && (isLinkReset ? 'Resetting...' : 'Activating...')}
                 </span>
               </>
             ) : (
@@ -289,16 +433,17 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
                 {authState === 'login' && 'Sign In'}
                 {authState === 'forgot' && 'Send OTP'}
                 {authState === 'reset' && 'Verify and Update'}
+                {authState === 'activate' && (isLinkReset ? 'Reset Password' : 'Activate Account')}
               </>
             )}
           </button>
         </form>
 
-        {(authState === 'forgot' || authState === 'reset') && (
+        {(authState === 'forgot' || authState === 'reset' || authState === 'activate') && (
           <button 
             type="button"
             disabled={isLoading}
-            onClick={() => { setAuthState('login'); setError(''); setSuccess(''); setInvalidFields([]); }}
+            onClick={closeAuthFlow}
             className="w-full flex justify-center items-center gap-2 mt-6 text-[13px] font-bold text-slate-500 hover:text-slate-800 transition-colors disabled:opacity-50"
           >
             <ArrowLeft size={14} /> Back to Login

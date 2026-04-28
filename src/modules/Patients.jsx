@@ -26,11 +26,11 @@ const Patients = ({ data, setData, onLogout }) => {
 
   // --- STATE MANAGEMENT ---
   const [patients, setPatients] = useState(() => data.cachedPatients || []);
-  const [totalPatients, setTotalPatients] = useState(() => data.cachedPatientStats?.total || 0);
-  const [page, setPage] = useState(1);
+  const [totalPatients, setTotalPatients] = useState(() => data.cachedPatientTotal || data.cachedPatientStats?.total || 0);
+  const [page, setPage] = useState(() => data.cachedPatientPage || 1);
   const [stats, setStats] = useState(() => data.cachedPatientStats || { total: 0, new: 0, returning: 0, noVisit: 0 });
   
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !(data.cachedPatients && data.cachedPatients.length > 0));
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
 
@@ -103,9 +103,11 @@ const PatientSkeleton = () => (
   const searchTimeoutRef = useRef(null);
   const queryRef = useRef(searchQuery);
   const typeRef = useRef(typeFilter);
+  const pageRef = useRef(page);
 
   useEffect(() => { queryRef.current = searchQuery; }, [searchQuery]);
   useEffect(() => { typeRef.current = typeFilter; }, [typeFilter]);
+  useEffect(() => { pageRef.current = page; }, [page]);
 
   // --- NOTIFICATION HELPERS ---
   const showNotification = (shortMessage, type = 'success', detailedMessage = null) => {
@@ -121,6 +123,7 @@ const PatientSkeleton = () => (
   // --- DATA FETCHING ---
   const fetchPatientData = async (targetPage = 1, isBackgroundSync = false) => {
     if (!clinicId) return;
+    const isDefaultView = !queryRef.current && !typeRef.current && !dateRange.from && !dateRange.to;
     
     if (targetPage === 1 && !isBackgroundSync) {
        if (queryRef.current) setIsSearching(true);
@@ -137,7 +140,9 @@ const PatientSkeleton = () => (
           .then(resData => {
              if (resData && resData.stats) {
                  setStats(resData.stats);
-                 
+                 if (isDefaultView && setData) {
+                   setData(prev => ({ ...prev, cachedPatientStats: resData.stats }));
+                 }
              }
           })
           .catch(() => console.log("Stats fetch failed quietly"))
@@ -157,12 +162,28 @@ const PatientSkeleton = () => (
             const incomingPatients = Array.isArray(resData.data) ? resData.data : [];
             if (targetPage === 1) {
               setPatients(incomingPatients);
-              
+              if (isDefaultView && setData) {
+                setData(prev => ({
+                  ...prev,
+                  cachedPatients: incomingPatients,
+                  cachedPatientPage: 1,
+                  cachedPatientTotal: resData.total || 0
+                }));
+              }
             } else {
               setPatients(prev => {
                 const existingIds = new Set(prev.map(p => p._id));
                 const uniqueNew = incomingPatients.filter(p => !existingIds.has(p._id));
-                return [...prev, ...uniqueNew];
+                const nextPatients = [...prev, ...uniqueNew];
+                if (isDefaultView && setData) {
+                  setData(dataPrev => ({
+                    ...dataPrev,
+                    cachedPatients: nextPatients,
+                    cachedPatientPage: targetPage,
+                    cachedPatientTotal: resData.total || 0
+                  }));
+                }
+                return nextPatients;
               });
             }
             setTotalPatients(resData.total || 0);
@@ -185,9 +206,9 @@ const PatientSkeleton = () => (
   useEffect(() => {
     const isInitialBackgroundSync = !typeFilter && !dateRange.from && !dateRange.to && !searchQuery && (data.cachedPatients?.length > 0);
     fetchPatientData(1, isInitialBackgroundSync);
-    const interval = setInterval(() => fetchPatientData(page, true), 60000);
+    const interval = setInterval(() => fetchPatientData(pageRef.current, true), 60000);
     return () => clearInterval(interval);
-  }, [typeFilter, dateRange]); 
+  }, [typeFilter, dateRange.from, dateRange.to]); 
 
   // --- ACTIONS ---
   const handleSearchInput = (val) => {

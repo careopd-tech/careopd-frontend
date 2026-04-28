@@ -216,7 +216,8 @@ const Doctors = ({ data, setData, onLogout }) => {
         const actionWord = targetStatus === 'Available' ? 'Activated' : 'Deactivated';
         showNotification(`Doctor ${actionWord}`, 'success', `${activeModal.doctorName} marked as ${targetStatus}.`);
       } else {
-        setModalError('Failed to update status.');
+        const errData = await response.json().catch(() => ({}));
+        setModalError(errData.error || 'Failed to update status.');
       }
     } catch (err) {
       setModalError('Server connection failed.');

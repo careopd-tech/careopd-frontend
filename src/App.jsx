@@ -18,6 +18,8 @@ const App = () => {
 
   // --- AUTH & ROLE STATE ---
   const [authState, setAuthState] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('activate') && params.get('email')) return 'activate';
     return localStorage.getItem('clinicId') ? 'authenticated' : 'login';
   });
   
@@ -32,10 +34,48 @@ const App = () => {
     appointments: [], doctors: [], patients: [], clinic: {}, notifications: [] 
   });
 
+  const savedUser = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}');
+    } catch (err) {
+      return {};
+    }
+  })();
+
+  const hasLinkedDoctor = Boolean(savedUser.doctorId || localStorage.getItem('doctorId'));
+  const isSoloWorkspace = data.clinic?.type === 'Solo' || (!data.clinic?.type && hasLinkedDoctor);
+
   useEffect(() => {
     const timer = setTimeout(() => setIsBooting(false), 150); 
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (authState !== 'authenticated') return;
+
+    const clinicId = localStorage.getItem('clinicId');
+    if (!clinicId) return;
+
+    const fetchClinicType = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/clinics/${clinicId}`);
+        if (response.ok) {
+          const clinic = await response.json();
+          setData(prev => ({ ...prev, clinic: { ...prev.clinic, ...clinic } }));
+        }
+      } catch (err) {
+        console.error('Failed to load clinic context', err);
+      }
+    };
+
+    fetchClinicType();
+  }, [authState]);
+
+  useEffect(() => {
+    if (activeTab === 'doctors' && isSoloWorkspace) {
+      setActiveTab('appointments');
+    }
+  }, [activeTab, isSoloWorkspace]);
 
   const handleLogout = () => {
     localStorage.clear(); 
@@ -65,22 +105,30 @@ const App = () => {
   // --- UNIFIED ROUTING ---
   let content;
   
-  if (activeTab === 'appointments') {
+  const effectiveActiveTab = activeTab === 'doctors' && isSoloWorkspace ? 'appointments' : activeTab;
+
+  if (effectiveActiveTab === 'appointments') {
     content = <Appointments data={data} setData={setData} onLogout={handleLogout}/>;
-  } else if (activeTab === 'doctors') {
+  } else if (effectiveActiveTab === 'doctors') {
     content = <Doctors data={data} setData={setData} onLogout={handleLogout}/>;
-  } else if (activeTab === 'patients') {
+  } else if (effectiveActiveTab === 'patients') {
     content = <Patients data={data} setData={setData} onLogout={handleLogout} />;
-  } else if (activeTab === 'settings') {
+  } else if (effectiveActiveTab === 'settings') {
     content = <Settings data={data} setData={setData} onLogout={handleLogout} />;
   } else {
-    content = <div className="p-10 text-slate-400">Tab "{activeTab}" not found.</div>;
+    content = <div className="p-10 text-slate-400">Tab "{effectiveActiveTab}" not found.</div>;
   }
 
   return renderWithUpdatePrompt(
     <>
       <DateProvider>
-        <Layout activeTab={activeTab} setActiveTab={setActiveTab} userRole={userRole}>
+        <Layout
+          activeTab={effectiveActiveTab}
+          setActiveTab={setActiveTab}
+          userRole={userRole}
+          clinicType={data.clinic?.type}
+          hasLinkedDoctor={hasLinkedDoctor}
+        >
           {content}
         </Layout>
       </DateProvider>

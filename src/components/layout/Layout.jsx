@@ -1,7 +1,7 @@
 import React from 'react';
 import { Calendar, Stethoscope, Users, Settings, Activity } from 'lucide-react';
 
-const Layout = ({ activeTab, setActiveTab, userRole, children }) => {
+const Layout = ({ activeTab, setActiveTab, userRole, clinicType, hasLinkedDoctor, children }) => {
   // DYNAMIC NAVIGATION BASED ON ROLE
   const getNavItems = () => {
     if (userRole === 'doctor') {
@@ -12,14 +12,16 @@ const Layout = ({ activeTab, setActiveTab, userRole, children }) => {
         { id: 'settings', label: 'Settings', mobileLabel: 'Settings', icon: Settings },
       ];
     }
+
+    const isSoloWorkspace = clinicType === 'Solo' || (!clinicType && hasLinkedDoctor);
     
     // Default Admin Navigation
     return [
       { id: 'appointments', label: 'Appointments', mobileLabel: 'Appts', icon: Calendar },
-      { id: 'doctors', label: 'Doctors', mobileLabel: 'Doctors', icon: Stethoscope },
+      !isSoloWorkspace && { id: 'doctors', label: 'Doctors', mobileLabel: 'Doctors', icon: Stethoscope },
       { id: 'patients', label: 'Patients', mobileLabel: 'Patients', icon: Users },
       { id: 'settings', label: 'Settings', mobileLabel: 'Settings', icon: Settings },
-    ];
+    ].filter(Boolean);
   };
 
   const currentNavItems = getNavItems();
