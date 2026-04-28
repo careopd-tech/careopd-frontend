@@ -15,8 +15,18 @@ const DEFAULT_TEMPLATES = [
 ];
 
 const DEFAULT_POLICIES = [
-  { title: 'Privacy Policy', text: 'We are committed to protecting your personal information...' },
-  { title: 'Consent Policy', text: 'By using our services, you consent to...' }
+  {
+    title: 'Privacy Policy',
+    text: 'We collect and use patient information only for registration, appointment management, consultation, billing, and clinic communication. Patient information is handled confidentially and shared only where required for care delivery, operations, or legal compliance.'
+  },
+  {
+    title: 'Consent Policy',
+    text: 'By registering with the clinic, the patient consents to the collection and use of their personal and medical information for healthcare services, appointment communication, prescriptions, follow-up reminders, and clinic administration.'
+  },
+  {
+    title: 'Appointment Policy',
+    text: 'Appointment timings are subject to doctor availability and clinic operations. Patients are requested to arrive on time and inform the clinic in advance for cancellation or rescheduling.'
+  }
 ];
 
 const Settings = ({ data, setData, onLogout }) => {
