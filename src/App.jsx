@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DateProvider } from './context/DateContext'; 
 import API_BASE_URL from './config'; 
 import Layout from './components/layout/Layout';
+import PullToRefresh from './components/system/PullToRefresh';
 import UpdatePrompt from './components/ui/UpdatePrompt';
 import Onboarding from './modules/Onboarding';
 
@@ -90,6 +91,7 @@ const App = () => {
   const renderWithUpdatePrompt = (content) => (
     <>
       <UpdatePrompt />
+      <PullToRefresh />
       {content}
     </>
   );

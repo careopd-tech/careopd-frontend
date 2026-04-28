@@ -3,6 +3,8 @@
 /* --- ADD THIS BLOCK TO FIX THE BLACK FLASH --- */
 :root {
   color-scheme: light; /* 1. Forces browser native UI (scrollbars, dropdowns) to be light */
+  --app-height: 100dvh;
+  --bottom-safe-area: max(env(safe-area-inset-bottom), 0px);
 }
 
 /* 2. Force inputs/selects to be white immediately */
@@ -16,4 +18,29 @@ body {
   margin: 0;
   padding: 0;
   background-color: #f8fafc; /* matches slate-50 */
+  overscroll-behavior-y: none;
+  touch-action: manipulation;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: var(--app-height);
+  overflow: hidden;
+}
+
+.app-viewport {
+  height: var(--app-height);
+  max-height: var(--app-height);
+}
+
+.mobile-bottom-nav {
+  padding-bottom: max(0.375rem, var(--bottom-safe-area));
+}
+
+@supports (height: 100svh) {
+  :root {
+    --app-height: 100svh;
+  }
 }

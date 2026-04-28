@@ -1,22 +1,34 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 let updateCheckIntervalId;
 
 function UpdatePrompt() {
+  const registrationRef = useRef(null);
+
+  const checkForServiceWorkerUpdate = () => {
+    const registration = registrationRef.current;
+    if (!registration) return;
+
+    registration.update().catch((error) => console.log('SW update check failed', error));
+  };
+
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
     onRegisteredSW(swScriptUrl, registration) {
       console.log('SW Registered', swScriptUrl);
+      registrationRef.current = registration || null;
 
       if (updateCheckIntervalId) {
         window.clearInterval(updateCheckIntervalId);
       }
 
       if (registration) {
+        window.setTimeout(checkForServiceWorkerUpdate, 1000);
+
         updateCheckIntervalId = window.setInterval(() => {
           registration.update().catch((error) => console.log('SW update check failed', error));
         }, UPDATE_CHECK_INTERVAL_MS);
@@ -26,6 +38,26 @@ function UpdatePrompt() {
       console.log('SW registration error', error);
     },
   });
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkForServiceWorkerUpdate();
+      }
+    };
+
+    window.addEventListener('focus', checkForServiceWorkerUpdate);
+    window.addEventListener('online', checkForServiceWorkerUpdate);
+    window.addEventListener('careopd:check-app-update', checkForServiceWorkerUpdate);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', checkForServiceWorkerUpdate);
+      window.removeEventListener('online', checkForServiceWorkerUpdate);
+      window.removeEventListener('careopd:check-app-update', checkForServiceWorkerUpdate);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   // If there's an update, show a persistent floating toast
   if (needRefresh) {

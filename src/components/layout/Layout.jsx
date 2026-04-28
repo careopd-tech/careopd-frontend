@@ -27,9 +27,9 @@ const Layout = ({ activeTab, setActiveTab, userRole, clinicType, hasLinkedDoctor
   const currentNavItems = getNavItems();
 
   return (
-    <div className="h-dvh bg-slate-50 font-sans text-slate-900 flex overflow-hidden overscroll-none">
+    <div className="app-viewport bg-slate-50 font-sans text-slate-900 flex overflow-hidden overscroll-none">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-200 h-dvh sticky top-0">
+      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-200 app-viewport sticky top-0">
         <div className="p-4 flex items-center gap-3 border-b border-slate-100">
            <div className="w-8 h-8 bg-teal-600 rounded-lg flex items-center justify-center text-white font-bold text-[15px]">C</div>
            <span className="font-bold text-[19px] tracking-tight text-slate-800">CareOPD</span>
@@ -48,18 +48,18 @@ const Layout = ({ activeTab, setActiveTab, userRole, clinicType, hasLinkedDoctor
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-dvh overflow-hidden">
+      <main className="flex-1 flex flex-col app-viewport overflow-hidden">
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
            {children}
         </div>
 
         {/* Mobile Bottom Nav */}
-        <nav className="flex-none md:hidden bg-white border-t border-slate-200 flex justify-around p-1.5 pb-safe z-30 shadow-lg">
+        <nav className="mobile-bottom-nav flex-none md:hidden bg-white border-t border-slate-200 flex justify-around px-1.5 pt-1.5 z-30 shadow-lg">
            {currentNavItems.map(item => (
              <button 
                 key={item.id} 
                 onClick={() => setActiveTab(item.id)} 
-                className={`flex flex-col items-center justify-center p-1.5 rounded-xl ${activeTab === item.id ? 'text-teal-600' : 'text-slate-400'}`}
+                className={`min-w-0 flex-1 flex flex-col items-center justify-center p-1.5 rounded-xl ${activeTab === item.id ? 'text-teal-600' : 'text-slate-400'}`}
              >
                <item.icon className="w-5 h-5" />
                <span className="text-[10px] font-bold mt-1">{item.mobileLabel || item.label}</span>
