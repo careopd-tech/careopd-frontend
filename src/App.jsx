@@ -3,7 +3,6 @@ import { DateProvider } from './context/DateContext';
 import API_BASE_URL from './config'; 
 import Layout from './components/layout/Layout';
 import KeyboardFocusManager from './components/system/KeyboardFocusManager';
-import PullToRefresh from './components/system/PullToRefresh';
 import UpdatePrompt from './components/ui/UpdatePrompt';
 import Onboarding from './modules/Onboarding';
 
@@ -99,7 +98,6 @@ const App = () => {
     <>
       <UpdatePrompt />
       <KeyboardFocusManager />
-      <PullToRefresh />
       {content}
     </>
   );
