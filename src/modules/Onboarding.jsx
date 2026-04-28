@@ -147,7 +147,7 @@ const Onboarding = ({ setAuthState }) => {
 
   if (success) {
     return (
-      <div className="min-h-dvh bg-slate-50 flex flex-col justify-center items-center p-4">
+      <div className="auth-screen min-h-dvh bg-slate-50 flex flex-col justify-center items-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center animate-scaleIn">
           <ShieldCheck size={64} className="mx-auto text-teal-500 mb-4" />
           <h2 className="text-2xl font-bold text-slate-800 mb-2">Workspace Ready!</h2>
@@ -161,7 +161,7 @@ const Onboarding = ({ setAuthState }) => {
   }
 
   return (
-    <div className="min-h-dvh bg-slate-50 flex flex-col justify-center items-center p-4">
+    <div className="auth-screen min-h-dvh bg-slate-50 flex flex-col justify-center items-center p-4">
       <div className="max-w-lg w-full bg-white rounded-2xl shadow-xl p-6 sm:p-8 animate-scaleIn">
         <div className="text-center mb-6">
           <h2 className="text-2xl font-bold text-slate-800">

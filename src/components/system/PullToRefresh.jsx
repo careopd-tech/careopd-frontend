@@ -27,6 +27,8 @@ const findScrollContainer = (target) => {
   return document.scrollingElement || document.documentElement;
 };
 
+const hasOpenModal = () => Boolean(document.querySelector('[data-careopd-modal]'));
+
 const getScrollTop = (element) => {
   if (element === document.scrollingElement || element === document.documentElement) {
     return window.scrollY || document.documentElement.scrollTop || 0;
@@ -58,6 +60,7 @@ const PullToRefresh = () => {
 
     const handleTouchStart = (event) => {
       if (!isMobilePointer() || event.touches.length !== 1 || isRefreshing) return;
+      if (hasOpenModal()) return;
 
       const touch = event.touches[0];
       const scrollTarget = findScrollContainer(event.target);
@@ -98,6 +101,7 @@ const PullToRefresh = () => {
         setIsRefreshing(true);
         updatePullDistance(TRIGGER_DISTANCE);
         window.dispatchEvent(new Event('careopd:check-app-update'));
+        sessionStorage.setItem('careopd_refresh_path', window.location.pathname + window.location.search + window.location.hash);
 
         navigator.serviceWorker?.getRegistration()
           .then((registration) => registration?.update())

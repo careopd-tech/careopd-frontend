@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DateProvider } from './context/DateContext'; 
 import API_BASE_URL from './config'; 
 import Layout from './components/layout/Layout';
+import KeyboardFocusManager from './components/system/KeyboardFocusManager';
 import PullToRefresh from './components/system/PullToRefresh';
 import UpdatePrompt from './components/ui/UpdatePrompt';
 import Onboarding from './modules/Onboarding';
@@ -29,7 +30,9 @@ const App = () => {
   });
 
   // UNIFIED: Everyone defaults to the Appointments (Queue) module
-  const [activeTab, setActiveTab] = useState('appointments');
+  const [activeTab, setActiveTab] = useState(() => {
+    return sessionStorage.getItem('careopd_active_tab') || 'appointments';
+  });
   
   const [data, setData] = useState({
     appointments: [], doctors: [], patients: [], clinic: {}, notifications: [] 
@@ -78,6 +81,10 @@ const App = () => {
     }
   }, [activeTab, isSoloWorkspace]);
 
+  useEffect(() => {
+    sessionStorage.setItem('careopd_active_tab', activeTab);
+  }, [activeTab]);
+
   const handleLogout = () => {
     localStorage.clear(); 
     setAuthState('login');
@@ -91,6 +98,7 @@ const App = () => {
   const renderWithUpdatePrompt = (content) => (
     <>
       <UpdatePrompt />
+      <KeyboardFocusManager />
       <PullToRefresh />
       {content}
     </>

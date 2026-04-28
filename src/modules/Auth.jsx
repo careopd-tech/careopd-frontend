@@ -252,7 +252,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
 
   if (authState === 'activate' && activationBlocked && !activationCompleted) {
     return (
-      <div className="min-h-dvh bg-slate-50 flex flex-col justify-center items-center p-4">
+      <div className="auth-screen min-h-dvh bg-slate-50 flex flex-col justify-center items-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-slate-100 animate-scaleIn">
           <div className="flex flex-col items-center mb-6">
             <img src="/CareOPD-Logo.png" alt="CareOPD Logo" className="h-24 mb-2 object-contain" />
@@ -279,7 +279,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
   }
 
   return (
-    <div className="min-h-dvh bg-slate-50 flex flex-col justify-center items-center p-4">
+    <div className="auth-screen min-h-dvh bg-slate-50 flex flex-col justify-center items-center p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-slate-100 animate-scaleIn">
         
         {/* Header/Logo Section */}

@@ -97,7 +97,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
   const waitingCount = queue.filter(a => a.status === 'Scheduled' || a.status === 'Waiting').length;
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-slate-100 overflow-hidden">
+    <div className="app-viewport flex flex-col bg-slate-100 overflow-hidden">
       
       {/* --- HEADER --- */}
       <header className="h-[60px] bg-white border-b border-slate-200 px-3 md:px-4 flex justify-between items-center shadow-sm z-20 flex-shrink-0">
