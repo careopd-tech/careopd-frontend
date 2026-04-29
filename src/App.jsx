@@ -14,12 +14,13 @@ import Doctors from './modules/Doctors';
 import Patients from './modules/Patients';
 import Settings from './modules/Settings';
 
-const LaunchScreen = () => (
-  <div className="app-viewport bg-slate-50 flex flex-col items-center justify-center px-4">
-    <img src="/CareOPD-Logo.png" alt="CareOPD Logo" className="h-24 mb-4 object-contain" />
-    <div className="w-9 h-9 rounded-full border-4 border-slate-200 border-t-teal-600 animate-spin" />
-  </div>
-);
+const getCachedClinic = () => {
+  try {
+    return JSON.parse(localStorage.getItem('careopd_clinic_context') || '{}');
+  } catch (err) {
+    return {};
+  }
+};
 
 const App = () => {
   // --- AUTH & ROLE STATE ---
@@ -38,12 +39,13 @@ const App = () => {
     return sessionStorage.getItem('careopd_active_tab') || 'appointments';
   });
   
-  const [data, setData] = useState({
-    appointments: [], doctors: [], patients: [], clinic: {}, notifications: [] 
-  });
-  const [clinicContextStatus, setClinicContextStatus] = useState(() => {
-    return localStorage.getItem('clinicId') ? 'loading' : 'idle';
-  });
+  const [data, setData] = useState(() => ({
+    appointments: [],
+    doctors: [],
+    patients: [],
+    clinic: getCachedClinic(),
+    notifications: []
+  }));
 
   const savedUser = (() => {
     try {
@@ -58,34 +60,26 @@ const App = () => {
 
   useEffect(() => {
     if (authState !== 'authenticated') {
-      setClinicContextStatus('idle');
       return;
     }
 
     const clinicId = localStorage.getItem('clinicId');
-    if (!clinicId) {
-      setClinicContextStatus('failed');
-      return;
-    }
+    if (!clinicId) return;
 
     let isMounted = true;
-    setClinicContextStatus('loading');
 
     const fetchClinicType = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/clinics/${clinicId}`);
         if (response.ok) {
           const clinic = await response.json();
+          localStorage.setItem('careopd_clinic_context', JSON.stringify(clinic));
           if (isMounted) {
             setData(prev => ({ ...prev, clinic: { ...prev.clinic, ...clinic } }));
-            setClinicContextStatus('ready');
           }
-        } else if (isMounted) {
-          setClinicContextStatus('failed');
         }
       } catch (err) {
         console.error('Failed to load clinic context', err);
-        if (isMounted) setClinicContextStatus('failed');
       }
     };
 
@@ -112,7 +106,6 @@ const App = () => {
     setActiveTab('appointments');
     setUserRole('admin'); 
     setData({ appointments: [], doctors: [], patients: [], clinic: {}, notifications: [] });
-    setClinicContextStatus('idle');
   };
 
   const renderWithUpdatePrompt = (content) => (
@@ -129,10 +122,6 @@ const App = () => {
 
   if (authState !== 'authenticated') {
     return renderWithUpdatePrompt(<Auth authState={authState} setAuthState={setAuthState} setUserRole={setUserRole} />);
-  }
-
-  if (clinicContextStatus === 'loading' || clinicContextStatus === 'idle') {
-    return renderWithUpdatePrompt(<LaunchScreen />);
   }
 
   // --- UNIFIED ROUTING ---

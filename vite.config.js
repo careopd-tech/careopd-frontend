@@ -26,7 +26,7 @@ export default defineConfig({
         scope: '/',
         description: 'Mobile-First Clinic Management Platform',
         theme_color: '#0d9488', // Teal color to match your UI
-        background_color: '#ffffff',
+        background_color: '#f8fafc',
         display: 'standalone', // This hides the browser address bar!
         orientation: 'portrait',
         icons: [
