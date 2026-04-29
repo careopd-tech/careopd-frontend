@@ -300,11 +300,14 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
 
   return (
     <div className="auth-screen min-h-dvh bg-slate-50 flex flex-col justify-center items-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-slate-100 animate-scaleIn">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-slate-100">
         
         {/* Header/Logo Section */}
-        <div className="flex flex-col items-center mb-8">
-          <img src="/CareOPD-Logo.png" alt="CareOPD Logo" className="h-24 mb-2 object-contain" />
+        <div className="mb-8">
+          <div className="flex items-center justify-center gap-2.5 mb-4">
+            <div className="w-9 h-9 bg-teal-600 rounded-lg flex items-center justify-center text-white font-bold text-[17px]">C</div>
+            <span className="text-[21px] font-bold text-slate-800 tracking-tight">CareOPD</span>
+          </div>
           <h2 className="text-2xl font-bold text-slate-800 text-center leading-tight">
             {authState === 'login' && 'Welcome to CareOPD'}
             {authState === 'forgot' && 'Recover Account'}
