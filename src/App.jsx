@@ -14,9 +14,14 @@ import Doctors from './modules/Doctors';
 import Patients from './modules/Patients';
 import Settings from './modules/Settings';
 
-const App = () => {
-  const [isBooting, setIsBooting] = useState(true);
+const LaunchScreen = () => (
+  <div className="app-viewport bg-slate-50 flex flex-col items-center justify-center px-4">
+    <img src="/CareOPD-Logo.png" alt="CareOPD Logo" className="h-24 mb-4 object-contain" />
+    <div className="w-9 h-9 rounded-full border-4 border-slate-200 border-t-teal-600 animate-spin" />
+  </div>
+);
 
+const App = () => {
   // --- AUTH & ROLE STATE ---
   const [authState, setAuthState] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -36,6 +41,9 @@ const App = () => {
   const [data, setData] = useState({
     appointments: [], doctors: [], patients: [], clinic: {}, notifications: [] 
   });
+  const [clinicContextStatus, setClinicContextStatus] = useState(() => {
+    return localStorage.getItem('clinicId') ? 'loading' : 'idle';
+  });
 
   const savedUser = (() => {
     try {
@@ -49,29 +57,43 @@ const App = () => {
   const isSoloWorkspace = data.clinic?.type === 'Solo' || (!data.clinic?.type && hasLinkedDoctor);
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsBooting(false), 150); 
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (authState !== 'authenticated') return;
+    if (authState !== 'authenticated') {
+      setClinicContextStatus('idle');
+      return;
+    }
 
     const clinicId = localStorage.getItem('clinicId');
-    if (!clinicId) return;
+    if (!clinicId) {
+      setClinicContextStatus('failed');
+      return;
+    }
+
+    let isMounted = true;
+    setClinicContextStatus('loading');
 
     const fetchClinicType = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/clinics/${clinicId}`);
         if (response.ok) {
           const clinic = await response.json();
-          setData(prev => ({ ...prev, clinic: { ...prev.clinic, ...clinic } }));
+          if (isMounted) {
+            setData(prev => ({ ...prev, clinic: { ...prev.clinic, ...clinic } }));
+            setClinicContextStatus('ready');
+          }
+        } else if (isMounted) {
+          setClinicContextStatus('failed');
         }
       } catch (err) {
         console.error('Failed to load clinic context', err);
+        if (isMounted) setClinicContextStatus('failed');
       }
     };
 
     fetchClinicType();
+
+    return () => {
+      isMounted = false;
+    };
   }, [authState]);
 
   useEffect(() => {
@@ -90,9 +112,8 @@ const App = () => {
     setActiveTab('appointments');
     setUserRole('admin'); 
     setData({ appointments: [], doctors: [], patients: [], clinic: {}, notifications: [] });
+    setClinicContextStatus('idle');
   };
-
-  if (isBooting) return null; 
 
   const renderWithUpdatePrompt = (content) => (
     <>
@@ -108,6 +129,10 @@ const App = () => {
 
   if (authState !== 'authenticated') {
     return renderWithUpdatePrompt(<Auth authState={authState} setAuthState={setAuthState} setUserRole={setUserRole} />);
+  }
+
+  if (clinicContextStatus === 'loading' || clinicContextStatus === 'idle') {
+    return renderWithUpdatePrompt(<LaunchScreen />);
   }
 
   // --- UNIFIED ROUTING ---
