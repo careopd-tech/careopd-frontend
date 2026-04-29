@@ -4,6 +4,13 @@ import App from './App.jsx'
 import './index.css'
 
 let stableViewportHeight = window.innerHeight;
+let viewportStateEnabled = false;
+
+const blurStartupFocus = () => {
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur();
+  }
+};
 
 const setAppViewportHeight = () => {
   stableViewportHeight = window.innerHeight;
@@ -11,6 +18,8 @@ const setAppViewportHeight = () => {
 };
 
 const setKeyboardViewportState = () => {
+  if (!viewportStateEnabled) return;
+
   const visualViewportHeight = window.visualViewport?.height || window.innerHeight;
   const keyboardHeight = Math.max(0, stableViewportHeight - visualViewportHeight - (window.visualViewport?.offsetTop || 0));
   const isKeyboardOpen = keyboardHeight > 120;
@@ -20,8 +29,15 @@ const setKeyboardViewportState = () => {
 };
 
 setAppViewportHeight();
-setKeyboardViewportState();
+blurStartupFocus();
+window.setTimeout(blurStartupFocus, 250);
+window.setTimeout(() => {
+  viewportStateEnabled = true;
+  setKeyboardViewportState();
+}, 700);
 window.addEventListener('resize', () => {
+  if (!viewportStateEnabled) return;
+
   if (!document.body.classList.contains('keyboard-open')) {
     setAppViewportHeight();
   }

@@ -13,6 +13,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [allowKeyboardInput, setAllowKeyboardInput] = useState(false);
   const [invalidFields, setInvalidFields] = useState([]);
   const [otp, setOtp] = useState('');
   const [activationChecking, setActivationChecking] = useState(false);
@@ -41,6 +42,25 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
       if (!window.closed) closeAuthFlow();
     }, 250);
   };
+
+  useEffect(() => {
+    const blurLaunchFocus = () => {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+    };
+    const enableKeyboardInput = () => setAllowKeyboardInput(true);
+
+    blurLaunchFocus();
+    window.setTimeout(blurLaunchFocus, 250);
+    window.addEventListener('pointerdown', enableKeyboardInput, { once: true });
+    window.addEventListener('keydown', enableKeyboardInput, { once: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', enableKeyboardInput);
+      window.removeEventListener('keydown', enableKeyboardInput);
+    };
+  }, []);
 
   useEffect(() => {
     if (authState !== 'activate' || activationCompleted) {
@@ -320,8 +340,10 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
                   type="text" 
                   name="email"
                   autoComplete="username"
+                  autoFocus={false}
+                  readOnly={!allowKeyboardInput}
                   placeholder={authState === 'forgot' ? 'registered mobile or email' : '10-digit number or email'} 
-                  disabled={isLoading} 
+                  disabled={isLoading}
                   className={`w-full pl-9 pr-3 py-2.5 bg-slate-50 border rounded-xl text-[14px] transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed ${invalidFields.includes('email') ? 'border-red-500 focus:ring-2 focus:ring-red-500' : 'border-slate-200 focus:ring-2 focus:ring-teal-500'}`}
                   value={email}
                   onChange={e => setEmail(e.target.value)}
@@ -338,6 +360,8 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
                 <input 
                   type="text" 
                   maxLength={6}
+                  autoFocus={false}
+                  readOnly={!allowKeyboardInput}
                   placeholder="123456" 
                   disabled={isLoading} 
                   className={`w-full pl-9 pr-3 py-2.5 bg-slate-50 border rounded-xl text-[14px] transition-all outline-none tracking-widest disabled:opacity-50 disabled:cursor-not-allowed ${invalidFields.includes('otp') ? 'border-red-500 focus:ring-2 focus:ring-red-500' : 'border-slate-200 focus:ring-2 focus:ring-teal-500'}`}
@@ -365,6 +389,8 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
                 <input 
                   type={showPassword ? "text" : "password"} 
                   autoComplete="current-password"
+                  autoFocus={false}
+                  readOnly={!allowKeyboardInput}
                   placeholder="••••••••" 
                   disabled={isLoading}
                   className={`w-full pl-9 pr-10 py-2.5 bg-slate-50 border rounded-xl text-[14px] transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed ${invalidFields.includes('password') ? 'border-red-500 focus:ring-2 focus:ring-red-500' : 'border-slate-200 focus:ring-2 focus:ring-teal-500'}`}
@@ -390,6 +416,8 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
                 <input 
                   type={showPassword ? "text" : "password"} 
                   placeholder="••••••••" 
+                  autoFocus={false}
+                  readOnly={!allowKeyboardInput}
                   disabled={isLoading}
                   className={`w-full pl-9 pr-10 py-2.5 bg-slate-50 border rounded-xl text-[14px] transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed ${invalidFields.includes('confirmPassword') ? 'border-red-500 focus:ring-2 focus:ring-red-500' : 'border-slate-200 focus:ring-2 focus:ring-teal-500'}`}
                   value={confirmPassword}
