@@ -6,6 +6,7 @@ import API_BASE_URL from '../config';
 // FIXED: Added setUserRole to props matching App.jsx
 const Auth = ({ authState, setAuthState, setUserRole }) => {
   const [showPassword, setShowPassword] = useState(false);
+  const [clinicCode, setClinicCode] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -22,14 +23,22 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
   const activationParams = new URLSearchParams(window.location.search);
   const activationToken = activationParams.get('activate') || '';
   const activationEmail = activationParams.get('email') || '';
+  const activationClinicCode = activationParams.get('clinicCode') || '';
   const activationMode = activationParams.get('mode') === 'reset' ? 'reset' : 'activate';
   const isLinkReset = authState === 'activate' && activationMode === 'reset';
+  const normalizeClinicCode = (value) => value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+  const formatClinicCode = (value) => {
+    const normalized = normalizeClinicCode(value);
+    return normalized.length > 4 ? `${normalized.slice(0, 4)}-${normalized.slice(4)}` : normalized;
+  };
+  const isValidClinicCode = (value) => normalizeClinicCode(value).length === 8;
   const closeAuthFlow = () => {
     window.history.replaceState({}, document.title, window.location.pathname);
     setAuthState('login');
     setError('');
     setSuccess('');
     setInvalidFields([]);
+    setClinicCode('');
     setPassword('');
     setConfirmPassword('');
     setActivationCompleted(false);
@@ -81,7 +90,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
 
       try {
         setActivationChecking(true);
-        const query = new URLSearchParams({ email: activationEmail, token: activationToken });
+        const query = new URLSearchParams({ email: activationEmail, token: activationToken, clinicCode: activationClinicCode });
         const response = await fetch(`${API_BASE_URL}/api/auth/activation-link-status?${query.toString()}`);
         const result = await response.json().catch(() => ({}));
 
@@ -98,7 +107,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
     };
 
     checkActivationLink();
-  }, [authState, activationEmail, activationToken, isLinkReset, activationCompleted]);
+  }, [authState, activationClinicCode, activationEmail, activationToken, isLinkReset, activationCompleted]);
 
   const isValidLoginId = (value) => {
     const trimmed = value.trim();
@@ -118,11 +127,14 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
     
     let errors = [];
     if (authState === 'login') {
+      if (!clinicCode) errors.push('clinicCode');
       if (!email) errors.push('email');
       if (!password) errors.push('password');
     } else if (authState === 'forgot') {
+      if (!clinicCode) errors.push('clinicCode');
       if (!email) errors.push('email');
     } else if (authState === 'reset' || authState === 'activate') {
+      if (authState === 'reset' && !clinicCode) errors.push('clinicCode');
       if (authState === 'reset' && (!otp || otp.length !== 6)) errors.push('otp');
       if (!password) errors.push('password');
       if (!confirmPassword) errors.push('confirmPassword');
@@ -131,6 +143,11 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
     if (errors.length > 0) {
       setInvalidFields(errors);
       return setError('Please fill all required details marked with *');
+    }
+
+    if ((authState === 'login' || authState === 'forgot' || authState === 'reset') && !isValidClinicCode(clinicCode)) {
+      setInvalidFields(prev => Array.from(new Set([...prev, 'clinicCode'])));
+      return setError('Enter a valid 8-character clinic code.');
     }
 
     if ((authState === 'login' || authState === 'forgot') && !isValidLoginId(email)) {
@@ -147,7 +164,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
         const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
+          body: JSON.stringify({ clinicCode: normalizeClinicCode(clinicCode), email, password })
         });
         
         const result = await response.json();
@@ -183,7 +200,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
         const response = await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: recoveryContact })
+          body: JSON.stringify({ clinicCode: normalizeClinicCode(clinicCode), email: recoveryContact })
         });
         
         // We intentionally don't check response.ok to prevent email enumeration
@@ -207,7 +224,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
         const response = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, otp, newPassword: password })
+          body: JSON.stringify({ clinicCode: normalizeClinicCode(clinicCode), email, otp, newPassword: password })
         });
 
         const result = await response.json();
@@ -240,7 +257,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
         const response = await fetch(`${API_BASE_URL}/api/auth/activate-account`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: activationEmail, token: activationToken, newPassword: password, mode: activationMode })
+          body: JSON.stringify({ clinicCode: normalizeClinicCode(activationClinicCode), email: activationEmail, token: activationToken, newPassword: password, mode: activationMode })
         });
 
         const result = await response.json().catch(() => ({}));
@@ -332,6 +349,29 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
+          {(authState === 'login' || authState === 'forgot' || authState === 'reset') && (
+            <div>
+              <label className="block text-[12px] font-bold text-slate-600 mb-1.5 uppercase tracking-wide">
+                Clinic Code <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  autoComplete="organization"
+                  autoFocus={false}
+                  readOnly={!allowKeyboardInput}
+                  placeholder="ABCD-EFGH"
+                  disabled={isLoading}
+                  className={`w-full pl-9 pr-3 py-2.5 bg-slate-50 border rounded-xl text-[14px] uppercase tracking-[0.18em] transition-all outline-none disabled:opacity-50 disabled:cursor-not-allowed ${invalidFields.includes('clinicCode') ? 'border-red-500 focus:ring-2 focus:ring-red-500' : 'border-slate-200 focus:ring-2 focus:ring-teal-500'}`}
+                  value={formatClinicCode(clinicCode)}
+                  onChange={e => setClinicCode(normalizeClinicCode(e.target.value))}
+                />
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">Use the 8-character clinic code shared by your clinic.</p>
+            </div>
+          )}
+
           {(authState === 'login' || authState === 'forgot') && (
             <div>
               <label className="block text-[12px] font-bold text-slate-600 mb-1.5 uppercase tracking-wide">

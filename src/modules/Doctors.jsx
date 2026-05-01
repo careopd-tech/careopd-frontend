@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Plus, CheckCircle, CalendarDays, XCircle, Building2, AlertTriangle, 
-  ChevronDown, ChevronRight, Edit2, CheckCircle as CheckIcon, AlertCircle 
+  ChevronDown, ChevronRight, Edit2, CheckCircle as CheckIcon, AlertCircle, Loader2 
 } from 'lucide-react';
 import { TIME_SLOTS } from '../data/constants';
 import Modal from '../components/ui/Modal';
@@ -57,6 +57,8 @@ const Doctors = ({ data, setData, onLogout }) => {
   const [statusFilter, setStatusFilter] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [expandedSection, setExpandedSection] = useState('available');
+  const [isSavingDoctor, setIsSavingDoctor] = useState(false);
+  const [isStatusSubmitting, setIsStatusSubmitting] = useState(false);
 
   const [loading, setLoading] = useState(!data.doctors || data.doctors.length === 0);
 
@@ -198,6 +200,7 @@ const Doctors = ({ data, setData, onLogout }) => {
     const targetStatus = activeModal.subType === 'activate' ? 'Available' : 'Inactive';
 
     try {
+      setIsStatusSubmitting(true);
       const clinicId = localStorage.getItem('clinicId');
       const response = await fetch(`${API_BASE_URL}/api/doctors/${activeModal.doctorId}`, {
         method: 'PUT',
@@ -221,6 +224,8 @@ const Doctors = ({ data, setData, onLogout }) => {
       }
     } catch (err) {
       setModalError('Server connection failed.');
+    } finally {
+      setIsStatusSubmitting(false);
     }
   };
 
@@ -373,6 +378,7 @@ const Doctors = ({ data, setData, onLogout }) => {
     };
 
     try {
+      setIsSavingDoctor(true);
       let response;
       if (newDoctor._id) {
         response = await fetch(`${API_BASE_URL}/api/doctors/${newDoctor._id}`, {
@@ -413,6 +419,8 @@ const Doctors = ({ data, setData, onLogout }) => {
       }
     } catch (err) {
       setModalError('Server error. Could not save.');
+    } finally {
+      setIsSavingDoctor(false);
     }
   };
 
@@ -504,6 +512,7 @@ const generateSlots = (doc, dateStr) => {
               <div>
                 <h4 className="font-bold text-[13px] text-slate-800 leading-tight">{doc.name}</h4>
                 <p className="text-[10px] text-slate-500 uppercase leading-tight mt-0.5">{doc.department}</p>
+                <p className="text-[10px] text-slate-400 leading-tight mt-1">Mobile: {doc.phone || 'Not Added'}</p>
               </div>
             </div>
             <div className="flex items-center gap-1.5 mt-1">
@@ -629,7 +638,15 @@ const generateSlots = (doc, dateStr) => {
         </div>
       </div>
 
-      <FAB icon={Plus} onClick={() => { setIsNewDept(false); setNewDeptName(''); setIsAddDoctorModalOpen(true); }} />
+      <FAB icon={Plus} onClick={() => {
+        setModalError('');
+        setInvalidFields([]);
+        setNewDoctor(defaultDoctorState);
+        setAddDoctorTab('personal');
+        setIsNewDept(false);
+        setNewDeptName('');
+        setIsAddDoctorModalOpen(true);
+      }} />
 
       {/* FILTER MODAL */}
       <Modal isOpen={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)} title="Filter Doctors" footer={
@@ -676,10 +693,13 @@ const generateSlots = (doc, dateStr) => {
             
             {addDoctorTab === 'working_hours' ? (
               <button 
-                onClick={handleSaveDoctor} 
-                className="flex-1 bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium"
+                onClick={handleSaveDoctor}
+                disabled={isSavingDoctor}
+                className="flex-1 bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                {newDoctor._id ? "Update Profile" : "Create Profile"}
+                {isSavingDoctor
+                  ? <><Loader2 size={16} className="animate-spin" /> {newDoctor._id ? 'Updating...' : 'Creating...'}</>
+                  : newDoctor._id ? "Update Profile" : "Create Profile"}
               </button>
             ) : (
               <button 
@@ -879,8 +899,14 @@ const generateSlots = (doc, dateStr) => {
         onClose={() => { setActiveModal(null); setModalError(''); setReason(''); setCustomReason(''); }} 
         title={activeModal?.subType === 'activate' ? 'Reactivate Doctor' : 'Deactivate Doctor'} 
         footer={
-          <button onClick={confirmStatusChange} className={`w-full py-1.5 rounded-lg text-[15px] font-medium text-white ${activeModal?.subType === 'activate' ? 'bg-teal-600' : 'bg-red-600'}`}>
-            {activeModal?.subType === 'activate' ? 'Confirm Activation' : 'Confirm Deactivation'}
+          <button
+            onClick={confirmStatusChange}
+            disabled={isStatusSubmitting}
+            className={`w-full py-1.5 rounded-lg text-[15px] font-medium text-white flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed ${activeModal?.subType === 'activate' ? 'bg-teal-600' : 'bg-red-600'}`}
+          >
+            {isStatusSubmitting
+              ? <><Loader2 size={16} className="animate-spin" /> Updating...</>
+              : activeModal?.subType === 'activate' ? 'Confirm Activation' : 'Confirm Deactivation'}
           </button>
         }
       >

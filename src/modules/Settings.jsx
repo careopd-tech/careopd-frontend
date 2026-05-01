@@ -542,6 +542,13 @@ const Settings = ({ data, setData, onLogout }) => {
           {/* 1. CLINIC */}
           {renderAccordion('clinic', 'Clinic Settings', Building2, 'text-blue-600', 
             <>
+              <div className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm">
+                <p className="text-[11px] font-bold text-slate-500 uppercase">Clinic Code</p>
+                <p className="text-[18px] font-bold tracking-[0.18em] text-slate-800 mt-1">
+                  {data.clinic?.clinicCode ? `${data.clinic.clinicCode.slice(0, 4)}-${data.clinic.clinicCode.slice(4)}` : 'Not Available'}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-1">Share this code with your clinic team for secure sign-in.</p>
+              </div>
               <SettingItem 
                 title="Clinic Details" 
                 subtitle={(data.clinic?.name || 'My Clinic') + " • " + (data.clinic?.address || 'Set address...')} 
@@ -570,7 +577,6 @@ const Settings = ({ data, setData, onLogout }) => {
                 <div className="p-4 text-center text-[12px] text-slate-400 font-medium">No users found</div>
               ) : (
                 accessUsers.map(user => {
-                  const linkedDoctor = data.doctors?.find(doc => String(doc._id) === String(user.doctorId));
                   const isProtectedOwner = user.role === 'super_admin';
                   return (
                     <div key={user._id} className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm flex items-center justify-between gap-2">
@@ -589,7 +595,7 @@ const Settings = ({ data, setData, onLogout }) => {
                         </div>
                         <p className="text-[11px] text-slate-500 truncate mt-0.5">{user.email} • {user.phone}</p>
                         <p className="text-[10px] text-slate-400 truncate mt-0.5">
-                          {roleLabels[user.role] || user.role}{linkedDoctor ? ` • ${linkedDoctor.name}` : ''}
+                          {roleLabels[user.role] || user.role}
                         </p>
                       </div>
                       <div className="flex flex-col gap-1.5 flex-shrink-0">

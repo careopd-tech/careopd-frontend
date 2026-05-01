@@ -8,6 +8,7 @@ const Onboarding = ({ setAuthState }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [createdClinicCode, setCreatedClinicCode] = useState('');
 
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [isOtpVerified, setIsOtpVerified] = useState(false);
@@ -122,6 +123,7 @@ const Onboarding = ({ setAuthState }) => {
       const result = await response.json().catch(() => ({}));
 
       if (response.ok) {
+        setCreatedClinicCode(result.clinicCode || '');
         setSuccess(true);
       } else if (response.status === 401 && result.code === 'OTP_EXPIRED') {
         setIsOtpVerified(false);
@@ -152,6 +154,13 @@ const Onboarding = ({ setAuthState }) => {
           <ShieldCheck size={64} className="mx-auto text-teal-500 mb-4" />
           <h2 className="text-2xl font-bold text-slate-800 mb-2">Workspace Ready!</h2>
           <p className="text-slate-500 mb-6">Your secure healthcare database has been successfully provisioned.</p>
+          {createdClinicCode && (
+            <div className="mb-6 p-4 rounded-2xl border border-teal-100 bg-teal-50">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-teal-700 mb-1">Clinic Code</p>
+              <p className="text-[22px] font-bold tracking-[0.2em] text-slate-800">{createdClinicCode}</p>
+              <p className="text-[12px] text-slate-500 mt-2">Share this code with your team. They will need it to sign in.</p>
+            </div>
+          )}
           <button onClick={() => setAuthState('login')} className="w-full bg-teal-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-teal-700">
             Go to Login
           </button>

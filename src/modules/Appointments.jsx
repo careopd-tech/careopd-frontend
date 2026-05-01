@@ -106,8 +106,9 @@ const Appointments = ({ data, setData, onLogout }) => {
   }, [notificationStack]);
 
   // Forms
+  const defaultNewPatientDetails = { firstName: '', middleName: '', lastName: '', phone: '', age: '', gender: 'M', address: '' };
   const [newAppt, setNewAppt] = useState({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate });
-  const [newPatientDetails, setNewPatientDetails] = useState({ firstName: '', middleName: '', lastName: '', phone: '', age: '', gender: 'M', address: '' });
+  const [newPatientDetails, setNewPatientDetails] = useState(defaultNewPatientDetails);
   const [rescheduleData, setRescheduleData] = useState({ date: '', time: '' });
   const [modalError, setModalError] = useState('');
   const [invalidFields, setInvalidFields] = useState([]);
@@ -153,9 +154,34 @@ const Appointments = ({ data, setData, onLogout }) => {
     return 'Scheduled';
   };
 
-  const getPatientName = (id) => { const p = (data.patients || []).find(p => String(p._id) === String(id) || String(p.id) === String(id)); return p ? p.name : 'Unknown'; };
-  const getDoctorName = (id) => { const d = (data.doctors || []).find(d => String(d._id) === String(id) || String(d.id) === String(id)); return d ? d.name : 'Unknown'; };
-  const getDoctorById = (id) => (data.doctors || []).find(d => String(d._id) === String(id));
+  const getEntityId = (value) => {
+    if (!value) return '';
+    if (typeof value === 'object') return String(value._id || value.id || '');
+    return String(value);
+  };
+
+  const getPatientName = (patientRef) => {
+    if (patientRef && typeof patientRef === 'object') {
+      return patientRef.name || 'Unknown Patient';
+    }
+    const patientId = getEntityId(patientRef);
+    const patient = (data.patients || []).find(p => getEntityId(p) === patientId);
+    return patient?.name || 'Unknown Patient';
+  };
+
+  const getDoctorName = (doctorRef) => {
+    if (doctorRef && typeof doctorRef === 'object') {
+      return doctorRef.name || 'Unknown Doctor';
+    }
+    const doctorId = getEntityId(doctorRef);
+    const doctor = (data.doctors || []).find(d => getEntityId(d) === doctorId);
+    return doctor?.name || 'Unknown Doctor';
+  };
+
+  const getDoctorById = (doctorRef) => {
+    const doctorId = getEntityId(doctorRef);
+    return (data.doctors || []).find(d => getEntityId(d) === doctorId);
+  };
 
   const departments = useMemo(() => [...new Set((data.doctors || []).map(d => d.department))], [data.doctors]);
 
@@ -197,7 +223,7 @@ const Appointments = ({ data, setData, onLogout }) => {
     if (hasAdvancedFilters) {
       if (activeFilters.dateFrom && appt.date < activeFilters.dateFrom) return false;
       if (activeFilters.dateTo && appt.date > activeFilters.dateTo) return false;
-      if (activeFilters.doctorId && String(appt.doctorId) !== String(activeFilters.doctorId)) return false;
+      if (activeFilters.doctorId && getEntityId(appt.doctorId) !== getEntityId(activeFilters.doctorId)) return false;
       if (activeFilters.status.length > 0 && !activeFilters.status.includes(uiStatus)) return false;
     }
     return true;
@@ -462,7 +488,7 @@ const Appointments = ({ data, setData, onLogout }) => {
       sourceData = sourceData.filter(appt => {
         if (activeFilters.dateFrom && appt.date < activeFilters.dateFrom) return false;
         if (activeFilters.dateTo && appt.date > activeFilters.dateTo) return false;
-        if (activeFilters.doctorId && String(appt.doctorId) !== String(activeFilters.doctorId)) return false;
+        if (activeFilters.doctorId && getEntityId(appt.doctorId) !== getEntityId(activeFilters.doctorId)) return false;
         return true;
       });
     }
@@ -551,8 +577,17 @@ const Appointments = ({ data, setData, onLogout }) => {
 
     if (errors.length > 0) { setInvalidFields(errors); return setModalError('Please fill required fields *'); }
     if (!validateFutureDate(newAppt.date, newAppt.time)) return setModalError('Cannot book in the past.');
-    const checkPatientConflict = (pid, date, time, eid) => pid !== 'add_new' && (sections.today || []).some(a => String(a.patientId) === String(pid) && a.date === date && a.time === time && a.status !== 'Cancelled' && a._id !== eid);
-    if (checkPatientConflict(newAppt.patientId, newAppt.date, newAppt.time, rebookingApptId)) return setModalError('Conflict: Appointment exists.');
+    const checkPatientConflict = (pid, date, time, eid) => (
+      pid !== 'add_new' &&
+      (sections.today || []).some(a =>
+        getEntityId(a.patientId) === getEntityId(pid) &&
+        a.date === date &&
+        a.time === time &&
+        a.status !== 'Cancelled' &&
+        a._id !== eid
+      )
+    );
+    if (checkPatientConflict(newAppt.patientId, newAppt.date, newAppt.time, rebookingApptId)) return setModalError('Selected Patient has an existing appointment at the same time.');
 
     setInvalidFields([]);
     setIsSubmitting(true);
@@ -581,9 +616,9 @@ const Appointments = ({ data, setData, onLogout }) => {
         await fetchAllData(true);
         setIsAddModalOpen(false); setRebookingApptId(null);
         setNewAppt({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate });
-        setNewPatientDetails({ name: '', phone: '', age: '', gender: 'M', address: '' });
+        setNewPatientDetails(defaultNewPatientDetails);
 
-        const pName = newAppt.patientId === 'add_new' ? newPatientDetails.name : getPatientName(newAppt.patientId);
+        const pName = newAppt.patientId === 'add_new' ? fullName : getPatientName(newAppt.patientId);
         showNotification(
           rebookingApptId ? 'Appointment Rebooked' : 'Appointment Booked',
           'success',
@@ -631,7 +666,13 @@ const Appointments = ({ data, setData, onLogout }) => {
 
   const handleRebook = (appt) => {
     const doc = getDoctorById(appt.doctorId);
-    setNewAppt({ patientId: appt.patientId.toString(), department: doc ? doc.department : '', doctorId: appt.doctorId.toString(), date: safeCurrentDate, time: '' });
+    setNewAppt({
+      patientId: getEntityId(appt.patientId),
+      department: doc ? doc.department : '',
+      doctorId: getEntityId(appt.doctorId),
+      date: safeCurrentDate,
+      time: ''
+    });
     setRebookingApptId(appt.date < safeCurrentDate ? null : appt._id);
     setIsAddModalOpen(true);
   };
@@ -680,7 +721,7 @@ const Appointments = ({ data, setData, onLogout }) => {
     const showActions = !isCancelled && !isCompleted && !isNoShow;
 
     // --- ADDED: SECURITY CHECK FOR CONSULT BUTTON ---
-    const isTreatingPhysician = (userRole === 'doctor') || (userRole === 'admin' && doctorId && String(appt.doctorId) === String(doctorId));
+    const isTreatingPhysician = (userRole === 'doctor') || (userRole === 'admin' && doctorId && getEntityId(appt.doctorId) === String(doctorId));
 
     return (
       <div key={appt._id} className={`p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col md:flex-row gap-2 ${isCancelled || isNoShow ? 'bg-slate-50 opacity-90' : 'bg-white'}`}>
@@ -710,8 +751,10 @@ const Appointments = ({ data, setData, onLogout }) => {
             {isTreatingPhysician && (
               <button 
                 onClick={() => {
-                  const pObj = (data.patients || []).find(p => String(p._id) === String(appt.patientId));
-                  setActiveConsultationAppt({ ...appt, patientId: pObj || { name: 'Unknown Patient' } });
+                  const patientRef = appt.patientId && typeof appt.patientId === 'object'
+                    ? appt.patientId
+                    : (data.patients || []).find(p => getEntityId(p) === getEntityId(appt.patientId));
+                  setActiveConsultationAppt({ ...appt, patientId: patientRef || { name: 'Unknown Patient' } });
                   setIsConsultationPadOpen(true);
                 }} 
                 className="flex-1 md:flex-none w-full h-7 text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors shadow-sm"
@@ -945,7 +988,7 @@ const Appointments = ({ data, setData, onLogout }) => {
         </div>
       </Modal>
 
-      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setRebookingApptId(null); setModalError(''); setInvalidFields([]); setPatientSearchQuery(''); setNewAppt({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate }); setNewPatientDetails({ name: '', phone: '', age: '', gender: 'M', address: '' }); }} title={rebookingApptId ? "ReBook Appointment" : "New Appointment"}
+      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setRebookingApptId(null); setModalError(''); setInvalidFields([]); setPatientSearchQuery(''); setNewAppt({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate }); setNewPatientDetails(defaultNewPatientDetails); }} title={rebookingApptId ? "ReBook Appointment" : "New Appointment"}
         footer={
           <button
             onClick={handleAddAppointment}

@@ -69,7 +69,7 @@ const PatientHistoryList = ({
         return (
             <div className="flex flex-col items-center justify-center py-12 text-slate-400">
                <History size={32} className="mb-2 opacity-20" />
-               <span className="text-[13px] font-medium text-slate-500">No valid past records found.</span>
+               <span className="text-[13px] font-medium text-slate-500">No past records found.</span>
             </div>
         );
     }
