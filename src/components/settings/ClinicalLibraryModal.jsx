@@ -13,6 +13,7 @@ const ClinicalLibraryModal = ({
   items = [],
   onCatalogUpdate
 }) => {
+  const supportsPin = itemType !== 'drug';
   const [searchQuery, setSearchQuery] = useState('');
   const [editingKeys, setEditingKeys] = useState([]);
   const [drafts, setDrafts] = useState({});
@@ -30,7 +31,7 @@ const ClinicalLibraryModal = ({
     item._id ||
     item.seedKey ||
     item.normalizedLabel ||
-    `${itemType}-${item.label || ''}-${item.description || ''}`
+    `${itemType}-${item.label || ''}-${item.group || item.category || ''}`
   );
   const isItemPinned = (item) => item?.pinned === true;
   const sortItemsByLabel = (catalogItems = []) => catalogItems
@@ -92,6 +93,16 @@ const ClinicalLibraryModal = ({
     return [...pendingDisplayItems, ...savedDisplayItems];
   }, [items, pendingItems, savedOrderKeys]);
 
+  const groupOptions = useMemo(() => {
+    const groups = new Set(['General']);
+    displayItems.forEach((item) => {
+      const group = String(item.group || item.category || '').trim();
+      if (group) groups.add(group);
+    });
+
+    return Array.from(groups).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [displayItems]);
+
   const filteredItems = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
     return displayItems
@@ -99,7 +110,7 @@ const ClinicalLibraryModal = ({
         if (!normalizedSearch) return true;
         return [
           item.label,
-          item.description,
+          item.group,
           item.category
         ]
           .filter(Boolean)
@@ -123,9 +134,9 @@ const ClinicalLibraryModal = ({
       ...prev,
       [key]: {
         label: item.label || '',
-        description: item.description || '',
-        category: item.category || 'General',
-        pinned: item.pinned === true
+        group: item.group || item.category || 'General',
+        isNewGroup: false,
+        pinned: supportsPin && item.pinned === true
       }
     }));
   };
@@ -135,7 +146,7 @@ const ClinicalLibraryModal = ({
     const newItem = {
       tempId,
       label: '',
-      description: '',
+      group: 'General',
       category: 'General',
       sortOrder: -1,
       pinned: false,
@@ -148,8 +159,8 @@ const ClinicalLibraryModal = ({
       ...prev,
       [tempId]: {
         label: '',
-        description: '',
-        category: 'General',
+        group: 'General',
+        isNewGroup: false,
         pinned: false
       }
     }));
@@ -185,14 +196,13 @@ const ClinicalLibraryModal = ({
     const key = getItemKey(item);
     const draft = drafts[key] || {
       label: item.label || '',
-      description: item.description || '',
-      category: item.category || 'General',
-      pinned: item.pinned === true
+      group: item.group || item.category || 'General',
+      isNewGroup: false,
+      pinned: supportsPin && item.pinned === true
     };
     const label = String(draft.label || '').trim();
-    const description = String(draft.description || '').trim();
-    const category = String(draft.category || '').trim() || 'General';
-    const pinned = draft.pinned === true;
+    const group = String(draft.group || '').trim() || 'General';
+    const pinned = supportsPin && draft.pinned === true;
 
     if (!label) {
       return setError('Item name is required.');
@@ -206,8 +216,7 @@ const ClinicalLibraryModal = ({
         clinicId,
         type: itemType,
         label,
-        description,
-        category,
+        group,
         pinned
       };
 
@@ -243,6 +252,7 @@ const ClinicalLibraryModal = ({
   };
 
   const handleTogglePin = async (item) => {
+    if (!supportsPin) return;
     const key = getItemKey(item);
     const nextPinned = !(item.pinned === true);
 
@@ -256,8 +266,7 @@ const ClinicalLibraryModal = ({
         body: JSON.stringify({
           clinicId,
           label: item.label,
-          description: item.description || '',
-          category: item.category || 'General',
+          group: item.group || item.category || 'General',
           pinned: nextPinned
         })
       });
@@ -322,15 +331,15 @@ const ClinicalLibraryModal = ({
             const isPinning = pinningKey === key;
             const draft = drafts[key] || {
               label: item.label || '',
-              description: item.description || '',
-              category: item.category || 'General',
-              pinned: item.pinned === true
+              group: item.group || item.category || 'General',
+              isNewGroup: false,
+              pinned: supportsPin && item.pinned === true
             };
-            const rowPinned = isEditing ? draft.pinned === true : isItemPinned(item);
+            const rowPinned = supportsPin && (isEditing ? draft.pinned === true : isItemPinned(item));
 
             return (
               <div key={key} className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm space-y-1">
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
+                <div className={`grid ${supportsPin ? 'grid-cols-[minmax(0,1fr)_auto]' : 'grid-cols-1'} gap-2 items-start`}>
                   <input
                     type="text"
                     value={isEditing ? draft.label : item.label || ''}
@@ -358,35 +367,61 @@ const ClinicalLibraryModal = ({
                 </div>
 
                 <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-start">
-                  <input
-                    type="text"
-                    value={isEditing ? draft.description : item.description || ''}
-                    onChange={(event) => handleDraftChange(key, 'description', event.target.value)}
-                    disabled={!isEditing || isSaving}
-                    className={`w-full ${compactInputClass} text-[12px] ${isEditing ? 'border-teal-300 bg-white focus:ring-1 focus:ring-teal-500' : 'border-transparent bg-slate-50 text-slate-600'}`}
-                    placeholder="Description"
-                  />
+                  <div className="min-w-0">
+                    <select
+                      value={isEditing ? draft.isNewGroup ? 'add_new' : draft.group || 'General' : item.group || item.category || 'General'}
+                      onChange={(event) => {
+                        if (event.target.value === 'add_new') {
+                          handleDraftChange(key, 'isNewGroup', true);
+                          handleDraftChange(key, 'group', '');
+                          return;
+                        }
+                        handleDraftChange(key, 'isNewGroup', false);
+                        handleDraftChange(key, 'group', event.target.value);
+                      }}
+                      disabled={!isEditing || isSaving}
+                      className={`w-full ${compactInputClass} text-[12px] ${isEditing ? 'border-teal-300 bg-white focus:ring-1 focus:ring-teal-500' : 'border-transparent bg-slate-50 text-slate-600'}`}
+                    >
+                      <option value="">Select Group</option>
+                      {isEditing && <option value="add_new" className="font-bold text-teal-600">+ Add New Group</option>}
+                      {groupOptions.map((group) => (
+                        <option key={group} value={group}>{group}</option>
+                      ))}
+                    </select>
+                    {isEditing && draft.isNewGroup && (
+                      <input
+                        type="text"
+                        value={draft.group || ''}
+                        onChange={(event) => handleDraftChange(key, 'group', event.target.value)}
+                        disabled={isSaving}
+                        className={`w-full ${compactInputClass} text-[12px] mt-1 animate-fadeIn border-teal-300 bg-white focus:ring-1 focus:ring-teal-500`}
+                        placeholder="Enter New Group"
+                      />
+                    )}
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isEditing) {
-                        handleDraftChange(key, 'pinned', !(draft.pinned === true));
-                        return;
-                      }
-                      if (!item.isNew) {
-                        handleTogglePin(item);
-                      }
-                    }}
-                    disabled={isSaving || isPinning}
-                    className={`${actionButtonClass} ${
-                      rowPinned
-                        ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                        : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
-                    } ${isPinning ? 'opacity-70' : ''}`}
-                  >
-                    <span className="inline-flex items-center gap-1"><Pin size={12} /> {rowPinned ? 'Pinned' : 'Pin'}</span>
-                  </button>
+                  {supportsPin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isEditing) {
+                          handleDraftChange(key, 'pinned', !(draft.pinned === true));
+                          return;
+                        }
+                        if (!item.isNew) {
+                          handleTogglePin(item);
+                        }
+                      }}
+                      disabled={isSaving || isPinning}
+                      className={`${actionButtonClass} ${
+                        rowPinned
+                          ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                          : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                      } ${isPinning ? 'opacity-70' : ''}`}
+                    >
+                      <span className="inline-flex items-center gap-1"><Pin size={12} /> {rowPinned ? 'Pinned' : 'Pin'}</span>
+                    </button>
+                  )}
                 </div>
               </div>
             );

@@ -644,7 +644,7 @@ const Settings = ({ data, setData, onLogout }) => {
             </>
           )}
 
-          {renderAccordion('clinical-library', 'Clinical Library', FileText, 'text-teal-600',
+          {renderAccordion('clinical-library', 'Clinical Catalog', FileText, 'text-teal-600',
             <>
               <SettingItem
                 title="Chief Complaints"

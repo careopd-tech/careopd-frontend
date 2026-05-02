@@ -13,6 +13,10 @@ input, select, textarea {
   background-color: #ffffff;
   color: #0f172a; /* matches slate-900 */
 }
+
+select {
+  padding-right: calc(0.5rem + 4px) !important;
+}
 /* --------------------------------------------- */
 
 body {

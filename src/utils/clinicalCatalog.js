@@ -45,7 +45,7 @@ export const groupCatalogByCategory = (items = []) => {
   items
     .filter(isActiveCatalogItem)
     .forEach((item) => {
-      const category = item.category || 'General';
+      const category = item.group || item.category || 'General';
       if (!groupedMap.has(category)) {
         groupedMap.set(category, []);
       }
@@ -66,11 +66,9 @@ export const groupCatalogByCategory = (items = []) => {
 export const getQuickCatalogItems = (items = [], limit = 9) => (
   items
     .filter(isActiveCatalogItem)
+    .filter(isPinnedCatalogItem)
     .slice()
     .sort((a, b) => {
-      if (isPinnedCatalogItem(a) !== isPinnedCatalogItem(b)) {
-        return isPinnedCatalogItem(a) ? -1 : 1;
-      }
       if ((a.sortOrder ?? 9999) !== (b.sortOrder ?? 9999)) {
         return (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999);
       }

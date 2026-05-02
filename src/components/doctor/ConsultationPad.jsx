@@ -86,6 +86,7 @@ const ConsultationPad = ({ activeAppt, onComplete, isSubmitting, clinicalCatalog
   // --- EFFECTS ---
   useEffect(() => {
     if (activeAppt?.patientId?._id || activeAppt?.patientId) {
+      setIsHistoryExpanded(false);
       setIsHistoryLoading(true);
       const clinicId = localStorage.getItem('clinicId');
       const pId = activeAppt.patientId._id || activeAppt.patientId;
@@ -108,7 +109,6 @@ const ConsultationPad = ({ activeAppt, onComplete, isSubmitting, clinicalCatalog
             ]
           }));
           setPatientHistory(enhancedData);
-          if (enhancedData.length > 0) setIsHistoryExpanded(true);
         })
         .catch(err => console.error(err))
         .finally(() => setIsHistoryLoading(false));
@@ -408,7 +408,7 @@ const ConsultationPad = ({ activeAppt, onComplete, isSubmitting, clinicalCatalog
                       {filteredMeds.length > 0 && currentMed.name.length > 0 ? (
                         filteredMeds.map((med, idx) => (
                           <button type="button" key={idx} onMouseDown={(e) => { e.preventDefault(); handleSelectPresetMed(med); }} className="w-full text-left px-3 py-2 border-b border-slate-100 last:border-0 hover:bg-teal-50 flex justify-between items-center group transition-colors">
-                            <div><div className="text-[12px] font-bold text-slate-700 group-hover:text-teal-700">{med.label}</div><div className="text-[10px] text-slate-400">{med.category || 'General'}</div></div>
+                            <div><div className="text-[12px] font-bold text-slate-700 group-hover:text-teal-700">{med.label}</div><div className="text-[10px] text-slate-400">{med.group || med.category || 'General'}</div></div>
                             <div className="text-[10px] text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">Select</div>
                           </button>
                         ))

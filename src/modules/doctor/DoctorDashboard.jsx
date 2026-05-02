@@ -203,6 +203,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
        activeAppt={activeAppt} 
        onComplete={handleCompleteConsultation} 
        isSubmitting={isSubmitting} 
+       clinicalCatalog={data?.clinicalCatalog}
     />
 </div>
 
