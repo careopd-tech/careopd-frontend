@@ -13,6 +13,10 @@ import Appointments from './modules/Appointments';
 import Doctors from './modules/Doctors';
 import Patients from './modules/Patients';
 import Settings from './modules/Settings';
+import {
+  cacheClinicalCatalog,
+  getCachedClinicalCatalog
+} from './utils/clinicalCatalog';
 
 const getCachedClinic = () => {
   try {
@@ -44,6 +48,7 @@ const App = () => {
     doctors: [],
     patients: [],
     clinic: getCachedClinic(),
+    clinicalCatalog: getCachedClinicalCatalog(localStorage.getItem('clinicId')),
     notifications: []
   }));
 
@@ -70,12 +75,24 @@ const App = () => {
 
     const fetchClinicType = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/clinics/${clinicId}`);
-        if (response.ok) {
-          const clinic = await response.json();
+        const [clinicResponse, catalogResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/clinics/${clinicId}`),
+          fetch(`${API_BASE_URL}/api/clinical-catalog/${clinicId}`)
+        ]);
+
+        if (clinicResponse.ok) {
+          const clinic = await clinicResponse.json();
           localStorage.setItem('careopd_clinic_context', JSON.stringify(clinic));
           if (isMounted) {
             setData(prev => ({ ...prev, clinic: { ...prev.clinic, ...clinic } }));
+          }
+        }
+
+        if (catalogResponse.ok) {
+          const catalog = await catalogResponse.json();
+          cacheClinicalCatalog(clinicId, catalog);
+          if (isMounted) {
+            setData(prev => ({ ...prev, clinicalCatalog: catalog }));
           }
         }
       } catch (err) {
@@ -100,12 +117,18 @@ const App = () => {
     sessionStorage.setItem('careopd_active_tab', activeTab);
   }, [activeTab]);
 
+  useEffect(() => {
+    const clinicId = localStorage.getItem('clinicId');
+    if (!clinicId) return;
+    cacheClinicalCatalog(clinicId, data.clinicalCatalog);
+  }, [data.clinicalCatalog]);
+
   const handleLogout = () => {
     localStorage.clear(); 
     setAuthState('login');
     setActiveTab('appointments');
     setUserRole('admin'); 
-    setData({ appointments: [], doctors: [], patients: [], clinic: {}, notifications: [] });
+    setData({ appointments: [], doctors: [], patients: [], clinic: {}, clinicalCatalog: getCachedClinicalCatalog(''), notifications: [] });
   };
 
   const renderWithUpdatePrompt = (content) => (

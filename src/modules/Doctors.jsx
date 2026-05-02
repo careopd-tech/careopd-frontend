@@ -3,12 +3,20 @@ import {
   Plus, CheckCircle, CalendarDays, XCircle, Building2, AlertTriangle, 
   ChevronDown, ChevronRight, Edit2, CheckCircle as CheckIcon, AlertCircle, Loader2 
 } from 'lucide-react';
-import { TIME_SLOTS } from '../data/constants';
 import Modal from '../components/ui/Modal';
 import FAB from '../components/ui/FAB';
 import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import API_BASE_URL from '../config';
+import {
+  formatClinicScheduleSummary,
+  generateTimeSlots,
+  getClinicSchedule,
+  getDoctorShiftWindows,
+  isTimeWithinDoctorShift,
+  timeToMinutes,
+  validateDoctorWorkingHours
+} from '../utils/schedule';
 
 // --- SKELETON LOADER ---
 const DoctorSkeleton = () => (
@@ -72,22 +80,26 @@ const Doctors = ({ data, setData, onLogout }) => {
       } catch (e) { return []; }
   });
 
+  const clinicSchedule = useMemo(() => getClinicSchedule(data.clinic || {}), [data.clinic]);
+
+  const getDefaultDoctorState = () => ({
+    _id: null,
+    firstName: '', middleName: '', lastName: '',
+    name: '', phone: '', email: '', gender: 'M', address: '',
+    department: '', qualification: '', experience: '', regNo: '',
+    morningStart: clinicSchedule.workingHoursStart,
+    morningEnd: clinicSchedule.workingHoursEnd,
+    eveningStart: '',
+    eveningEnd: '',
+    photoUrl: '', photo: ''
+  });
+
   // Sync Notification Stack to LocalStorage
   useEffect(() => {
       localStorage.setItem('doc_notifications', JSON.stringify(notificationStack));
   }, [notificationStack]);
 
-  const defaultDoctorState = {
-    _id: null,
-    // Split Name Fields (UI Only)
-    firstName: '', middleName: '', lastName: '',
-    name: '', phone: '', email: '', gender: 'M', address: '',
-    department: '', qualification: '', experience: '', regNo: '',
-    morningStart: '09:00', morningEnd: '13:00', eveningStart: '17:00', eveningEnd: '21:00',
-    photoUrl: '', photo: '' 
-  };
-
-  const [newDoctor, setNewDoctor] = useState(defaultDoctorState);
+  const [newDoctor, setNewDoctor] = useState(() => getDefaultDoctorState());
 
   // --- NEW: Handle Name Parts with Validation ---
   const handleDocNameInput = (field, value) => {
@@ -127,17 +139,20 @@ const Doctors = ({ data, setData, onLogout }) => {
       if (!clinicId) return;
 
       try {
-        const [docsRes, apptsRes] = await Promise.all([
+        const [docsRes, apptsRes, clinicRes] = await Promise.all([
           fetch(`${API_BASE_URL}/api/doctors/${clinicId}?tag=doctors`),
-          fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments`)
+          fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments`),
+          fetch(`${API_BASE_URL}/api/clinics/${clinicId}`)
         ]);
 
         if (docsRes.ok && apptsRes.ok) {
           const docs = await docsRes.json();
           const appts = await apptsRes.json();
+          const clinic = clinicRes.ok ? await clinicRes.json() : null;
           
           setData(prev => ({
             ...prev,
+            clinic: clinic || prev.clinic,
             doctors: docs,
             calendar30: appts
           }));
@@ -250,7 +265,7 @@ const Doctors = ({ data, setData, onLogout }) => {
     }
 
     setNewDoctor({
-      ...defaultDoctorState,
+      ...getDefaultDoctorState(),
       ...doc,
       firstName: fName,
       middleName: mName,
@@ -341,8 +356,9 @@ const Doctors = ({ data, setData, onLogout }) => {
 
     if (!newDoctor.morningStart) errors.push('morningStart');
     if (!newDoctor.morningEnd) errors.push('morningEnd');
-    if (!newDoctor.eveningStart) errors.push('eveningStart');
-    if (!newDoctor.eveningEnd) errors.push('eveningEnd');
+    if ((newDoctor.eveningStart && !newDoctor.eveningEnd) || (!newDoctor.eveningStart && newDoctor.eveningEnd)) {
+      errors.push('eveningStart', 'eveningEnd');
+    }
 
     if (errors.length > 0) {
       setInvalidFields(errors);
@@ -354,6 +370,21 @@ const Doctors = ({ data, setData, onLogout }) => {
       const msg = errors.includes('photo') ? 'Profile photo is required *' : 'Please fill required fields correctly *';
       return setModalError(msg);
     }
+
+    const doctorHoursError = validateDoctorWorkingHours({
+      morningStart: newDoctor.morningStart,
+      morningEnd: newDoctor.morningEnd,
+      eveningStart: newDoctor.eveningStart,
+      eveningEnd: newDoctor.eveningEnd,
+      clinic: clinicSchedule
+    });
+
+    if (doctorHoursError) {
+      setInvalidFields(['morningStart', 'morningEnd', 'eveningStart', 'eveningEnd']);
+      setAddDoctorTab('working_hours');
+      return setModalError(doctorHoursError);
+    }
+
     setInvalidFields([]);
 
     const clinicId = localStorage.getItem('clinicId');
@@ -371,8 +402,8 @@ const Doctors = ({ data, setData, onLogout }) => {
       regNo: newDoctor.regNo,
       morningStart: newDoctor.morningStart,
       morningEnd: newDoctor.morningEnd,
-      eveningStart: newDoctor.eveningStart,
-      eveningEnd: newDoctor.eveningEnd,
+      eveningStart: newDoctor.eveningStart || '',
+      eveningEnd: newDoctor.eveningEnd || '',
       status: newDoctor.status || 'Available',
       photo: newDoctor.photo || newDoctor.name.charAt(0) 
     };
@@ -408,7 +439,7 @@ const Doctors = ({ data, setData, onLogout }) => {
         });
 
         setIsAddDoctorModalOpen(false);
-        setNewDoctor(defaultDoctorState);
+        setNewDoctor(getDefaultDoctorState());
         setAddDoctorTab('personal');
         setIsNewDept(false);
         setNewDeptName('');
@@ -424,53 +455,30 @@ const Doctors = ({ data, setData, onLogout }) => {
     }
   };
 
-const generateSlots = (doc, dateStr) => {
+  const generateSlots = (doc, dateStr) => {
     const docAppts = (data.calendar30 || []).filter(a => {
       const apptDoctorId = a.doctorId && typeof a.doctorId === 'object' ? a.doctorId._id : a.doctorId;
       return String(apptDoctorId) === String(doc._id) && 
              a.date === dateStr && 
              a.status !== 'Cancelled';
     });
-    
-    // --- NEW: Helper to convert "02:00 PM" to "14:00" for accurate math ---
-    const convertTo24Hour = (timeStr) => {
-    if (!timeStr || !timeStr.includes('M')) return timeStr; // Fallback if already 24h
-    
-    const [time, modifier] = timeStr.split(' ');
-    // Convert to numbers immediately for safe math
-    let [h, m] = time.split(':').map(Number); 
-    
-    // The only two rules you ever need for 12-hour to 24-hour conversion:
-    if (modifier === 'PM' && h !== 12) h += 12;
-    if (modifier === 'AM' && h === 12) h = 0;
-    
-    // Convert back to zero-padded strings (e.g., 9 -> "09")
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  };
 
-    // --- NEW: Smart Shift Checker (Handles Overnight Shifts) ---
-    const checkShift = (slotTime, start, end) => {
-      if (!start || !end) return false;
-      if (start < end) return slotTime >= start && slotTime < end; // Normal Shift
-      if (start > end) return slotTime >= start || slotTime < end; // Overnight Shift
-      return false;
-    };
+    const doctorShifts = getDoctorShiftWindows(doc, clinicSchedule);
+    const slotTimes = [...new Set([
+      ...generateTimeSlots(clinicSchedule.appointmentWindowMinutes),
+      ...docAppts.map((appt) => appt.time)
+    ])]
+      .sort((a, b) => timeToMinutes(a) - timeToMinutes(b));
 
-    const isWithinShift = (time) => {
-      const time24 = convertTo24Hour(time); 
-      const isMorning = checkShift(time24, doc.morningStart || '09:00', doc.morningEnd || '13:00');
-      const isEvening = checkShift(time24, doc.eveningStart || '17:00', doc.eveningEnd || '21:00');
-      return isMorning || isEvening;
-    };
-
-    // Filter slots to only show times within the Doctor's shifts
-    return TIME_SLOTS.filter(isWithinShift).map(t => {
+    return slotTimes
+      .filter((time) => isTimeWithinDoctorShift(time, doctorShifts))
+      .map(t => {
        const appt = docAppts.find(a => a.time === t);
        return {
          time: t,
          status: appt ? (appt.status === 'Completed' ? 'Completed' : 'Booked') : 'Available'
        };
-    });
+      });
   };
 
   const filteredDoctors = (data.doctors || []).filter(doc => {
@@ -641,7 +649,7 @@ const generateSlots = (doc, dateStr) => {
       <FAB icon={Plus} onClick={() => {
         setModalError('');
         setInvalidFields([]);
-        setNewDoctor(defaultDoctorState);
+        setNewDoctor(getDefaultDoctorState());
         setAddDoctorTab('personal');
         setIsNewDept(false);
         setNewDeptName('');
@@ -675,7 +683,7 @@ const generateSlots = (doc, dateStr) => {
           setIsNewDept(false);
           setNewDeptName('');
           setAddDoctorTab('personal');
-          setNewDoctor(defaultDoctorState);
+          setNewDoctor(getDefaultDoctorState());
         }} 
         title={newDoctor._id ? "Edit Doctor Profile" : "Add New Doctor"} 
         footer={
@@ -848,32 +856,64 @@ const generateSlots = (doc, dateStr) => {
 
             {addDoctorTab === 'working_hours' && (
               <div className="space-y-4 animate-fadeIn">
+                <div className="rounded-lg border border-teal-100 bg-teal-50 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-teal-700">Clinic Schedule</p>
+                      <p className="text-[12px] text-teal-900">{formatClinicScheduleSummary(clinicSchedule)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setNewDoctor(prev => ({
+                        ...prev,
+                        morningStart: clinicSchedule.workingHoursStart,
+                        morningEnd: clinicSchedule.workingHoursEnd,
+                        eveningStart: '',
+                        eveningEnd: ''
+                      }))}
+                      className="rounded-md border border-teal-200 bg-white px-2.5 py-1 text-[11px] font-bold text-teal-700 transition-colors hover:bg-teal-100"
+                    >
+                      Use Clinic Hours
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <h4 className="text-[11px] font-bold text-slate-700 uppercase tracking-wide mb-1 border-b border-slate-100 pb-1">Morning Shift</h4>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Start Time <span className="text-red-500">*</span></label>
-                      <input type="time" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('morningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningStart} onChange={e => setNewDoctor({...newDoctor, morningStart: e.target.value})} />
+                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('morningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningStart} onChange={e => setNewDoctor({...newDoctor, morningStart: e.target.value})} />
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">End Time <span className="text-red-500">*</span></label>
-                      <input type="time" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('morningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningEnd} onChange={e => setNewDoctor({...newDoctor, morningEnd: e.target.value})} />
+                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('morningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningEnd} onChange={e => setNewDoctor({...newDoctor, morningEnd: e.target.value})} />
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <h4 className="text-[11px] font-bold text-slate-700 uppercase tracking-wide mb-1 border-b border-slate-100 pb-1">Evening Shift</h4>
+                  <div className="mb-1 flex items-center justify-between border-b border-slate-100 pb-1">
+                    <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">Evening Shift</h4>
+                    <button
+                      type="button"
+                      onClick={() => setNewDoctor(prev => ({ ...prev, eveningStart: '', eveningEnd: '' }))}
+                      className="text-[10px] font-bold uppercase tracking-wide text-slate-400 transition-colors hover:text-red-500"
+                    >
+                      Clear
+                    </button>
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Start Time <span className="text-red-500">*</span></label>
-                      <input type="time" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('eveningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningStart} onChange={e => setNewDoctor({...newDoctor, eveningStart: e.target.value})} />
+                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Start Time</label>
+                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('eveningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningStart} onChange={e => setNewDoctor({...newDoctor, eveningStart: e.target.value})} />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">End Time <span className="text-red-500">*</span></label>
-                      <input type="time" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('eveningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningEnd} onChange={e => setNewDoctor({...newDoctor, eveningEnd: e.target.value})} />
+                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">End Time</label>
+                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('eveningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningEnd} onChange={e => setNewDoctor({...newDoctor, eveningEnd: e.target.value})} />
                     </div>
                   </div>
+                  <p className="mt-1 text-[10px] text-slate-400">Optional. Leave this blank if the doctor follows a single continuous shift.</p>
                 </div>
                 
                 <div>

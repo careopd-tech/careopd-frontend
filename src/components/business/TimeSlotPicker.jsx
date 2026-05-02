@@ -1,8 +1,14 @@
 import React, { useMemo } from 'react';
 import { Clock } from 'lucide-react';
-import { TIME_SLOTS } from '../../data/constants';
+import {
+  generateTimeSlots,
+  getClinicSchedule,
+  getDoctorShiftWindows,
+  isTimeWithinDoctorShift,
+  timeToMinutes
+} from '../../utils/schedule';
 
-const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments }) => {
+const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, clinic }) => {
   if (!doctor) {
     return (
       <div className="p-6 text-center border-2 border-dashed border-slate-100 rounded-xl bg-slate-50">
@@ -17,6 +23,7 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments }) 
   const now = new Date();
   const currentHour = now.getHours();
   const currentMinute = now.getMinutes();
+  const clinicSchedule = useMemo(() => getClinicSchedule(clinic || {}), [clinic]);
 
   const parseTime = (timeStr) => {
     if (!timeStr) return { h: 0, m: 0, str24: '00:00' };
@@ -31,34 +38,30 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments }) 
   const processedSlots = useMemo(() => {
     if (!date) return [];
 
-    const mStart = doctor.morningStart || '09:00';
-    const mEnd = doctor.morningEnd || '13:00';
-    const eStart = doctor.eveningStart || '17:00';
-    const eEnd = doctor.eveningEnd || '21:00';
-
     const currentDocId = doctor._id || doctor.id;
+    const doctorShifts = getDoctorShiftWindows(doctor, clinicSchedule);
+    const baseSlots = generateTimeSlots(clinicSchedule.appointmentWindowMinutes);
 
     const bookedTimes = appointments
-      .filter(a => String(a.doctorId) === String(currentDocId) && a.date === date && a.status !== 'Cancelled')
+      .filter(a => {
+        const apptDoctorId = a.doctorId && typeof a.doctorId === 'object' ? a.doctorId._id : a.doctorId;
+        return String(apptDoctorId) === String(currentDocId) && a.date === date && a.status !== 'Cancelled';
+      })
       .map(a => a.time);
+
+    const slotTimes = [...new Set([
+      ...baseSlots,
+      ...bookedTimes,
+      ...(selectedTime ? [selectedTime] : [])
+    ])]
+      .sort((a, b) => timeToMinutes(a) - timeToMinutes(b));
 
     const result = [];
 
-    // --- NEW: Smart Shift Checker (Handles Overnight Shifts) ---
-    const checkShift = (slotTime, start, end) => {
-      if (start < end) return slotTime >= start && slotTime < end; // Normal Shift
-      if (start > end) return slotTime >= start || slotTime < end; // Overnight Shift
-      return false;
-    };
-
-    TIME_SLOTS.forEach(t => {
+    slotTimes.forEach(t => {
       const { h, m, str24 } = parseTime(t);
 
-      // A. Shift Check (Is it inside working hours?)
-      const isMorning = checkShift(str24, mStart, mEnd);
-      const isEvening = checkShift(str24, eStart, eEnd);
-
-      if (isMorning || isEvening) {
+      if (isTimeWithinDoctorShift(str24, doctorShifts)) {
         let isExpired = false;
         if (isToday) {
           if (h < currentHour || (h === currentHour && m <= currentMinute)) {
@@ -84,7 +87,7 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments }) 
 
     return result;
   // Note: added selectedTime to dependency array so it re-evaluates 'isCurrent' when user clicks
-  }, [doctor, date, appointments, isToday, currentHour, currentMinute, selectedTime]); 
+  }, [appointments, clinicSchedule, currentHour, currentMinute, date, doctor, isToday, selectedTime]); 
 
   if (processedSlots.length === 0) {
     return (

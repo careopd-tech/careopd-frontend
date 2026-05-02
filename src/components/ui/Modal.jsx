@@ -1,7 +1,15 @@
 import React from 'react';
 import { X } from 'lucide-react';
 
-const Modal = ({ isOpen, onClose, title, children, footer }) => {
+const Modal = ({
+  isOpen,
+  onClose,
+  title,
+  children,
+  footer,
+  bodyClassName = 'p-4 overflow-y-auto flex-1 overscroll-contain',
+  panelClassName = 'careopd-modal-panel bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[calc(var(--app-height)-1.5rem)] animate-scaleIn'
+}) => {
   if (!isOpen) return null;
   
   // 1. Added overscroll-none to the background overlay to trap touches
@@ -13,7 +21,7 @@ const Modal = ({ isOpen, onClose, title, children, footer }) => {
       aria-modal="true"
       data-careopd-modal
     >
-      <div className="careopd-modal-panel bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[calc(var(--app-height)-1.5rem)] animate-scaleIn">
+      <div className={panelClassName}>
         <div className="px-4 py-3 md:landscape:py-2 border-b border-slate-100 flex justify-between items-center bg-slate-50 flex-shrink-0">
           <h3 className="font-bold text-slate-800 text-[15px]">{title}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
@@ -21,7 +29,7 @@ const Modal = ({ isOpen, onClose, title, children, footer }) => {
           </button>
         </div>
         
-        <div className="p-4 overflow-y-auto flex-1 overscroll-contain">
+        <div className={bodyClassName}>
           {children}
         </div>
         

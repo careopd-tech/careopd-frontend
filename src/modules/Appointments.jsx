@@ -265,7 +265,15 @@ const Appointments = ({ data, setData, onLogout }) => {
         }
 
         {
-          const [snapshot, docs, pats, calendar30] = await Promise.all([snapshotRes.json(), docsRes.json(), patsRes.json(), calRes.json()]);
+          const [snapshot, docs, pats, calendar30, clinic] = await Promise.all([
+            snapshotRes.json(),
+            docsRes.json(),
+            patsRes.json(),
+            calRes.json(),
+            fetch(`${API_BASE_URL}/api/clinics/${clinicId}`)
+              .then(async (response) => (response.ok ? response.json() : null))
+              .catch(() => null)
+          ]);
 
           const activeSection = expandedSectionRef.current;
 
@@ -305,7 +313,7 @@ const Appointments = ({ data, setData, onLogout }) => {
           setSections(finalSections);
           setMetaCounts({ previous: snapshot.counts?.previous || 0, upcoming: snapshot.counts?.upcoming || 0 });
           setData(prev => ({
-            ...prev, doctors: docs, patients: pats, appointments: updatedToday, counts: snapshot.counts, cachedSections: finalSections, calendar30: calendar30
+            ...prev, clinic: clinic || prev.clinic, doctors: docs, patients: pats, appointments: updatedToday, counts: snapshot.counts, cachedSections: finalSections, calendar30: calendar30
           }));
         }
       });
@@ -560,6 +568,24 @@ const Appointments = ({ data, setData, onLogout }) => {
     setNewPatientDetails(prev => ({ ...prev, address: cleanVal }));
   };
 
+  const hasLocalPatientConflict = (patientId, date, time, excludeAppointmentId = null) => {
+    if (!patientId || patientId === 'add_new' || !date || !time) return false;
+
+    const loadedAppointments = [
+      ...(sections.today || []),
+      ...(sections.upcoming || []),
+      ...(sections.previous || [])
+    ];
+
+    return loadedAppointments.some(appt =>
+      getEntityId(appt.patientId) === getEntityId(patientId) &&
+      appt.date === date &&
+      appt.time === time &&
+      appt.status !== 'Cancelled' &&
+      appt._id !== excludeAppointmentId
+    );
+  };
+
   // --- ACTIONS ---
   const handleAddAppointment = async () => {
     setModalError('');
@@ -577,17 +603,9 @@ const Appointments = ({ data, setData, onLogout }) => {
 
     if (errors.length > 0) { setInvalidFields(errors); return setModalError('Please fill required fields *'); }
     if (!validateFutureDate(newAppt.date, newAppt.time)) return setModalError('Cannot book in the past.');
-    const checkPatientConflict = (pid, date, time, eid) => (
-      pid !== 'add_new' &&
-      (sections.today || []).some(a =>
-        getEntityId(a.patientId) === getEntityId(pid) &&
-        a.date === date &&
-        a.time === time &&
-        a.status !== 'Cancelled' &&
-        a._id !== eid
-      )
-    );
-    if (checkPatientConflict(newAppt.patientId, newAppt.date, newAppt.time, rebookingApptId)) return setModalError('Selected Patient has an existing appointment at the same time.');
+    if (hasLocalPatientConflict(newAppt.patientId, newAppt.date, newAppt.time, rebookingApptId)) {
+      return setModalError('Selected Patient has an existing appointment at the same time.');
+    }
 
     setInvalidFields([]);
     setIsSubmitting(true);
@@ -625,6 +643,9 @@ const Appointments = ({ data, setData, onLogout }) => {
           `Appointment ${rebookingApptId ? 'Rebooked' : 'Booked'} for ${pName} on ${newAppt.date}  at ${newAppt.time}`
         );
       } else {
+        if (result.errorCode === 'ERR_APPOINTMENT_CONFLICT') {
+          return setModalError('Selected Patient has an existing appointment at the same time.');
+        }
         if (result.errorCode === 'ERR_PATIENT_DUPLICATE') {
           setInvalidFields(prev => [...prev, 'newPatientPhone']);
         }
@@ -651,10 +672,23 @@ const Appointments = ({ data, setData, onLogout }) => {
   const confirmReschedule = async () => {
     if (!rescheduleData.date || !rescheduleData.time) return setModalError('Select date & time');
     if (!validateFutureDate(rescheduleData.date, rescheduleData.time)) return setModalError('Cannot reschedule to the past.');
+    if (hasLocalPatientConflict(getEntityId(actionAppt?.patientId), rescheduleData.date, rescheduleData.time, actionAppt?._id)) {
+      return setModalError('Selected Patient has an existing appointment at the same time.');
+    }
 
     setIsSubmitting(true);
     try {
-      await fetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clinicId, date: rescheduleData.date, time: rescheduleData.time, status: 'Scheduled' }) });
+      const response = await fetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId, date: rescheduleData.date, time: rescheduleData.time, status: 'Scheduled' })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return setModalError(result.errorCode === 'ERR_APPOINTMENT_CONFLICT'
+          ? 'Selected Patient has an existing appointment at the same time.'
+          : (result.error || 'Failed to reschedule appointment.'));
+      }
       await fetchAllData(true);
       setIsRescheduleModalOpen(false);
       showNotification('Appointment Rescheduled', 'success', `Appointment Rescheduled for ${getPatientName(actionAppt.patientId)} to ${rescheduleData.date} at ${rescheduleData.time}`);
@@ -974,6 +1008,7 @@ const Appointments = ({ data, setData, onLogout }) => {
                     activeAppt={activeConsultationAppt} 
                     onComplete={handleCompleteConsultation} 
                     isSubmitting={isSubmitting} 
+                    clinicalCatalog={data.clinicalCatalog}
                  />
              </div>
           </div>
@@ -1180,7 +1215,7 @@ const Appointments = ({ data, setData, onLogout }) => {
           <div>
             <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Available Slots <span className="text-red-500">*</span></label>
             <div className={`rounded-lg ${invalidFields.includes('time') ? 'border border-red-500 p-1' : ''}`}>
-              <TimeSlotPicker selectedTime={newAppt.time} onSelect={(t) => setNewAppt({ ...newAppt, time: t })} doctor={getDoctorById(newAppt.doctorId)} date={newAppt.date} appointments={data.calendar30 || []} />
+              <TimeSlotPicker selectedTime={newAppt.time} onSelect={(t) => setNewAppt({ ...newAppt, time: t })} doctor={getDoctorById(newAppt.doctorId)} date={newAppt.date} appointments={data.calendar30 || []} clinic={data.clinic} />
             </div>
           </div>
         </div>
@@ -1198,7 +1233,7 @@ const Appointments = ({ data, setData, onLogout }) => {
         <div className="space-y-3">
           {actionAppt && (<div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex items-center justify-between mb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Currently Scheduled:</span><span className="text-[13px] font-bold text-slate-700">{actionAppt.date} at {actionAppt.time}</span></div>)}
           <AlertMessage message={modalError} />
-          <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">New Date</label><input type="date" min={new Date().toISOString().split('T')[0]} max={maxDateStr} className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50" value={rescheduleData.date} onChange={(e) => setRescheduleData({ ...rescheduleData, date: e.target.value, time: '' })} /></div><div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Available Slots</label><TimeSlotPicker selectedTime={rescheduleData.time} onSelect={(t) => setRescheduleData({ ...rescheduleData, time: t })} doctor={getDoctorById(actionAppt?.doctorId)} date={rescheduleData.date} appointments={data.calendar30 || []} /></div>
+          <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">New Date</label><input type="date" min={new Date().toISOString().split('T')[0]} max={maxDateStr} className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50" value={rescheduleData.date} onChange={(e) => setRescheduleData({ ...rescheduleData, date: e.target.value, time: '' })} /></div><div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Available Slots</label><TimeSlotPicker selectedTime={rescheduleData.time} onSelect={(t) => setRescheduleData({ ...rescheduleData, time: t })} doctor={getDoctorById(actionAppt?.doctorId)} date={rescheduleData.date} appointments={data.calendar30 || []} clinic={data.clinic} /></div>
         </div>
       </Modal>
 

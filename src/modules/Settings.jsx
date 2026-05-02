@@ -5,7 +5,15 @@ import {
 import Modal from '../components/ui/Modal';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import AlertMessage from '../components/ui/AlertMessage';
+import ClinicalLibraryModal from '../components/settings/ClinicalLibraryModal';
 import API_BASE_URL from '../config';
+import {
+  APPOINTMENT_WINDOW_OPTIONS,
+  formatClinicScheduleSummary,
+  getClinicSchedule,
+  normalizeAppointmentWindow,
+  validateClinicSchedule
+} from '../utils/schedule';
 
 // Initial Defaults
 const DEFAULT_TEMPLATES = [
@@ -51,6 +59,7 @@ const Settings = ({ data, setData, onLogout }) => {
   const [accessUsers, setAccessUsers] = useState([]);
   const [accessLoading, setAccessLoading] = useState(false);
   const [accessModalOpen, setAccessModalOpen] = useState(false);
+  const [clinicalLibraryType, setClinicalLibraryType] = useState('');
   const [statusConfirmUser, setStatusConfirmUser] = useState(null);
   const [statusRemark, setStatusRemark] = useState('');
   const [notification, setNotification] = useState(null);
@@ -106,15 +115,27 @@ const Settings = ({ data, setData, onLogout }) => {
       if (!clinicId) return;
 
       try {
-        const response = await fetch(`${API_BASE_URL}/api/clinics/${clinicId}`);
-        if (response.ok) {
-          const clinicData = await response.json();
+        const [response, catalogResponse] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/clinics/${clinicId}`),
+          fetch(`${API_BASE_URL}/api/clinical-catalog/${clinicId}`)
+        ]);
+
+        const [clinicData, catalogData] = await Promise.all([
+          response.ok ? response.json() : Promise.resolve(null),
+          catalogResponse.ok ? catalogResponse.json() : Promise.resolve(null)
+        ]);
+
+        if (clinicData) {
           const mergedData = {
              ...clinicData,
              templates: (clinicData.templates && clinicData.templates.length > 0) ? clinicData.templates : DEFAULT_TEMPLATES,
              policies: (clinicData.policies && clinicData.policies.length > 0) ? clinicData.policies : DEFAULT_POLICIES
           };
           setData(prev => ({ ...prev, clinic: mergedData }));
+        }
+
+        if (catalogData) {
+          setData(prev => ({ ...prev, clinicalCatalog: catalogData }));
         }
       } catch (err) {
         console.error("Failed to load settings", err);
@@ -196,6 +217,10 @@ const Settings = ({ data, setData, onLogout }) => {
       if (!formData.address) errors.push('address');
     } else if (editModal.type === 'single_input') {
       if (!formData.value) errors.push('value');
+    } else if (editModal.type === 'clinic_schedule') {
+      if (!formData.workingHoursStart) errors.push('workingHoursStart');
+      if (!formData.workingHoursEnd) errors.push('workingHoursEnd');
+      if (!formData.appointmentWindowMinutes) errors.push('appointmentWindowMinutes');
     } else if (editModal.type === 'template' || editModal.type === 'policy') {
       if (!formData.title) errors.push('title');
       if (!formData.text) errors.push('text');
@@ -205,6 +230,20 @@ const Settings = ({ data, setData, onLogout }) => {
       setInvalidFields(errors);
       return setModalError('Please fill all required details marked with *');
     }
+
+    if (editModal.type === 'clinic_schedule') {
+      const scheduleError = validateClinicSchedule({
+        workingHoursStart: formData.workingHoursStart,
+        workingHoursEnd: formData.workingHoursEnd,
+        appointmentWindowMinutes: formData.appointmentWindowMinutes
+      });
+
+      if (scheduleError) {
+        setInvalidFields(['workingHoursStart', 'workingHoursEnd', 'appointmentWindowMinutes']);
+        return setModalError(scheduleError);
+      }
+    }
+
     setInvalidFields([]);
 
     const clinicId = localStorage.getItem('clinicId');
@@ -230,6 +269,12 @@ const Settings = ({ data, setData, onLogout }) => {
       updatePayload = { policies: currentList };
     } else if (editModal.type === 'clinic_details') {
       updatePayload = { name: formData.name, address: formData.address };
+    } else if (editModal.type === 'clinic_schedule') {
+      updatePayload = {
+        workingHoursStart: formData.workingHoursStart,
+        workingHoursEnd: formData.workingHoursEnd,
+        appointmentWindowMinutes: normalizeAppointmentWindow(formData.appointmentWindowMinutes)
+      };
     } else if (editModal.stateKey === 'hours') {
       updatePayload = { hours: formData.value };
     }
@@ -509,12 +554,34 @@ const Settings = ({ data, setData, onLogout }) => {
 
   const clinicTemplates = data.clinic?.templates || [];
   const clinicPolicies = data.clinic?.policies || [];
+  const clinicalCatalog = data.clinicalCatalog || { complaints: [], drugs: [], labTests: [] };
   const loggedInDoctorId = savedUser.doctorId || localStorage.getItem('doctorId');
   const canUpgradeSolo = data.clinic?.type === 'Solo' || (!data.clinic?.type && Boolean(loggedInDoctorId));
+  const clinicSchedule = getClinicSchedule(data.clinic || {});
   const roleLabels = {
     super_admin: 'Super Admin',
     clinic_admin: 'Clinic Admin',
     doctor: 'Doctor'
+  };
+
+  const handleClinicalCatalogUpdate = (itemType, updatedItem) => {
+    const typeMap = {
+      complaint: 'complaints',
+      drug: 'drugs',
+      lab_test: 'labTests'
+    };
+    const targetKey = typeMap[itemType];
+    if (!targetKey) return;
+
+    setData(prev => ({
+      ...prev,
+      clinicalCatalog: {
+        ...(prev.clinicalCatalog || {}),
+        [targetKey]: (prev.clinicalCatalog?.[targetKey] || []).some(item => item._id === updatedItem._id)
+          ? (prev.clinicalCatalog?.[targetKey] || []).map(item => item._id === updatedItem._id ? updatedItem : item)
+          : [...(prev.clinicalCatalog?.[targetKey] || []), updatedItem]
+      }
+    }));
   };
 
   return (
@@ -544,7 +611,7 @@ const Settings = ({ data, setData, onLogout }) => {
             <>
               <div className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm">
                 <p className="text-[11px] font-bold text-slate-500 uppercase">Clinic Code</p>
-                <p className="text-[18px] font-bold tracking-[0.18em] text-slate-800 mt-1">
+                <p className="text-[18px] font-bold tracking-[0.18em] text-teal-600 mt-1">
                   {data.clinic?.clinicCode ? `${data.clinic.clinicCode.slice(0, 4)}-${data.clinic.clinicCode.slice(4)}` : 'Not Available'}
                 </p>
                 <p className="text-[10px] text-slate-400 mt-1">Share this code with your clinic team for secure sign-in.</p>
@@ -555,9 +622,17 @@ const Settings = ({ data, setData, onLogout }) => {
                 onEdit={() => openEdit({ title: 'Edit Clinic Details', type: 'clinic_details', initialData: { name: data.clinic?.name, address: data.clinic?.address } })}
               />
               <SettingItem 
-                title="Operating Hours" 
-                subtitle={data.clinic?.hours || '9 AM - 5 PM'} 
-                onEdit={() => openEdit({ title: 'Edit Operating Hours', type: 'single_input', inputLabel: 'Operating Hours', stateKey: 'hours', initialData: { value: data.clinic?.hours } })}
+                title="Clinic Schedule" 
+                subtitle={formatClinicScheduleSummary(data.clinic || clinicSchedule)} 
+                onEdit={() => openEdit({
+                  title: 'Edit Clinic Schedule',
+                  type: 'clinic_schedule',
+                  initialData: {
+                    workingHoursStart: clinicSchedule.workingHoursStart,
+                    workingHoursEnd: clinicSchedule.workingHoursEnd,
+                    appointmentWindowMinutes: clinicSchedule.appointmentWindowMinutes
+                  }
+                })}
               />
               {canUpgradeSolo && (
                 <SettingItem
@@ -566,6 +641,26 @@ const Settings = ({ data, setData, onLogout }) => {
                   onEdit={openUpgradeModal}
                 />
               )}
+            </>
+          )}
+
+          {renderAccordion('clinical-library', 'Clinical Library', FileText, 'text-teal-600',
+            <>
+              <SettingItem
+                title="Chief Complaints"
+                subtitle={`${(clinicalCatalog.complaints || []).length} items`}
+                onEdit={() => setClinicalLibraryType('complaint')}
+              />
+              <SettingItem
+                title="Drug Master"
+                subtitle={`${(clinicalCatalog.drugs || []).length} items`}
+                onEdit={() => setClinicalLibraryType('drug')}
+              />
+              <SettingItem
+                title="Lab Tests"
+                subtitle={`${(clinicalCatalog.labTests || []).length} items`}
+                onEdit={() => setClinicalLibraryType('lab_test')}
+              />
             </>
           )}
 
@@ -698,6 +793,33 @@ const Settings = ({ data, setData, onLogout }) => {
 
            {editModal?.type === 'single_input' && (
              <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">{editModal.inputLabel} *</label><input type="text" className="w-full p-2 border border-slate-200 rounded-lg text-[13px] outline-none focus:ring-1 focus:ring-teal-500" value={formData.value || ''} onChange={e => setFormData({...formData, value: e.target.value})} /></div>
+           )}
+
+           {editModal?.type === 'clinic_schedule' && (
+             <>
+               <div className="rounded-lg border border-teal-100 bg-teal-50 px-3 py-2">
+                 <p className="text-[11px] font-bold uppercase tracking-wide text-teal-700">Scheduling Rule</p>
+                 <p className="text-[12px] text-teal-900">Doctor working hours and appointment slots will follow this clinic schedule.</p>
+               </div>
+               <div className="grid grid-cols-2 gap-2">
+                 <div>
+                   <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Clinic Start Time *</label>
+                   <input type="time" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('workingHoursStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.workingHoursStart || ''} onChange={e => setFormData({...formData, workingHoursStart: e.target.value})} />
+                 </div>
+                 <div>
+                   <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Clinic End Time *</label>
+                   <input type="time" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('workingHoursEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.workingHoursEnd || ''} onChange={e => setFormData({...formData, workingHoursEnd: e.target.value})} />
+                 </div>
+               </div>
+               <div>
+                 <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Appointment Window *</label>
+                 <select className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('appointmentWindowMinutes') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.appointmentWindowMinutes || clinicSchedule.appointmentWindowMinutes} onChange={e => setFormData({...formData, appointmentWindowMinutes: Number(e.target.value)})}>
+                   {APPOINTMENT_WINDOW_OPTIONS.map((minutes) => (
+                     <option key={minutes} value={minutes}>{minutes} minutes</option>
+                   ))}
+                 </select>
+               </div>
+             </>
            )}
 
            {(editModal?.type === 'template' || editModal?.type === 'policy') && (
@@ -859,6 +981,36 @@ const Settings = ({ data, setData, onLogout }) => {
           </div>
         </div>
       </Modal>
+
+      <ClinicalLibraryModal
+        clinicId={localStorage.getItem('clinicId')}
+        isOpen={clinicalLibraryType === 'complaint'}
+        onClose={() => setClinicalLibraryType('')}
+        title="Chief Complaints"
+        itemType="complaint"
+        items={clinicalCatalog.complaints || []}
+        onCatalogUpdate={handleClinicalCatalogUpdate}
+      />
+
+      <ClinicalLibraryModal
+        clinicId={localStorage.getItem('clinicId')}
+        isOpen={clinicalLibraryType === 'drug'}
+        onClose={() => setClinicalLibraryType('')}
+        title="Drug Master"
+        itemType="drug"
+        items={clinicalCatalog.drugs || []}
+        onCatalogUpdate={handleClinicalCatalogUpdate}
+      />
+
+      <ClinicalLibraryModal
+        clinicId={localStorage.getItem('clinicId')}
+        isOpen={clinicalLibraryType === 'lab_test'}
+        onClose={() => setClinicalLibraryType('')}
+        title="Lab Tests"
+        itemType="lab_test"
+        items={clinicalCatalog.labTests || []}
+        onCatalogUpdate={handleClinicalCatalogUpdate}
+      />
 
     </div>
   );

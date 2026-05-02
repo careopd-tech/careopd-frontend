@@ -2,42 +2,24 @@ import React, { useState, useEffect } from 'react';
 import PatientHistoryList, { filterValidHistory, getUiStatus, getStatusStyling } from '../ui/PatientHistoryList';
 import { Plus, Trash2, FileText, Activity, Pill, CheckCircle, Loader2, FlaskConical, X, History, Search, ChevronRight, Check, ChevronDown, RotateCw } from 'lucide-react';
 import API_BASE_URL from '../../config';
-
-// --- CLINICAL DICTIONARIES ---
-const TOP_COMPLAINTS = ['Fever', 'Cough', 'Headache', 'Stomach ache', 'Body ache', 'Vomiting', 'Loose motion', 'Weakness', 'Cold'];
-const TOP_LABS = ['CBC', 'LFT', 'KFT', 'Lipid Profile', 'Urine Routine', 'HbA1c', 'Thyroid Profile', 'X-Ray Chest', 'ECG'];
-
-const ALL_COMPLAINTS = [
-  { category: 'General', items: ['Fever', 'Chills', 'Fatigue', 'Weakness', 'Weight Loss', 'Weight Gain', 'Loss of Appetite', 'Body ache'] },
-  { category: 'Respiratory', items: ['Cough', 'Shortness of Breath', 'Wheezing', 'Sore Throat', 'Chest Congestion', 'Sputum Production'] },
-  { category: 'Gastrointestinal', items: ['Stomach ache', 'Nausea', 'Vomiting', 'Loose motion', 'Constipation', 'Acidity / Heartburn', 'Bloating', 'Blood in Stool'] },
-  { category: 'Neurological', items: ['Headache', 'Dizziness / Vertigo', 'Fainting', 'Numbness', 'Tingling', 'Tremors'] },
-  { category: 'Musculoskeletal', items: ['Joint Pain', 'Back Ache', 'Neck Pain', 'Muscle Cramps', 'Swelling in Joints'] },
-  { category: 'Skin', items: ['Rash', 'Itching', 'Acne', 'Skin Lesion', 'Hair Fall', 'Discoloration'] }
-];
-
-const ALL_LABS = [
-  { category: 'Blood Routine', items: ['CBC', 'ESR', 'Peripheral Smear', 'Blood Grouping'] },
-  { category: 'Biochemistry', items: ['LFT', 'KFT', 'Lipid Profile', 'Blood Sugar Fasting (FBS)', 'Blood Sugar PP (PPBS)', 'HbA1c', 'Serum Electrolytes', 'Uric Acid'] },
-  { category: 'Hormonal & Markers', items: ['Thyroid Profile (T3,T4,TSH)', 'Vitamin B12', 'Vitamin D3', 'CRP', 'Serum Ferritin'] },
-  { category: 'Urine & Stool', items: ['Urine Routine', 'Urine Culture', 'Stool Routine', 'Stool Occult Blood'] },
-  { category: 'Imaging & Cardio', items: ['X-Ray Chest', 'ECG', 'ECHO', 'USG Abdomen', 'USG KUB'] }
-];
+import { getQuickCatalogItems, groupCatalogByCategory, isActiveCatalogItem } from '../../utils/clinicalCatalog';
 
 // --- RX DICTIONARIES ---
 const RX_ROUTES = ['Oral', 'Topical', 'Injection', 'Inhalation', 'Eye', 'Ear', 'Nasal', 'Sublingual', 'Vaginal'];
 const RX_TIMINGS = ['Empty Stomach', 'Before Meal', 'After Meal', 'Early Morning', 'At Night', 'Any Time / SOS'];
 const RX_FREQUENCIES = ['One time a day', 'Two times a day', 'Three times a day', 'Four times a day', 'Every alternate day', 'Weekly once', 'SOS (As Needed)'];
 const RX_DURATIONS = ['1 Day', '3 Days', '5 Days', '7 Days', '10 Days', '14 Days', '1 Month'];
+const DEFAULT_MEDICATION_DRAFT = {
+  name: '',
+  route: 'Oral',
+  quantity: '1',
+  frequency: 'Two times a day',
+  timing: 'After Meal',
+  duration: '5 Days',
+  instructions: ''
+};
 
-const COMMON_MEDS = [
-  { name: 'Tab Paracetamol 500mg', route: 'Oral', quantity: '1', frequency: 'SOS (As Needed)', timing: 'Any Time / SOS', duration: '3 Days', instructions: '' },
-  { name: 'Tab Pantoprazole 40mg', route: 'Oral', quantity: '1', frequency: 'One time a day', timing: 'Empty Stomach', duration: '5 Days', instructions: '' },
-  { name: 'Cap Amoxicillin 500mg', route: 'Oral', quantity: '1', frequency: 'Two times a day', timing: 'After Meal', duration: '5 Days', instructions: '' },
-  { name: 'Syp Cetirizine 5ml', route: 'Oral', quantity: '5ml', frequency: 'One time a day', timing: 'At Night', duration: '3 Days', instructions: '' },
-];
-
-const ConsultationPad = ({ activeAppt, onComplete, isSubmitting }) => {
+const ConsultationPad = ({ activeAppt, onComplete, isSubmitting, clinicalCatalog }) => {
   const loggedInDoctorId = localStorage.getItem('doctorId');
   const loggedInRole = localStorage.getItem('userRole') || 'admin';
 
@@ -54,9 +36,7 @@ const ConsultationPad = ({ activeAppt, onComplete, isSubmitting }) => {
 
   // --- UPGRADED RX STATE ---
   const [medicines, setMedicines] = useState([]);
-  const [currentMed, setCurrentMed] = useState({
-    name: '', route: 'Oral', quantity: '1', frequency: 'Two times a day', timing: 'After Meal', duration: '5 Days', instructions: ''
-  });
+  const [currentMed, setCurrentMed] = useState(DEFAULT_MEDICATION_DRAFT);
   const [isCustomRegimen, setIsCustomRegimen] = useState(false);
 
   const [labTests, setLabTests] = useState([]);
@@ -69,6 +49,20 @@ const ConsultationPad = ({ activeAppt, onComplete, isSubmitting }) => {
   const [sheetSearch, setSheetSearch] = useState('');
   const [tempComplaintSelection, setTempComplaintSelection] = useState([]);
   const [tempLabSelection, setTempLabSelection] = useState([]);
+
+  const complaintCatalog = (clinicalCatalog?.complaints || []).filter(isActiveCatalogItem);
+  const labCatalog = (clinicalCatalog?.labTests || []).filter(isActiveCatalogItem);
+  const drugCatalog = (clinicalCatalog?.drugs || []).filter(isActiveCatalogItem);
+  const topComplaints = getQuickCatalogItems(complaintCatalog, 9).map((item) => item.label);
+  const topLabs = getQuickCatalogItems(labCatalog, 9).map((item) => item.label);
+  const groupedComplaintCatalog = groupCatalogByCategory(complaintCatalog).map((group) => ({
+    category: group.category,
+    items: group.items.map((item) => item.label)
+  }));
+  const groupedLabCatalog = groupCatalogByCategory(labCatalog).map((group) => ({
+    category: group.category,
+    items: group.items.map((item) => item.label)
+  }));
 
 
 
@@ -169,13 +163,18 @@ const ConsultationPad = ({ activeAppt, onComplete, isSubmitting }) => {
     setLabTests(newLabTests); setActiveSheet(null);
   };
 
-  const handleSelectPresetMed = (med) => { setCurrentMed(med); setIsMedSelected(true); setShowRxSuggestions(false); setIsCustomRegimen(false); };
+  const handleSelectPresetMed = (drugItem) => {
+    setCurrentMed({ ...DEFAULT_MEDICATION_DRAFT, name: drugItem.label });
+    setIsMedSelected(true);
+    setShowRxSuggestions(false);
+    setIsCustomRegimen(false);
+  };
   const handleSelectCustomMed = () => { if (!currentMed.name.trim()) return; setIsMedSelected(true); setShowRxSuggestions(false); };
 
   const handleAddMedicine = () => {
     if (!currentMed.name) return;
     setMedicines([...medicines, { ...currentMed, id: Date.now() }]);
-    setCurrentMed({ name: '', route: 'Oral', quantity: '1', frequency: 'Two times a day', timing: 'After Meal', duration: '5 Days', instructions: '' });
+    setCurrentMed(DEFAULT_MEDICATION_DRAFT);
     setIsMedSelected(false); setShowRxSuggestions(false); setIsCustomRegimen(false);
   };
 
@@ -184,14 +183,14 @@ const ConsultationPad = ({ activeAppt, onComplete, isSubmitting }) => {
     onComplete(activeAppt._id, prescriptionData, finalStatus);
   };
 
-  const filteredMeds = COMMON_MEDS.filter(m => m.name.toLowerCase().includes(currentMed.name.toLowerCase()));
+  const filteredMeds = drugCatalog.filter((drugItem) => drugItem.label.toLowerCase().includes(currentMed.name.toLowerCase()));
 
   // --- RENDER HELPERS ---
   const renderBottomSheet = () => {
     if (!activeSheet) return null;
     const isComplaints = activeSheet === 'complaints';
     const title = isComplaints ? 'Select Chief Complaints' : 'Select Lab Tests';
-    const dataList = isComplaints ? ALL_COMPLAINTS : ALL_LABS;
+    const dataList = isComplaints ? groupedComplaintCatalog : groupedLabCatalog;
     const totalCount = dataList.reduce((acc, cat) => acc + cat.items.length, 0);
     const filteredData = dataList.map(category => ({
       ...category, items: category.items.filter(item => item.toLowerCase().includes(sheetSearch.toLowerCase()))
@@ -334,7 +333,7 @@ const ConsultationPad = ({ activeAppt, onComplete, isSubmitting }) => {
 
                 {/* --- QUICK LIST (COMPLAINTS) --- */}
                 <div className="flex gap-2 overflow-x-auto mb-2 pb-2 w-full custom-scrollbar-hide">
-                  {TOP_COMPLAINTS.map(chip => {
+                  {topComplaints.map(chip => {
                     const isSelected = complaintsList.includes(chip);
                     return (
                       <button
@@ -409,7 +408,7 @@ const ConsultationPad = ({ activeAppt, onComplete, isSubmitting }) => {
                       {filteredMeds.length > 0 && currentMed.name.length > 0 ? (
                         filteredMeds.map((med, idx) => (
                           <button type="button" key={idx} onMouseDown={(e) => { e.preventDefault(); handleSelectPresetMed(med); }} className="w-full text-left px-3 py-2 border-b border-slate-100 last:border-0 hover:bg-teal-50 flex justify-between items-center group transition-colors">
-                            <div><div className="text-[12px] font-bold text-slate-700 group-hover:text-teal-700">{med.name}</div><div className="text-[10px] text-slate-400">{med.frequency} • {med.timing}</div></div>
+                            <div><div className="text-[12px] font-bold text-slate-700 group-hover:text-teal-700">{med.label}</div><div className="text-[10px] text-slate-400">{med.category || 'General'}</div></div>
                             <div className="text-[10px] text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">Select</div>
                           </button>
                         ))
@@ -545,7 +544,7 @@ const ConsultationPad = ({ activeAppt, onComplete, isSubmitting }) => {
 
             {/* --- QUICK LIST (LABS) --- */}
             <div className="flex gap-2 overflow-x-auto mb-2 pb-2 w-full custom-scrollbar-hide">
-              {TOP_LABS.map(lab => {
+              {topLabs.map(lab => {
                 const isSelected = labTests.some(t => t.name === lab);
                 return (
                   <button

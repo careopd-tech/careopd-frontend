@@ -10,7 +10,10 @@ export const INITIAL_DATA = {
     address: '123 Health Ave, Metro City',
     phone: '+1 555-0123',
     email: 'admin@careopd.com',
-    hours: '09:00 AM - 06:00 PM'
+    hours: '9:00 AM - 6:00 PM',
+    workingHoursStart: '09:00',
+    workingHoursEnd: '18:00',
+    appointmentWindowMinutes: 15
   },
   doctors: [
     { id: 101, name: 'Dr. Sarah Smith', department: 'Cardiology', status: 'Available', photo: 'S', morningStart: '09:00', morningEnd: '13:00', eveningStart: '17:00', eveningEnd: '20:00' },
