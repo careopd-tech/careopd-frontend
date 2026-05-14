@@ -3,6 +3,7 @@ import { Camera, Save, User, Mail, Phone, Shield } from 'lucide-react';
 import Modal from '../ui/Modal'; 
 import AlertMessage from '../ui/AlertMessage';
 import API_BASE_URL from '../../config'; 
+import { authFetch } from '../../utils/auth';
 
 const MyAccountModal = ({ isOpen, onClose }) => {
   const [loading, setLoading] = useState(false);
@@ -41,7 +42,7 @@ const MyAccountModal = ({ isOpen, onClose }) => {
         if (!userId) return setError("User session missing.");
 
         try {
-          const response = await fetch(`${API_BASE_URL}/api/users/${userId}?clinicId=${clinicId}`);
+          const response = await authFetch(`${API_BASE_URL}/api/users/${userId}?clinicId=${clinicId}`);
           if (response.ok) {
             const data = await response.json();
             const formattedData = {
@@ -84,7 +85,7 @@ const MyAccountModal = ({ isOpen, onClose }) => {
     setLoading(true);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/users/${userId}?clinicId=${clinicId}`, {
+      const response = await authFetch(`${API_BASE_URL}/api/users/${userId}?clinicId=${clinicId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

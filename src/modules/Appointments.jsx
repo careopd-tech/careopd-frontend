@@ -11,6 +11,8 @@ import ModuleHeader from '../components/ui/ModuleHeader';
 import TimeSlotPicker from '../components/business/TimeSlotPicker';
 import { useGlobalDate } from '../context/DateContext';
 import API_BASE_URL from '../config';
+import { getSessionUser } from '../utils/auth';
+import { hasPermission } from '../utils/permissions';
 
 // --- ADDED: IMPORT THE EMR PAD ---
 import ConsultationPad from '../components/doctor/ConsultationPad';
@@ -22,10 +24,13 @@ const Appointments = ({ data, setData, onLogout }) => {
   const clinicId = localStorage.getItem('clinicId');
   const userRole = localStorage.getItem('userRole') || 'admin';
   const doctorId = localStorage.getItem('doctorId') || '';
+  const sessionUser = getSessionUser();
   const rbacQuery = `&userRole=${userRole}&doctorId=${doctorId}`;
   
   // --- ADDED: RBAC HELPER ---
-  const isAdmin = userRole === 'admin';
+  const canManageAppointments = hasPermission(sessionUser.permissions, 'appointments.manage');
+  const canViewAllAppointments = hasPermission(sessionUser.permissions, 'appointments.view_all') || canManageAppointments;
+  const isAdmin = canManageAppointments;
 
   // --- NEW: 30-Day Window Boundary ---
   const maxDateObj = new Date(safeCurrentDate);
@@ -883,8 +888,8 @@ const Appointments = ({ data, setData, onLogout }) => {
 
       {/* ADDED: DYNAMIC TITLE BASED ON ROLE */}
       <ModuleHeader
-        title={isAdmin ? "Appointments" : "Queue & Schedule"}
-        shortTitle={isAdmin ? "Appts" : "Queue"}
+        title={canViewAllAppointments ? "Appointments" : "Queue & Schedule"}
+        shortTitle={canViewAllAppointments ? "Appts" : "Queue"}
         searchVal={searchQuery}
         onSearch={handleSearchInput}
         onFilterClick={openFilterModal}

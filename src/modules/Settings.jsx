@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Building2, MessageCircle, FileText, Plus, Edit2, ChevronDown, ChevronRight, UserPlus, Users, CheckCircle, AlertCircle
+  Building2, MessageCircle, FileText, Plus, Edit2, ChevronDown, ChevronRight, UserPlus, Users, CheckCircle, AlertCircle, ShieldCheck
 } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import AlertMessage from '../components/ui/AlertMessage';
 import ClinicalLibraryModal from '../components/settings/ClinicalLibraryModal';
 import API_BASE_URL from '../config';
+import { authFetch, getSessionUser, updateSessionFromAuth } from '../utils/auth';
+import { hasPermission } from '../utils/permissions';
 import {
   APPOINTMENT_WINDOW_OPTIONS,
   formatClinicScheduleSummary,
@@ -61,7 +63,14 @@ const Settings = ({ data, setData, onLogout }) => {
   const [accessModalOpen, setAccessModalOpen] = useState(false);
   const [clinicalLibraryType, setClinicalLibraryType] = useState('');
   const [statusConfirmUser, setStatusConfirmUser] = useState(null);
+  const [transferConfirmUser, setTransferConfirmUser] = useState(null);
   const [statusRemark, setStatusRemark] = useState('');
+  const [transferRemark, setTransferRemark] = useState('');
+  const [permissionProfiles, setPermissionProfiles] = useState({
+    clinic_admin: {},
+    doctor: {}
+  });
+  const [permissionsLoading, setPermissionsLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [notificationStack, setNotificationStack] = useState(() => {
     try {
@@ -78,14 +87,13 @@ const Settings = ({ data, setData, onLogout }) => {
     phone: ''
   });
 
-  const savedUser = (() => {
-    try {
-      return JSON.parse(localStorage.getItem('user') || '{}');
-    } catch (err) {
-      return {};
-    }
-  })();
-  const canManageAccess = savedUser.accountRole === 'super_admin';
+  const savedUser = getSessionUser();
+  const canManageAccess = hasPermission(savedUser.permissions, 'settings.users_access');
+  const canManageRolePermissions = hasPermission(savedUser.permissions, 'settings.permissions');
+  const canManageClinicSettings = hasPermission(savedUser.permissions, 'settings.clinic');
+  const canManageCatalog = hasPermission(savedUser.permissions, 'settings.catalog');
+  const canManageCommunication = hasPermission(savedUser.permissions, 'settings.communication');
+  const canManagePolicies = hasPermission(savedUser.permissions, 'settings.policies');
 
   useEffect(() => {
     localStorage.setItem('settings_notifications', JSON.stringify(notificationStack.slice(0, 30)));
@@ -145,7 +153,7 @@ const Settings = ({ data, setData, onLogout }) => {
   }, [setData]);
 
   useEffect(() => {
-    if (!canManageAccess) return;
+    if (!canManageAccess && !canManageRolePermissions) return;
 
     const clinicId = localStorage.getItem('clinicId');
     if (!clinicId) return;
@@ -153,10 +161,16 @@ const Settings = ({ data, setData, onLogout }) => {
     const fetchAccessContext = async () => {
       try {
         setAccessLoading(true);
-        const [usersRes, doctorsRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/users?clinicId=${clinicId}&actorId=${savedUser._id}`),
-          fetch(`${API_BASE_URL}/api/doctors/${clinicId}`)
-        ]);
+        const requests = [
+          canManageAccess
+            ? authFetch(`${API_BASE_URL}/api/users?clinicId=${clinicId}`)
+            : Promise.resolve({ ok: false }),
+          fetch(`${API_BASE_URL}/api/doctors/${clinicId}`),
+          canManageRolePermissions
+            ? authFetch(`${API_BASE_URL}/api/clinics/${clinicId}/permissions`)
+            : Promise.resolve({ ok: false })
+        ];
+        const [usersRes, doctorsRes, permissionsRes] = await Promise.all(requests);
 
         if (usersRes.ok) {
           setAccessUsers(await usersRes.json());
@@ -166,6 +180,11 @@ const Settings = ({ data, setData, onLogout }) => {
           const doctors = await doctorsRes.json();
           setData(prev => ({ ...prev, doctors }));
         }
+
+        if (permissionsRes.ok) {
+          const permissionsPayload = await permissionsRes.json();
+          setPermissionProfiles(permissionsPayload.permissionProfiles || { clinic_admin: {}, doctor: {} });
+        }
       } catch (err) {
         console.error('Failed to load access settings', err);
       } finally {
@@ -174,7 +193,7 @@ const Settings = ({ data, setData, onLogout }) => {
     };
 
     fetchAccessContext();
-  }, [canManageAccess, savedUser._id, setData]);
+  }, [canManageAccess, canManageRolePermissions, savedUser._id, setData]);
 
   const openEdit = (config) => {
     setModalError('');
@@ -395,12 +414,11 @@ const Settings = ({ data, setData, onLogout }) => {
 
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/users`, {
+      const response = await authFetch(`${API_BASE_URL}/api/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           clinicId,
-          actorId: savedUser._id,
           name,
           email,
           phone,
@@ -446,10 +464,10 @@ const Settings = ({ data, setData, onLogout }) => {
 
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/users/${user._id}/status`, {
+      const response = await authFetch(`${API_BASE_URL}/api/users/${user._id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clinicId, actorId: savedUser._id, status: nextStatus, activationPending: Boolean(user.activationPending), remark: statusRemark.trim() })
+        body: JSON.stringify({ clinicId, status: nextStatus, activationPending: Boolean(user.activationPending), remark: statusRemark.trim() })
       });
 
       const result = await response.json().catch(() => ({}));
@@ -478,10 +496,10 @@ const Settings = ({ data, setData, onLogout }) => {
     const clinicId = localStorage.getItem('clinicId');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/users/${user._id}/reset-link`, {
+      const response = await authFetch(`${API_BASE_URL}/api/users/${user._id}/reset-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clinicId, actorId: savedUser._id })
+        body: JSON.stringify({ clinicId })
       });
 
       const result = await response.json().catch(() => ({}));
@@ -497,6 +515,91 @@ const Settings = ({ data, setData, onLogout }) => {
       }
     } catch (err) {
       showNotification('Connection Error', 'error', 'Server connection error.');
+    }
+  };
+
+  const toggleRolePermission = (roleKey, permissionKey) => {
+    setPermissionProfiles(prev => ({
+      ...prev,
+      [roleKey]: {
+        ...(prev?.[roleKey] || {}),
+        [permissionKey]: !prev?.[roleKey]?.[permissionKey]
+      }
+    }));
+  };
+
+  const handleSavePermissionProfiles = async () => {
+    const clinicId = localStorage.getItem('clinicId');
+    if (!clinicId) return showNotification('Action Failed', 'error', 'Clinic ID missing.');
+
+    try {
+      setPermissionsLoading(true);
+      const response = await authFetch(`${API_BASE_URL}/api/clinics/${clinicId}/permissions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permissionProfiles })
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        setPermissionProfiles(result.permissionProfiles || permissionProfiles);
+        const nextSessionUser = {
+          ...savedUser,
+          permissionProfiles: result.permissionProfiles || permissionProfiles
+        };
+        localStorage.setItem('user', JSON.stringify(nextSessionUser));
+        showNotification('Permissions Updated', 'success', 'Role permissions saved successfully.');
+      } else {
+        showNotification('Action Failed', 'error', result.error || 'Failed to update role permissions.');
+      }
+    } catch (err) {
+      showNotification('Connection Error', 'error', 'Server connection error.');
+    } finally {
+      setPermissionsLoading(false);
+    }
+  };
+
+  const openTransferConfirm = (user) => {
+    setModalError('');
+    setTransferRemark('');
+    setTransferConfirmUser(user);
+  };
+
+  const closeTransferConfirm = () => {
+    setTransferConfirmUser(null);
+    setTransferRemark('');
+    setModalError('');
+  };
+
+  const handleTransferOwnership = async () => {
+    const clinicId = localStorage.getItem('clinicId');
+    if (!clinicId || !transferConfirmUser?._id) return;
+
+    try {
+      setLoading(true);
+      const response = await authFetch(`${API_BASE_URL}/api/users/${transferConfirmUser._id}/transfer-super-admin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId, reason: transferRemark.trim() })
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        if (result.actorSession) {
+          updateSessionFromAuth(result.actorSession);
+        }
+        showNotification('Ownership Transferred', 'success', `${transferConfirmUser.name} is now the clinic owner.`);
+        closeTransferConfirm();
+        window.setTimeout(() => window.location.reload(), 700);
+      } else {
+        showNotification('Action Failed', 'error', result.error || 'Failed to transfer ownership.');
+      }
+    } catch (err) {
+      showNotification('Connection Error', 'error', 'Server connection error.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -563,6 +666,32 @@ const Settings = ({ data, setData, onLogout }) => {
     clinic_admin: 'Clinic Admin',
     doctor: 'Doctor'
   };
+  const permissionGroups = [
+    {
+      title: 'Operations',
+      items: [
+        { key: 'appointments.view_all', label: 'View full appointment book' },
+        { key: 'appointments.manage', label: 'Create and manage appointments' },
+        { key: 'appointments.consult_own', label: 'Consult own appointment queue' },
+        { key: 'patients.view_all', label: 'View full patient list' },
+        { key: 'patients.view_own', label: 'View own patients only' },
+        { key: 'patients.create_edit', label: 'Create and edit patients' },
+        { key: 'doctors.view', label: 'View doctors module' },
+        { key: 'doctors.manage', label: 'Create and manage doctors' }
+      ]
+    },
+    {
+      title: 'Settings',
+      items: [
+        { key: 'settings.clinic', label: 'Manage clinic details and schedule' },
+        { key: 'settings.catalog', label: 'Manage clinical catalog' },
+        { key: 'settings.communication', label: 'Manage WhatsApp templates' },
+        { key: 'settings.policies', label: 'Manage policies' },
+        { key: 'settings.users_access', label: 'Manage users and access' },
+        { key: 'settings.permissions', label: 'Configure role permissions' }
+      ]
+    }
+  ];
 
   const handleClinicalCatalogUpdate = (itemType, updatedItem) => {
     const typeMap = {
@@ -607,7 +736,7 @@ const Settings = ({ data, setData, onLogout }) => {
         <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           
           {/* 1. CLINIC */}
-          {renderAccordion('clinic', 'Clinic Settings', Building2, 'text-blue-600', 
+          {canManageClinicSettings && renderAccordion('clinic', 'Clinic Settings', Building2, 'text-blue-600', 
             <>
               <div className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm">
                 <p className="text-[11px] font-bold text-slate-500 uppercase">Clinic Code</p>
@@ -644,7 +773,7 @@ const Settings = ({ data, setData, onLogout }) => {
             </>
           )}
 
-          {renderAccordion('clinical-library', 'Clinical Catalog', FileText, 'text-teal-600',
+          {canManageCatalog && renderAccordion('clinical-library', 'Clinical Catalog', FileText, 'text-teal-600',
             <>
               <SettingItem
                 title="Chief Complaints"
@@ -694,6 +823,15 @@ const Settings = ({ data, setData, onLogout }) => {
                         </p>
                       </div>
                       <div className="flex flex-col gap-1.5 flex-shrink-0">
+                        {!isProtectedOwner && user.status === 'Active' && (
+                          <button
+                            type="button"
+                            onClick={() => openTransferConfirm(user)}
+                            className="px-2.5 py-1.5 rounded-md text-[11px] font-bold transition-colors bg-amber-50 text-amber-700 hover:bg-amber-100"
+                          >
+                            Transfer Ownership
+                          </button>
+                        )}
                         <button
                           type="button"
                           disabled={user.status === 'Inactive'}
@@ -730,9 +868,49 @@ const Settings = ({ data, setData, onLogout }) => {
               </button>
             </>
           )}
+
+          {canManageRolePermissions && renderAccordion('permissions', 'Role Permissions', ShieldCheck, 'text-amber-600',
+            <div className="space-y-3">
+              <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
+                <p className="text-[12px] font-bold text-amber-800">Delegate daily operations without sharing ownership.</p>
+                <p className="text-[11px] text-amber-700 mt-1">These controls decide which parts of the workspace clinic admins and doctors can manage.</p>
+              </div>
+              {['clinic_admin', 'doctor'].map(roleKey => (
+                <div key={roleKey} className="p-3 bg-white border border-slate-200 rounded-lg shadow-sm space-y-3">
+                  <div>
+                    <h4 className="text-[13px] font-bold text-slate-800">{roleLabels[roleKey]}</h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Permission profile for all users in this role.</p>
+                  </div>
+                  {permissionGroups.map(group => (
+                    <div key={`${roleKey}-${group.title}`} className="space-y-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{group.title}</p>
+                      {group.items.map(item => (
+                        <label key={`${roleKey}-${item.key}`} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-slate-50 border border-slate-100">
+                          <span className="text-[12px] text-slate-700">{item.label}</span>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(permissionProfiles?.[roleKey]?.[item.key])}
+                            onChange={() => toggleRolePermission(roleKey, item.key)}
+                            className="accent-teal-600"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <button
+                onClick={handleSavePermissionProfiles}
+                disabled={permissionsLoading}
+                className="w-full py-2 text-[12px] font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors disabled:opacity-70"
+              >
+                {permissionsLoading ? 'Saving...' : 'Save Role Permissions'}
+              </button>
+            </div>
+          )}
           
           {/* 2. WHATSAPP SETTINGS (Renamed) */}
-          {renderAccordion('whatsapp', 'Whatsapp Settings', MessageCircle, 'text-green-600',
+          {canManageCommunication && renderAccordion('whatsapp', 'Whatsapp Settings', MessageCircle, 'text-green-600',
             <>
               {clinicTemplates.map((tpl, idx) => (
                 <SettingItem 
@@ -753,7 +931,7 @@ const Settings = ({ data, setData, onLogout }) => {
           )}
 
           {/* 3. POLICIES */}
-          {renderAccordion('policy', 'Policy Settings', FileText, 'text-purple-600',
+          {canManagePolicies && renderAccordion('policy', 'Policy Settings', FileText, 'text-purple-600',
             <>
               {clinicPolicies.map((pol, idx) => (
                 <SettingItem 
@@ -922,6 +1100,54 @@ const Settings = ({ data, setData, onLogout }) => {
               className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('phone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
               value={accessData.phone}
               onChange={e => setAccessData({ ...accessData, phone: e.target.value.replace(/\D/g, '') })}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!transferConfirmUser}
+        onClose={closeTransferConfirm}
+        title="Transfer Clinic Ownership"
+        footer={
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={closeTransferConfirm}
+              disabled={loading}
+              className="w-full bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70 hover:bg-slate-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleTransferOwnership}
+              disabled={loading}
+              className="w-full bg-amber-600 text-white py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70 hover:bg-amber-700 transition-colors"
+            >
+              {loading ? 'Transferring...' : 'Transfer Ownership'}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <AlertMessage message={modalError} />
+          <div className="bg-amber-50 border border-amber-100 rounded-lg p-3">
+            <p className="text-[13px] font-bold text-amber-900">{transferConfirmUser?.name}</p>
+            <p className="text-[11px] text-amber-800 mt-0.5">{transferConfirmUser?.email}</p>
+            <p className="text-[10px] text-amber-700 mt-1">{roleLabels[transferConfirmUser?.role] || transferConfirmUser?.role}</p>
+          </div>
+          <p className="text-[13px] text-slate-600 leading-relaxed">
+            This will make the selected user the new clinic owner and super admin. Your account will fall back to {savedUser.doctorId ? 'Doctor' : 'Clinic Admin'} access.
+          </p>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Reason</label>
+            <textarea
+              value={transferRemark}
+              onChange={e => setTransferRemark(e.target.value)}
+              placeholder="Optional note for audit history"
+              className="w-full p-2 border border-slate-200 rounded-lg text-[13px] h-24 outline-none focus:ring-1 focus:ring-amber-500 resize-none"
+              disabled={loading}
             />
           </div>
         </div>

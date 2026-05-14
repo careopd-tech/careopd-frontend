@@ -17,6 +17,7 @@ import {
   cacheClinicalCatalog,
   getCachedClinicalCatalog
 } from './utils/clinicalCatalog';
+import { getAvailableTabs } from './utils/permissions';
 
 const getCachedClinic = () => {
   try {
@@ -62,6 +63,13 @@ const App = () => {
 
   const hasLinkedDoctor = Boolean(savedUser.doctorId || localStorage.getItem('doctorId'));
   const isSoloWorkspace = data.clinic?.type === 'Solo' || (!data.clinic?.type && hasLinkedDoctor);
+  const availableTabs = getAvailableTabs({
+    userRole,
+    clinicType: data.clinic?.type,
+    hasLinkedDoctor,
+    permissions: savedUser.permissions || {}
+  });
+  const fallbackTab = availableTabs[0] || 'appointments';
 
   useEffect(() => {
     if (authState !== 'authenticated') {
@@ -108,10 +116,10 @@ const App = () => {
   }, [authState]);
 
   useEffect(() => {
-    if (activeTab === 'doctors' && isSoloWorkspace) {
-      setActiveTab('appointments');
+    if (!availableTabs.includes(activeTab)) {
+      setActiveTab(fallbackTab);
     }
-  }, [activeTab, isSoloWorkspace]);
+  }, [activeTab, availableTabs, fallbackTab]);
 
   useEffect(() => {
     sessionStorage.setItem('careopd_active_tab', activeTab);
@@ -150,7 +158,7 @@ const App = () => {
   // --- UNIFIED ROUTING ---
   let content;
   
-  const effectiveActiveTab = activeTab === 'doctors' && isSoloWorkspace ? 'appointments' : activeTab;
+  const effectiveActiveTab = availableTabs.includes(activeTab) ? activeTab : fallbackTab;
 
   if (effectiveActiveTab === 'appointments') {
     content = <Appointments data={data} setData={setData} onLogout={handleLogout}/>;
@@ -171,8 +179,10 @@ const App = () => {
           activeTab={effectiveActiveTab}
           setActiveTab={setActiveTab}
           userRole={userRole}
+          accountRole={savedUser.accountRole}
           clinicType={data.clinic?.type}
           hasLinkedDoctor={hasLinkedDoctor}
+          permissions={savedUser.permissions || {}}
         >
           {content}
         </Layout>

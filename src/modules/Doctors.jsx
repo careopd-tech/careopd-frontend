@@ -8,6 +8,8 @@ import FAB from '../components/ui/FAB';
 import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import API_BASE_URL from '../config';
+import { getSessionUser } from '../utils/auth';
+import { hasPermission } from '../utils/permissions';
 import {
   formatClinicScheduleSummary,
   generateTimeSlots,
@@ -37,6 +39,8 @@ const DoctorSkeleton = () => (
 );
 
 const Doctors = ({ data, setData, onLogout }) => {
+  const sessionUser = getSessionUser();
+  const canManageDoctors = hasPermission(sessionUser.permissions, 'doctors.manage');
   const [activeModal, setActiveModal] = useState(null);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isAddDoctorModalOpen, setIsAddDoctorModalOpen] = useState(false);
@@ -646,7 +650,7 @@ const Doctors = ({ data, setData, onLogout }) => {
         </div>
       </div>
 
-      <FAB icon={Plus} onClick={() => {
+      {canManageDoctors && <FAB icon={Plus} onClick={() => {
         setModalError('');
         setInvalidFields([]);
         setNewDoctor(getDefaultDoctorState());
@@ -654,7 +658,7 @@ const Doctors = ({ data, setData, onLogout }) => {
         setIsNewDept(false);
         setNewDeptName('');
         setIsAddDoctorModalOpen(true);
-      }} />
+      }} />}
 
       {/* FILTER MODAL */}
       <Modal isOpen={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)} title="Filter Doctors" footer={

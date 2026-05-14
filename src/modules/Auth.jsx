@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Mail, KeyRound, Eye, EyeOff, CheckCircle, ArrowLeft, Loader2 } from 'lucide-react';
 import AlertMessage from '../components/ui/AlertMessage';
 import API_BASE_URL from '../config';
+import { updateSessionFromAuth } from '../utils/auth';
 
 // FIXED: Added setUserRole to props matching App.jsx
 const Auth = ({ authState, setAuthState, setUserRole }) => {
@@ -170,21 +171,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
         const result = await response.json();
 
         if (response.ok && result.user) {
-          // --- NEW: Setup the Personas in LocalStorage ---
-          localStorage.setItem('user', JSON.stringify(result.user));
-          localStorage.setItem('clinicId', result.user.clinicId._id || result.user.clinicId);
-          localStorage.setItem('userName', result.user.name);
-          localStorage.setItem('userEmail', result.user.email || email.trim().toLowerCase());
-          
-          // Securely map the role and doctorId for RBAC UI logic
-          localStorage.setItem('userRole', result.user.role);
-          if (result.user.doctorId) {
-             localStorage.setItem('doctorId', result.user.doctorId);
-          } else {
-             localStorage.removeItem('doctorId');
-          }
-          
-          if (result.token) localStorage.setItem('token', result.token);
+          updateSessionFromAuth(result);
           
           // Update React State
           if (setUserRole) setUserRole(result.user.role);
@@ -321,9 +308,8 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
         
         {/* Header/Logo Section */}
         <div className="mb-8">
-          <div className="flex items-center justify-center gap-2.5 mb-4">
-            <div className="w-9 h-9 bg-teal-600 rounded-lg flex items-center justify-center text-white font-bold text-[17px]">C</div>
-            <span className="text-[21px] font-bold text-slate-800 tracking-tight">CareOPD</span>
+          <div className="flex items-center justify-center mb-4">
+            <img src="/icon_x192.png" alt="CareOPD Icon" className="w-16 h-16 object-contain" />
           </div>
           <h2 className="text-2xl font-bold text-slate-800 text-center leading-tight">
             {authState === 'login' && 'Welcome to CareOPD'}
@@ -332,7 +318,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
             {authState === 'activate' && (isLinkReset ? 'Reset Your Password' : 'Activate Your Account')}
           </h2>
           <p className="text-slate-500 text-sm mt-1.5 text-center">
-            {authState === 'login' && 'Sign in to access your administrative dashboard.'}
+            {authState === 'login' && 'Please sign in to manage your clinic'}
             {authState === 'forgot' && 'We will send a 6-digit OTP to your registered contact.'}
             {authState === 'reset' && 'Enter the OTP and set a new password.'}
             {authState === 'activate' && (isLinkReset ? `Set a new password for ${activationEmail}.` : `Create a password to activate ${activationEmail}.`)}

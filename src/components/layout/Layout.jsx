@@ -1,27 +1,21 @@
 import React from 'react';
 import { Calendar, Stethoscope, Users, Settings, Activity } from 'lucide-react';
+import { getAvailableTabs } from '../../utils/permissions';
 
-const Layout = ({ activeTab, setActiveTab, userRole, clinicType, hasLinkedDoctor, children }) => {
+const Layout = ({ activeTab, setActiveTab, userRole, clinicType, hasLinkedDoctor, permissions, children }) => {
   // DYNAMIC NAVIGATION BASED ON ROLE
   const getNavItems = () => {
-    if (userRole === 'doctor') {
-      return [
-        // Maps securely to the Appointments.jsx module under the hood
-        { id: 'appointments', label: 'Queue & Schedule', mobileLabel: 'Queue', icon: Activity },
-        { id: 'patients', label: 'My Patients', mobileLabel: 'Patients', icon: Users },
-        { id: 'settings', label: 'Settings', mobileLabel: 'Settings', icon: Settings },
-      ];
-    }
+    const availableTabs = getAvailableTabs({ userRole, clinicType, hasLinkedDoctor, permissions });
+    const navConfig = {
+      appointments: userRole === 'doctor'
+        ? { id: 'appointments', label: 'Queue & Schedule', mobileLabel: 'Queue', icon: Activity }
+        : { id: 'appointments', label: 'Appointments', mobileLabel: 'Appts', icon: Calendar },
+      doctors: { id: 'doctors', label: 'Doctors', mobileLabel: 'Doctors', icon: Stethoscope },
+      patients: { id: 'patients', label: userRole === 'doctor' ? 'My Patients' : 'Patients', mobileLabel: 'Patients', icon: Users },
+      settings: { id: 'settings', label: 'Settings', mobileLabel: 'Settings', icon: Settings }
+    };
 
-    const isSoloWorkspace = clinicType === 'Solo' || (!clinicType && hasLinkedDoctor);
-    
-    // Default Admin Navigation
-    return [
-      { id: 'appointments', label: 'Appointments', mobileLabel: 'Appts', icon: Calendar },
-      !isSoloWorkspace && { id: 'doctors', label: 'Doctors', mobileLabel: 'Doctors', icon: Stethoscope },
-      { id: 'patients', label: 'Patients', mobileLabel: 'Patients', icon: Users },
-      { id: 'settings', label: 'Settings', mobileLabel: 'Settings', icon: Settings },
-    ].filter(Boolean);
+    return availableTabs.map(tabId => navConfig[tabId]).filter(Boolean);
   };
 
   const currentNavItems = getNavItems();

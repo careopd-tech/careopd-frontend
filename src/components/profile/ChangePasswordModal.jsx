@@ -3,6 +3,7 @@ import { Loader2, CheckCircle, EyeOff, Eye } from 'lucide-react';
 import Modal from '../ui/Modal';
 import AlertMessage from '../ui/AlertMessage';
 import API_BASE_URL from '../../config';
+import { authFetch, getSessionUser, updateSessionFromAuth } from '../../utils/auth';
 
 // --- Helper Component (Moved from MyAccountModal) ---
 const PasswordField = ({ placeholder, value, onChange, isVisible, onToggle }) => (
@@ -80,7 +81,7 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/users/${userId}/change-password?clinicId=${clinicId}`, {
+      const response = await authFetch(`${API_BASE_URL}/api/users/${userId}/change-password?clinicId=${clinicId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -92,6 +93,9 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
       const data = await response.json();
 
       if (response.ok) {
+        if (data.token) {
+          updateSessionFromAuth({ user: getSessionUser(), token: data.token });
+        }
         setSuccess('Password updated successfully!');
         setPasswords({ current: '', new: '', confirm: '' });
         setTimeout(() => onClose(), 1500);

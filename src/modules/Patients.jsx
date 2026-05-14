@@ -9,6 +9,8 @@ import FAB from '../components/ui/FAB';
 import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import API_BASE_URL from '../config';
+import { getSessionUser } from '../utils/auth';
+import { hasPermission } from '../utils/permissions';
 
 
 
@@ -21,6 +23,8 @@ const Patients = ({ data, setData, onLogout }) => {
   const clinicId = localStorage.getItem('clinicId');
   const userRole = localStorage.getItem('userRole') || 'admin';
   const doctorId = localStorage.getItem('doctorId') || '';
+  const sessionUser = getSessionUser();
+  const canManagePatients = hasPermission(sessionUser.permissions, 'patients.create_edit');
 
   const rbacQuery = `&userRole=${userRole}&doctorId=${doctorId}`;
 
@@ -450,7 +454,7 @@ const renderPatientCard = (p) => {
         </div>
       </div>
 
-      {userRole === 'admin' && (
+      {canManagePatients && (
         <FAB icon={Plus} onClick={() => { setNewPatient(defaultPatientState); setAddPatientTab('demographics'); setIsAddPatientModalOpen(true); }} />
       )}
 
