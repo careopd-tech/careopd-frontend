@@ -457,8 +457,8 @@ const ClinicalLibraryModal = ({
           };
           const showSecondaryAction = supportsPin || isEditing;
           return (
-            <div key={key} className="py-2.5 px-0 bg-white border border-slate-200 rounded-lg shadow-sm">
-              <div className="flex items-center gap-1.5">
+            <div key={key} className="min-h-[42px] py-1 px-0 bg-white border border-slate-200 rounded-lg shadow-sm">
+              <div className="flex items-center gap-1.5 ml-2 mr-1">
                 <input
                   type="text"
                   value={isEditing ? draft.label : item.label || ''}
@@ -466,8 +466,8 @@ const ClinicalLibraryModal = ({
                   disabled={!isEditing || isSaving}
                   className={`flex-1 min-w-0 ${inlineInputClass} ${
                     isEditing
-                      ? 'border-teal-300 bg-white text-slate-800 focus:ring-1 focus:ring-teal-500'
-                      : 'border-transparent bg-slate-50 text-slate-800'
+                      ? '!h-[30px] pl-1 pr-1 border-teal-300 bg-white text-slate-800 focus:ring-1 focus:ring-teal-500'
+                      : '!h-[30px] pl-1 pr-1 border-transparent bg-slate-50 text-slate-800'
                   }`}
                   placeholder="Item name"
                 />
