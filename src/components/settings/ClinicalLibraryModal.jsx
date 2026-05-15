@@ -25,6 +25,7 @@ const ClinicalLibraryModal = ({
   const [drafts, setDrafts] = useState({});
   const [pendingItems, setPendingItems] = useState([]);
   const [pendingGroups, setPendingGroups] = useState([]);
+  const [groupSlots, setGroupSlots] = useState([]);
   const [expandedGroups, setExpandedGroups] = useState({});
   const [error, setError] = useState('');
   const [savingKey, setSavingKey] = useState('');
@@ -45,12 +46,28 @@ const ClinicalLibraryModal = ({
   );
 
   const getItemGroup = (item) => normalizeText(item.group || item.category || 'General') || 'General';
+  const getPendingGroupKey = (groupId) => `pending-${groupId}`;
+  const buildGroupSlots = (catalogItems = []) => {
+    const slots = [];
+    const seen = new Set();
 
-  const sortItemsByLabel = (catalogItems = []) => catalogItems
-    .slice()
-    .sort((a, b) => String(a.label || '').localeCompare(String(b.label || ''), undefined, { sensitivity: 'base' }));
+    catalogItems.forEach((item, index) => {
+      const groupName = getItemGroup(item);
+      const normalizedName = normalizeKey(groupName);
+      if (seen.has(normalizedName)) return;
 
-  const getInitialOrderedItems = (catalogItems = []) => sortItemsByLabel(catalogItems);
+      seen.add(normalizedName);
+      slots.push({
+        slotId: normalizedName || `group-${index}`,
+        name: groupName,
+        pendingGroupId: ''
+      });
+    });
+
+    return slots;
+  };
+
+  const getInitialOrderedItems = (catalogItems = []) => catalogItems.slice();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -59,6 +76,7 @@ const ClinicalLibraryModal = ({
     setDrafts({});
     setPendingItems([]);
     setPendingGroups([]);
+    setGroupSlots(buildGroupSlots(items));
     setExpandedGroups({ General: true });
     setError('');
     setSavingKey('');
@@ -86,6 +104,38 @@ const ClinicalLibraryModal = ({
     });
   }, [items, isOpen, itemType]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setGroupSlots((prev) => {
+      const next = [...prev];
+      let changed = false;
+
+      items.forEach((item, index) => {
+        const groupName = getItemGroup(item);
+        const normalizedName = normalizeKey(groupName);
+        const existingIndex = next.findIndex((slot) => normalizeKey(slot.name) === normalizedName);
+
+        if (existingIndex >= 0) {
+          if (!next[existingIndex].name && groupName) {
+            next[existingIndex] = { ...next[existingIndex], name: groupName };
+            changed = true;
+          }
+          return;
+        }
+
+        next.push({
+          slotId: normalizedName || `group-${index}`,
+          name: groupName,
+          pendingGroupId: ''
+        });
+        changed = true;
+      });
+
+      return changed ? next : prev;
+    });
+  }, [items, isOpen, itemType]);
+
   const displayItems = useMemo(() => {
     const pendingDisplayItems = pendingItems.map((item) => ({ ...item, isNew: true }));
 
@@ -105,6 +155,7 @@ const ClinicalLibraryModal = ({
 
   const groupedCatalog = useMemo(() => {
     const groupMap = new Map();
+    const groupOrder = [];
 
     const ensureGroup = (key, name, extras = {}) => {
       if (!groupMap.has(key)) {
@@ -113,37 +164,28 @@ const ClinicalLibraryModal = ({
           name,
           items: [],
           pendingGroupId: extras.pendingGroupId || '',
-          isPendingGroup: Boolean(extras.isPendingGroup)
+          isPendingGroup: Boolean(extras.pendingGroupId)
         });
+        groupOrder.push(key);
+      } else if (name && !groupMap.get(key).name) {
+        groupMap.get(key).name = name;
       }
       return groupMap.get(key);
     };
 
+    groupSlots.forEach((slot) => {
+      ensureGroup(slot.slotId, slot.name, { pendingGroupId: slot.pendingGroupId || '' });
+    });
+
     displayItems.forEach((item) => {
       const groupName = getItemGroup(item);
-      const groupKey = normalizeKey(groupName) || 'general';
+      const matchingSlot = groupSlots.find((slot) => normalizeKey(slot.name) === normalizeKey(groupName));
+      const groupKey = matchingSlot?.slotId || normalizeKey(groupName) || 'general';
       ensureGroup(groupKey, groupName).items.push(item);
     });
 
-    pendingGroups.forEach((group) => {
-      const normalizedName = normalizeKey(group.name);
-      if (normalizedName && groupMap.has(normalizedName)) {
-        const existing = groupMap.get(normalizedName);
-        existing.pendingGroupId = group.id;
-        return;
-      }
-
-      const fallbackName = group.name || 'New Category Group';
-      const groupKey = normalizedName || `pending-${group.id}`;
-      ensureGroup(groupKey, fallbackName, { pendingGroupId: group.id, isPendingGroup: true });
-    });
-
-    return Array.from(groupMap.values()).sort((a, b) => {
-      if (a.name === 'General') return -1;
-      if (b.name === 'General') return 1;
-      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-    });
-  }, [displayItems, pendingGroups]);
+    return groupOrder.map((key) => groupMap.get(key)).filter(Boolean);
+  }, [displayItems, groupSlots]);
 
   const filteredGroups = useMemo(() => {
     const normalizedSearch = normalizeKey(searchQuery);
@@ -192,9 +234,25 @@ const ClinicalLibraryModal = ({
   };
 
   const handleAddGroup = () => {
+    const editingGroup = pendingGroups.find((group) => group.isEditing);
+    if (editingGroup) {
+      setExpandedGroups((prev) => ({ ...prev, [getPendingGroupKey(editingGroup.id)]: true }));
+      setSearchQuery('');
+      setError('');
+      window.requestAnimationFrame(() => {
+        listRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      return;
+    }
+
     const id = `group-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    setPendingGroups((prev) => [{ id, name: '' }, ...prev]);
-    setExpandedGroups((prev) => ({ ...prev, [`pending-${id}`]: true }));
+    setPendingGroups((prev) => [{ id, name: '', isEditing: true }, ...prev]);
+    setGroupSlots((prev) => [{
+      slotId: getPendingGroupKey(id),
+      name: '',
+      pendingGroupId: id
+    }, ...prev]);
+    setExpandedGroups((prev) => ({ ...prev, [getPendingGroupKey(id)]: true }));
     setSearchQuery('');
     setError('');
     window.requestAnimationFrame(() => {
@@ -206,6 +264,60 @@ const ClinicalLibraryModal = ({
     setPendingGroups((prev) => prev.map((group) => (
       group.id === groupId ? { ...group, name: value } : group
     )));
+    setGroupSlots((prev) => prev.map((slot) => (
+      slot.pendingGroupId === groupId ? { ...slot, name: value } : slot
+    )));
+  };
+
+  const handleDeleteGroup = (group) => {
+    if (group.visibleItems.length > 0) {
+      return;
+    }
+
+    if (group.pendingGroupId) {
+      setPendingGroups((prev) => prev.filter((entry) => entry.id !== group.pendingGroupId));
+    }
+
+    setGroupSlots((prev) => prev.filter((slot) => slot.slotId !== group.id));
+    setExpandedGroups((prev) => {
+      const next = { ...prev };
+      delete next[group.id];
+      return next;
+    });
+    setError('');
+  };
+
+  const handleSaveGroup = (groupId) => {
+    const targetGroup = pendingGroups.find((group) => group.id === groupId);
+    const groupName = normalizeText(targetGroup?.name || '');
+
+    if (!groupName) {
+      setError('Category group name is required.');
+      return;
+    }
+
+    const normalizedGroupName = normalizeKey(groupName);
+    const duplicateExists = groupedCatalog.some((group) => (
+      group.pendingGroupId !== groupId && normalizeKey(group.name) === normalizedGroupName
+    ));
+
+    if (duplicateExists) {
+      setError('A category group with this name already exists.');
+      return;
+    }
+
+    setPendingGroups((prev) => prev.map((group) => (
+      group.id === groupId ? { ...group, name: groupName, isEditing: false } : group
+    )));
+    setGroupSlots((prev) => prev.map((slot) => (
+      slot.pendingGroupId === groupId ? { ...slot, name: groupName } : slot
+    )));
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [getPendingGroupKey(groupId)]: true,
+      [normalizedGroupName]: true
+    }));
+    setError('');
   };
 
   const handleAddItem = (group) => {
@@ -392,8 +504,55 @@ const ClinicalLibraryModal = ({
   };
 
   const renderGroupHeader = (group) => {
+    const pendingGroup = group.pendingGroupId
+      ? pendingGroups.find((entry) => entry.id === group.pendingGroupId)
+      : null;
+    const isEditingGroup = Boolean(pendingGroup?.isEditing);
     const isExpanded = isSearchMode ? true : Boolean(expandedGroups[group.id]);
     const Count = group.visibleItems.length;
+
+    if (isEditingGroup) {
+      return (
+        <div className="w-full flex items-center gap-1.5 px-3 py-2.5 bg-white border-b border-slate-100">
+          <input
+            type="text"
+            value={pendingGroup?.name || ''}
+            onChange={(event) => handlePendingGroupNameChange(pendingGroup.id, event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                handleSaveGroup(pendingGroup.id);
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                handleDeleteGroup(group);
+              }
+            }}
+            placeholder="Add category group name"
+            autoFocus
+            className={`flex-1 min-w-0 ${inlineInputClass} !h-[30px] pl-2 pr-2 border-teal-300 bg-white text-slate-800 focus:ring-1 focus:ring-teal-500`}
+          />
+          <button
+            type="button"
+            onClick={() => handleSaveGroup(pendingGroup.id)}
+            className={`${actionButtonClass} text-teal-700 hover:bg-teal-50`}
+            aria-label="Save category group"
+            title="Save"
+          >
+            <Save size={12} />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDeleteGroup(group)}
+            className={`${actionButtonClass} text-slate-500 hover:bg-slate-100`}
+            aria-label="Cancel category group"
+            title="Cancel"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      );
+    }
 
     return (
       <button
@@ -422,28 +581,33 @@ const ClinicalLibraryModal = ({
       ? pendingGroups.find((entry) => entry.id === group.pendingGroupId)
       : null;
 
+    if (pendingGroup?.isEditing) {
+      return null;
+    }
+
+    const canDeleteGroup = group.visibleItems.length === 0;
+
     return (
       <div className="p-2 space-y-2 bg-slate-50/60">
-        {pendingGroup && (
-          <div className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm">
-            <label className="type-label block text-slate-500 uppercase mb-1">Category Group Name</label>
-            <input
-              type="text"
-              value={pendingGroup.name}
-              onChange={(event) => handlePendingGroupNameChange(pendingGroup.id, event.target.value)}
-              placeholder="Enter category group name"
-              className={`w-full ${inlineInputClass} border-teal-200 bg-white focus:ring-1 focus:ring-teal-500`}
-            />
-          </div>
-        )}
+        <div className={`grid gap-2 ${canDeleteGroup ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <button
+            type="button"
+            onClick={() => handleAddItem(group)}
+            className="type-label w-full py-2 rounded-lg border border-dashed border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors inline-flex items-center justify-center gap-2"
+          >
+            <Plus size={14} /> Add Item
+          </button>
 
-        <button
-          type="button"
-          onClick={() => handleAddItem(group)}
-          className="type-label w-full py-2 rounded-lg border border-dashed border-teal-200 bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors inline-flex items-center justify-center gap-2"
-        >
-          <Plus size={14} /> Add Item
-        </button>
+          {canDeleteGroup && (
+            <button
+              type="button"
+              onClick={() => handleDeleteGroup(group)}
+              className="type-label w-full py-2 rounded-lg border border-dashed border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors inline-flex items-center justify-center gap-2"
+            >
+              <Trash2 size={14} /> Delete This Group
+            </button>
+          )}
+        </div>
 
         {group.visibleItems.length > 0 ? group.visibleItems.map((item) => {
           const key = getItemKey(item);
@@ -542,6 +706,7 @@ const ClinicalLibraryModal = ({
         setDrafts({});
         setPendingItems([]);
         setPendingGroups([]);
+        setGroupSlots([]);
         setExpandedGroups({});
         setError('');
         setSavingKey('');
