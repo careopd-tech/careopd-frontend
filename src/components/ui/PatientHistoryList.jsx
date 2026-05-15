@@ -104,9 +104,9 @@ const PatientHistoryList = ({
                         >
                             <span className={`text-[11px] font-bold ${isLatest ? 'text-teal-800' : 'text-slate-700'}`}>{visit.date}</span>
                             {!hideDoctorName && (
-                                <span className="text-[9px] text-slate-500 truncate w-full text-left">Dr. {visit.doctorId?.name?.replace(/^Dr\.\s*/i, '') || 'Unknown'}</span>
+                                <span className="text-[11px] text-slate-500 truncate w-full text-left">Dr. {visit.doctorId?.name?.replace(/^Dr\.\s*/i, '') || 'Unknown'}</span>
                             )}
-                            <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded tracking-wider uppercase mt-0.5 border ${styling.badge}`}>{uiStatus}</span>
+                            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded tracking-wider uppercase mt-0.5 border ${styling.badge}`}>{uiStatus}</span>
                         </button>
                     );
                 })}
@@ -187,7 +187,7 @@ const PatientHistoryList = ({
                                     <span className={`text-[13px] font-bold ${canExpand ? 'text-slate-800' : 'text-slate-500'}`}>
                                         {visit.date} • {visit.time}
                                     </span>
-                                    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border whitespace-nowrap flex-shrink-0 ${styling.badge}`}>
+                                    <span className={`text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border whitespace-nowrap flex-shrink-0 ${styling.badge}`}>
                                         {uiStatus}
                                     </span>
                                 </div>
@@ -201,7 +201,7 @@ const PatientHistoryList = ({
 
                                 {/* ROW 3: Action Button */}
                                     {canExpand && (
-                                        <div className={`w-full h-7 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 transition-colors
+                                        <div className={`w-full h-7 text-[11px] font-bold rounded-lg flex items-center justify-center gap-1 transition-colors
                                             ${isExpanded ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}
                                         `}>
                                             {isFetching ? (
@@ -220,11 +220,11 @@ const PatientHistoryList = ({
                                     {/* 1. Vitals */}
                                     {(visit.vitals?.bp || visit.vitals?.temp || visit.vitals?.weight) && (
                                         <div>
-                                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Activity size={12} /> Vitals</h4>
+                                            <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><Activity size={12} /> Vitals</h4>
                                             <div className="flex gap-4 bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
-                                                {visit.vitals.bp && <div><span className="text-[9px] text-slate-400 uppercase font-bold block">BP</span><span className="text-[11px] font-bold text-slate-800">{visit.vitals.bp}</span></div>}
-                                                {visit.vitals.temp && <div><span className="text-[9px] text-slate-400 uppercase font-bold block">Temp</span><span className="text-[11px] font-bold text-slate-800">{visit.vitals.temp}°F</span></div>}
-                                                {visit.vitals.weight && <div><span className="text-[9px] text-slate-400 uppercase font-bold block">Weight</span><span className="text-[11px] font-bold text-slate-800">{visit.vitals.weight} kg</span></div>}
+                                                {visit.vitals.bp && <div><span className="text-[11px] text-slate-400 uppercase font-bold block">BP</span><span className="text-[11px] font-bold text-slate-800">{visit.vitals.bp}</span></div>}
+                                                {visit.vitals.temp && <div><span className="text-[11px] text-slate-400 uppercase font-bold block">Temp</span><span className="text-[11px] font-bold text-slate-800">{visit.vitals.temp}°F</span></div>}
+                                                {visit.vitals.weight && <div><span className="text-[11px] text-slate-400 uppercase font-bold block">Weight</span><span className="text-[11px] font-bold text-slate-800">{visit.vitals.weight} kg</span></div>}
                                             </div>
                                         </div>
                                     )}
@@ -232,10 +232,10 @@ const PatientHistoryList = ({
                                     {/* 2. Clinical Notes */}
                                     {(visit.complaints || visit.diagnosis) && (
                                         <div>
-                                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><FileText size={12} /> Notes</h4>
+                                            <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><FileText size={12} /> Notes</h4>
                                             <div className="bg-white p-2 rounded-lg border border-slate-100 shadow-sm space-y-2">
-                                                {visit.complaints && <div><span className="text-[9px] text-slate-400 uppercase font-bold block">Complaints</span><span className="text-[11px] font-medium text-slate-800">{visit.complaints}</span></div>}
-                                                {visit.diagnosis && <div><span className="text-[9px] text-slate-400 uppercase font-bold block">Diagnosis</span><span className="text-[11px] font-bold text-teal-800">{visit.diagnosis}</span></div>}
+                                                {visit.complaints && <div><span className="text-[11px] text-slate-400 uppercase font-bold block">Complaints</span><span className="text-[11px] font-medium text-slate-800">{visit.complaints}</span></div>}
+                                                {visit.diagnosis && <div><span className="text-[11px] text-slate-400 uppercase font-bold block">Diagnosis</span><span className="text-[11px] font-bold text-teal-800">{visit.diagnosis}</span></div>}
                                             </div>
                                         </div>
                                     )}
@@ -243,15 +243,15 @@ const PatientHistoryList = ({
                                     {/* 3. Medicines */}
                                     {visit.medicines && visit.medicines.length > 0 && (
                                         <div>
-                                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex justify-between items-center"><span className="flex items-center gap-1.5"><Pill size={12} /> Rx</span><span className="text-[9px] text-teal-600 bg-teal-50 px-1.5 rounded font-bold">{visit.medicines.length}</span></h4>
+                                            <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex justify-between items-center"><span className="flex items-center gap-1.5"><Pill size={12} /> Rx</span><span className="text-[11px] text-teal-600 bg-teal-50 px-1.5 rounded font-bold">{visit.medicines.length}</span></h4>
                                             <div className="border border-slate-100 rounded-lg overflow-hidden bg-white shadow-sm">
                                                 {visit.medicines.map((med, index) => (
                                                     <div key={index} className="p-2 border-b border-slate-50 last:border-0">
                                                         <div className="text-[11px] font-bold text-slate-800">{index + 1}. {med.name}</div>
-                                                        <div className="text-[10px] text-teal-700 font-medium flex gap-1 items-center mt-0.5">
+                                                        <div className="text-[11px] text-teal-700 font-medium flex gap-1 items-center mt-0.5">
                                                             <span>{med.route}</span>•<span>{getFormattedUnit(med)}</span>•<span>{med.frequency}</span>•<span className="text-slate-500">{med.timing}</span>
                                                         </div>
-                                                        <div className="text-[9px] text-slate-500 mt-1 flex gap-1 items-center">
+                                                        <div className="text-[11px] text-slate-500 mt-1 flex gap-1 items-center">
                                                             <span className="font-bold text-slate-600 bg-slate-100 px-1 rounded">{med.duration}</span>
                                                             {med.instructions && <span className="italic">| {med.instructions}</span>}
                                                         </div>
@@ -264,10 +264,10 @@ const PatientHistoryList = ({
                                     {/* 4. Labs */}
                                     {visit.labTests && visit.labTests.length > 0 && (
                                         <div>
-                                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><FlaskConical size={12} /> Labs</h4>
+                                            <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><FlaskConical size={12} /> Labs</h4>
                                             <div className="flex flex-wrap gap-1 bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
                                                 {visit.labTests.map((test, idx) => (
-                                                    <span key={idx} className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-medium border border-blue-100">{test.name}</span>
+                                                    <span key={idx} className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[11px] font-medium border border-blue-100">{test.name}</span>
                                                 ))}
                                             </div>
                                         </div>

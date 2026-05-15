@@ -768,21 +768,21 @@ const Appointments = ({ data, setData, onLogout }) => {
           <div className="flex justify-between items-start mb-1.5">
             <div className="flex items-center gap-1.5 mt-0.5">
               <Clock size={12} className="text-slate-400" />
-              <span className="text-[13px] font-bold text-slate-700">{appt.time}</span>
-              <span className="text-[10px] text-slate-400">| {appt.date}</span>
+              <span className="type-body text-slate-700">{appt.time}</span>
+              <span className="type-label text-slate-400">| {appt.date}</span>
             </div>
-            {isNoShow ? <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide">No Show</span> : <StatusBadge status={appt.status} />}
+            {isNoShow ? <span className="type-utility bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase">No Show</span> : <StatusBadge status={appt.status} />}
           </div>
-          <h4 className="font-bold text-[13px] text-slate-800 leading-tight">{getPatientName(appt.patientId)}</h4>
-          <p className="text-[11px] text-slate-500 leading-tight mt-0.5">{appt.type || 'Consultation'} with <span className="text-teal-600 font-medium">{getDoctorName(appt.doctorId)}</span></p>
+          <h4 className="type-card-title text-slate-800 leading-tight">{getPatientName(appt.patientId)}</h4>
+          <p className="type-label text-slate-500 leading-tight mt-0.5">{appt.type || 'Consultation'} with <span className="text-teal-600 font-medium">{getDoctorName(appt.doctorId)}</span></p>
         </div>
         {showActions && (
           <div className="flex flex-row md:flex-col gap-1.5 border-t md:border-t-0 md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 justify-end flex-shrink-0 md:w-32">
             {/* ADDED: ADMIN SECURITY LOCK */}
             {isAdmin && (
               <>
-                <button onClick={() => { setActionAppt(appt); setIsCancelModalOpen(true); }} className="flex-1 md:flex-none w-full h-7 text-[10px] font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg whitespace-nowrap">Cancel</button>
-                <button onClick={() => { setActionAppt(appt); setRescheduleData({ date: appt.date, time: appt.time }); setIsRescheduleModalOpen(true); }} className="flex-1 md:flex-none w-full h-7 text-[10px] font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap"><CalendarDays size={12} /> Reschedule</button>
+                <button onClick={() => { setActionAppt(appt); setIsCancelModalOpen(true); }} className="type-label flex-1 md:flex-none w-full h-7 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg whitespace-nowrap">Cancel</button>
+                <button onClick={() => { setActionAppt(appt); setRescheduleData({ date: appt.date, time: appt.time }); setIsRescheduleModalOpen(true); }} className="type-label flex-1 md:flex-none w-full h-7 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap"><CalendarDays size={12} /> Reschedule</button>
               </>
             )}
 
@@ -796,7 +796,7 @@ const Appointments = ({ data, setData, onLogout }) => {
                   setActiveConsultationAppt({ ...appt, patientId: patientRef || { name: 'Unknown Patient' } });
                   setIsConsultationPadOpen(true);
                 }} 
-                className="flex-1 md:flex-none w-full h-7 text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors shadow-sm"
+                className="type-label flex-1 md:flex-none w-full h-7 text-white bg-teal-600 hover:bg-teal-700 rounded-lg flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors shadow-sm"
               >
                 <Activity size={14} /> Consult
               </button>
@@ -807,7 +807,7 @@ const Appointments = ({ data, setData, onLogout }) => {
           <div className="flex flex-row md:flex-col gap-1.5 border-t md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 justify-end flex-shrink-0 md:w-32">
             {/* ADDED: ADMIN SECURITY LOCK */}
             {isAdmin && (
-              <button onClick={() => handleRebook(appt)} className="flex-1 md:flex-none w-full h-7 text-[10px] font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm rounded-lg flex items-center justify-center gap-1 whitespace-nowrap"><RefreshCw size={12} /> ReBook</button>
+              <button onClick={() => handleRebook(appt)} className="type-label flex-1 md:flex-none w-full h-7 text-white bg-blue-600 hover:bg-blue-700 shadow-sm rounded-lg flex items-center justify-center gap-1 whitespace-nowrap"><RefreshCw size={12} /> ReBook</button>
             )}
           </div>
         )}
@@ -832,12 +832,12 @@ const Appointments = ({ data, setData, onLogout }) => {
         <button onClick={() => handleToggleSection(id)} className={`flex items-center justify-between px-3 py-2.5 bg-white hover:bg-slate-50 transition-colors z-10 shadow-sm border-b outline-none ${isExpanded ? 'border-slate-100' : 'border-transparent'}`}>
           <div className={`flex items-center gap-1.5 ${colorClass}`}>
             <Icon size={14} />
-            <h3 className="text-[11px] font-bold uppercase tracking-wider">
+            <h3 className="type-section-title">
               {title}
-              {isFiltering && <span className="text-red-500 ml-1.5 text-[10px]">(Filtered)</span>}
+              {isFiltering && <span className="type-label text-red-500 ml-1.5">(Filtered)</span>}
             </h3>
-            {id === 'today' && <span className="bg-teal-100 text-teal-700 text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-1.5">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
-            <span className="ml-1.5 text-[10px] text-slate-400 font-normal">{(!loading || items.length > 0) ? `(${displayCount})` : ''}</span>
+            {id === 'today' && <span className="type-label bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full ml-1.5">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
+            <span className="type-label ml-1.5 text-slate-400 font-normal">{(!loading || items.length > 0) ? `(${displayCount})` : ''}</span>
           </div>
           <div className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}><ChevronDown size={14} className="text-slate-400" /></div>
         </button>
@@ -847,12 +847,12 @@ const Appointments = ({ data, setData, onLogout }) => {
             {isSectionLoading && items.length === 0 && (
               <div className="flex flex-col items-center justify-center py-8 text-slate-400">
                 <Loader2 size={24} className="animate-spin text-teal-600 mb-2" />
-                <span className="text-[10px] font-medium">Loading records...</span>
+                <span className="type-label">Loading records...</span>
               </div>
             )}
 
             {id === 'previous' && items.length > 0 && items.length < metaCounts.previous && (
-              <button onClick={() => fetchBatch(id)} disabled={isSectionLoading} className="w-full py-1.5 mb-2 text-[10px] font-bold text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5 flex-shrink-0">
+              <button onClick={() => fetchBatch(id)} disabled={isSectionLoading} className="type-label w-full py-1.5 mb-2 text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5 flex-shrink-0">
                 {isSectionLoading ? <Loader2 size={12} className="animate-spin" /> : <ChevronDown className="rotate-180" size={12} />}
                 {isSectionLoading ? 'Loading...' : 'Load Older'}
               </button>
@@ -860,10 +860,10 @@ const Appointments = ({ data, setData, onLogout }) => {
 
             {visibleItems.length > 0 && visibleItems.map(renderAppointmentCard)}
 
-            {!isSectionLoading && visibleItems.length === 0 && <div className="text-center py-6 text-slate-400 text-[11px] italic">No appointments</div>}
+            {!isSectionLoading && visibleItems.length === 0 && <div className="type-secondary text-center py-6 text-slate-400 italic">No appointments</div>}
 
             {id !== 'previous' && id !== 'today' && items.length > 0 && items.length < metaCounts.upcoming && (
-              <button onClick={() => fetchBatch(id)} disabled={isSectionLoading} className="w-full py-1.5 mt-2 text-[10px] font-bold text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5 flex-shrink-0">
+              <button onClick={() => fetchBatch(id)} disabled={isSectionLoading} className="type-label w-full py-1.5 mt-2 text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5 flex-shrink-0">
                 {isSectionLoading ? <Loader2 size={12} className="animate-spin" /> : <ChevronDown size={12} />}
                 {isSectionLoading ? 'Loading...' : 'Load More'}
               </button>
@@ -882,7 +882,7 @@ const Appointments = ({ data, setData, onLogout }) => {
       {notification && (
         <div className={`fixed top-6 right-6 z-[100] px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 bg-white border-l-4 ${notification.type === 'success' ? 'border-teal-500 text-teal-800' : 'border-red-500 text-red-800'}`}>
           {notification.type === 'success' ? <CheckCircle size={20} className="text-teal-500" /> : <AlertCircle size={20} className="text-red-500" />}
-          <span className="text-[13px] font-bold">{notification.message}</span>
+          <span className="type-body">{notification.message}</span>
         </div>
       )}
 
@@ -916,8 +916,8 @@ const Appointments = ({ data, setData, onLogout }) => {
                   onClick={() => handleStatsClick(s.key)}
                   className={`flex-1 p-1.5 rounded-xl border duration-200 text-center flex flex-col items-center justify-center ${s.color} ${isActive ? 'border-slate-400 ring-2 ring-slate-200 shadow-inner' : 'border-slate-100 hover:shadow-sm'}`}
                 >
-                  <div className="text-[17px] font-bold leading-tight">{s.val}</div>
-                  <div className="text-[9px] font-semibold uppercase mt-0.5">{s.label}</div>
+                  <div className="type-page-title leading-tight">{s.val}</div>
+                  <div className="type-utility uppercase mt-0.5">{s.label}</div>
                 </button>
               );
             })}
@@ -929,8 +929,8 @@ const Appointments = ({ data, setData, onLogout }) => {
               <div className="flex items-center justify-between px-3 py-2.5 bg-white border-b border-slate-100 shadow-sm flex-none">
                 <div className="flex items-center gap-1.5">
                   <Clock size={14} className="text-teal-700" />
-                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-teal-700">Search Results {hasActiveFilters && <span className="text-red-500 ml-1.5 text-[10px]">(Filtered)</span>}</h3>
-                  <span className="ml-1.5 text-[10px] text-slate-400 font-normal">
+                  <h3 className="type-section-title text-teal-700">Search Results {hasActiveFilters && <span className="type-label text-red-500 ml-1.5">(Filtered)</span>}</h3>
+                  <span className="type-label ml-1.5 text-slate-400 font-normal">
                     Showing {visibleSearchResults.length} of {searchTotal}
                   </span>
                 </div>
@@ -938,7 +938,7 @@ const Appointments = ({ data, setData, onLogout }) => {
               </div>
               <div className="flex-1 overflow-y-auto p-2 space-y-1.5 bg-slate-50/50 scrollbar-hide">
                 {isSearching ? (
-                  <div className="py-10 text-center text-slate-400 flex flex-col items-center gap-2"><Loader2 className="animate-spin text-teal-600" /><span className="text-xs">Searching database...</span></div>
+                  <div className="py-10 text-center text-slate-400 flex flex-col items-center gap-2"><Loader2 className="animate-spin text-teal-600" /><span className="type-secondary">Searching database...</span></div>
                 ) : visibleSearchResults.length > 0 ? (
                   <>
                     {visibleSearchResults.map(renderAppointmentCard)}
@@ -947,14 +947,14 @@ const Appointments = ({ data, setData, onLogout }) => {
                       <button
                         onClick={fetchSearchMore}
                         disabled={isSearchLoadingMore}
-                        className="w-full py-2 mt-2 text-[10px] font-bold text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5"
+                        className="type-label w-full py-2 mt-2 text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5"
                       >
                         {isSearchLoadingMore ? <Loader2 size={12} className="animate-spin" /> : <ChevronDown size={12} />}
                         {isSearchLoadingMore ? 'Loading...' : 'Load More Results'}
                       </button>
                     )}
                   </>
-                ) : (<div className="py-10 text-center text-slate-400 text-xs">{searchResults.length > 0 ? "No results match your active filters." : `No records found for "${searchQuery}"`}</div>)}
+                ) : (<div className="type-secondary py-10 text-center text-slate-400">{searchResults.length > 0 ? "No results match your active filters." : `No records found for "${searchQuery}"`}</div>)}
               </div>
             </div>
           ) : (
@@ -980,14 +980,14 @@ const Appointments = ({ data, setData, onLogout }) => {
              {/* EMR Header */}
              <div className="px-3 md:px-5 h-14 border-b border-slate-200 flex justify-between items-center bg-white shadow-sm z-10 flex-shrink-0">
                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold text-lg">
+                    <div className="type-section-title w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center text-teal-700">
                        {activeConsultationAppt.patientId?.name?.charAt(0) || 'U'}
                     </div>
                     <div>
-                      <h2 className="text-[16px] md:text-lg font-bold text-slate-800 leading-tight">
+                      <h2 className="type-section-title text-slate-800 leading-tight">
                          {activeConsultationAppt.patientId?.name || 'Unknown Patient'}
                       </h2>
-                      <p className="text-[11px] md:text-xs text-slate-500 font-medium">
+                      <p className="type-label text-slate-500">
                          {activeConsultationAppt.patientId?.gender || 'U'} • {activeConsultationAppt.patientId?.age ? `${activeConsultationAppt.patientId.age} Yrs` : 'Age Unknown'} 
                          <span className="mx-2 text-slate-300">|</span> 
                          {activeConsultationAppt.time}
@@ -1002,7 +1002,7 @@ const Appointments = ({ data, setData, onLogout }) => {
                     }} 
                     className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors flex items-center gap-2"
                  >
-                    <span className="text-[11px] font-bold hidden md:inline">Close</span>
+                    <span className="type-label hidden md:inline">Close</span>
                     <X size={18} />
                  </button>
              </div>
@@ -1020,10 +1020,10 @@ const Appointments = ({ data, setData, onLogout }) => {
         </div>
       )}
 
-      <Modal isOpen={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)} title="Filter Appointments" footer={<div className="flex gap-2"><button onClick={clearFilters} className="flex-1 py-1.5 text-[15px] text-slate-600 font-medium border border-slate-200 rounded-lg bg-white">Clear</button><button onClick={applyActiveFilters} className="flex-1 bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium">Apply</button></div>}>
+      <Modal isOpen={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)} title="Filter Appointments" footer={<div className="flex gap-2"><button onClick={clearFilters} className="type-section-title flex-1 py-1.5 text-slate-600 border border-slate-200 rounded-lg bg-white">Clear</button><button onClick={applyActiveFilters} className="type-section-title flex-1 bg-teal-600 text-white py-1.5 rounded-lg">Apply</button></div>}>
         <div className="space-y-4">
-          <div><h4 className="text-[11px] font-bold text-slate-400 uppercase mb-2">Date Range</h4><div className="grid grid-cols-2 gap-2"><div><span className="text-[11px] font-bold text-teal-700 uppercase block mb-1">From</span><input type="date" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[13px]" value={tempFilters.dateFrom} onChange={(e) => setTempFilters({ ...tempFilters, dateFrom: e.target.value })} /></div><div><span className="text-[11px] font-bold text-teal-700 uppercase block mb-1">To</span><input type="date" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[13px]" value={tempFilters.dateTo} onChange={(e) => setTempFilters({ ...tempFilters, dateTo: e.target.value })} /></div></div></div>
-          <div><h4 className="text-[11px] font-bold text-slate-400 uppercase mb-2">Doctor</h4><select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[13px]" value={tempFilters.doctorId} onChange={(e) => setTempFilters({ ...tempFilters, doctorId: e.target.value })}><option value="">All Doctors</option>{data.doctors.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}</select></div>
+          <div><h4 className="type-utility text-slate-400 uppercase mb-2">Date Range</h4><div className="grid grid-cols-2 gap-2"><div><span className="type-utility text-teal-700 uppercase block mb-1">From</span><input type="date" className="type-body w-full p-2 bg-slate-50 border border-slate-200 rounded-lg" value={tempFilters.dateFrom} onChange={(e) => setTempFilters({ ...tempFilters, dateFrom: e.target.value })} /></div><div><span className="type-utility text-teal-700 uppercase block mb-1">To</span><input type="date" className="type-body w-full p-2 bg-slate-50 border border-slate-200 rounded-lg" value={tempFilters.dateTo} onChange={(e) => setTempFilters({ ...tempFilters, dateTo: e.target.value })} /></div></div></div>
+          <div><h4 className="type-utility text-slate-400 uppercase mb-2">Doctor</h4><select className="type-body w-full p-2 bg-slate-50 border border-slate-200 rounded-lg" value={tempFilters.doctorId} onChange={(e) => setTempFilters({ ...tempFilters, doctorId: e.target.value })}><option value="">All Doctors</option>{data.doctors.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}</select></div>
           {/* <div><h4 className="text-[11px] font-bold text-slate-400 uppercase mb-2">Status</h4><div className="flex flex-wrap gap-2">{['Scheduled', 'Completed', 'Cancelled', 'No-Show'].map(status => { const isSelected = tempFilters.status.includes(status); return (<button key={status} onClick={() => { let newStatus = isSelected ? tempFilters.status.filter(s => s !== status) : [...tempFilters.status, status]; if (['Scheduled', 'Completed', 'Cancelled', 'No-Show'].every(s => newStatus.includes(s))) { newStatus = []; } setTempFilters({...tempFilters, status: newStatus}); }} className={`px-3 py-1.5 rounded-full text-[11px] font-bold border transition-colors ${isSelected ? 'bg-teal-100 text-teal-800 border-teal-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>{status}</button>); })}</div></div> */}
         </div>
       </Modal>
@@ -1033,7 +1033,7 @@ const Appointments = ({ data, setData, onLogout }) => {
           <button
             onClick={handleAddAppointment}
             disabled={isSubmitting}
-            className="w-full bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+            className="type-section-title w-full bg-teal-600 text-white py-1.5 rounded-lg flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Confirming...</> : 'Confirm Booking'}
           </button>
@@ -1041,17 +1041,17 @@ const Appointments = ({ data, setData, onLogout }) => {
         <div className="space-y-3">
           <AlertMessage message={modalError} />
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Patient <span className="text-red-500">*</span></label>
+            <label className="type-label block text-slate-500 mb-1 uppercase">Patient <span className="text-red-500">*</span></label>
             {newAppt.patientId ? (
                <div className={`flex items-center justify-between p-2.5 border rounded-lg bg-slate-50 shadow-inner ${invalidFields.includes('patientId') ? 'border-red-500' : 'border-slate-200'}`}>
                   {/* --- SELECTED PATIENT BADGE --- */}
                   <div className="flex items-center gap-2">
                      {newAppt.patientId === 'add_new' ? (
-                        <span className="text-[13px] font-bold text-teal-600 flex items-center gap-1.5"><Plus size={16}/> New Patient Entry</span>
+                        <span className="type-body text-teal-600 flex items-center gap-1.5"><Plus size={16}/> New Patient Entry</span>
                      ) : (
                         <div>
-                          <div className="text-[13px] font-bold text-slate-800">{getPatientName(newAppt.patientId)}</div>
-                          <div className="text-[10px] text-slate-500">Selected Patient</div>
+                          <div className="type-card-title text-slate-800">{getPatientName(newAppt.patientId)}</div>
+                          <div className="type-label text-slate-500">Selected Patient</div>
                         </div>
                      )}
                   </div>
@@ -1060,7 +1060,7 @@ const Appointments = ({ data, setData, onLogout }) => {
                     <button 
                       type="button" 
                       onClick={() => { setNewAppt({...newAppt, patientId: ''}); setPatientSearchQuery(''); setIsPatientDropdownOpen(false); }} 
-                      className="text-[11px] font-bold text-slate-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
+                      className="type-label text-slate-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
                     >
                       Change
                     </button>
@@ -1081,7 +1081,7 @@ const Appointments = ({ data, setData, onLogout }) => {
                           setPatientSearchQuery(e.target.value);
                           setIsPatientDropdownOpen(true);
                       }}
-                      className={`w-full pl-9 pr-3 py-2 border rounded-lg text-[13px] outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all ${invalidFields.includes('patientId') ? 'border-red-500' : 'border-slate-200 bg-slate-50'}`}
+                      className={`type-body w-full pl-9 pr-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all ${invalidFields.includes('patientId') ? 'border-red-500' : 'border-slate-200 bg-slate-50'}`}
                    />
                  </div>
                  
@@ -1096,7 +1096,7 @@ const Appointments = ({ data, setData, onLogout }) => {
                             setPatientSearchQuery(''); 
                             setIsPatientDropdownOpen(false); 
                         }}
-                        className="w-full text-left px-3 py-2.5 text-[13px] font-bold text-teal-600 hover:bg-teal-50 flex items-center gap-2 border-b border-slate-100 transition-colors sticky top-0 bg-white/95 backdrop-blur-sm z-10"
+                        className="type-body w-full text-left px-3 py-2.5 text-teal-600 hover:bg-teal-50 flex items-center gap-2 border-b border-slate-100 transition-colors sticky top-0 bg-white/95 backdrop-blur-sm z-10"
                       >
                         <div className="bg-teal-100 p-1 rounded-md"><Plus size={14} className="text-teal-700" /></div> Create New Patient
                       </button>
@@ -1120,15 +1120,15 @@ const Appointments = ({ data, setData, onLogout }) => {
                            className="w-full text-left px-3 py-2 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors flex justify-between items-center group"
                          >
                            <div>
-                             <div className="font-bold text-[13px] text-slate-700 group-hover:text-teal-700">{p.name}</div>
-                             <div className="text-[10px] text-slate-400">{p.phone}</div>
+                             <div className="type-card-title text-slate-700 group-hover:text-teal-700">{p.name}</div>
+                             <div className="type-label text-slate-400">{p.phone}</div>
                            </div>
-                           <div className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">Select</div>
+                           <div className="type-label text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">Select</div>
                          </button>
                       ))}
                       
                       {patientSearchQuery !== '' && data.patients.filter(p => (p.name || '').toLowerCase().includes(patientSearchQuery.toLowerCase()) || (p.phone || '').includes(patientSearchQuery)).length === 0 && (
-                         <div className="p-4 text-center text-slate-400 text-[11px]">No matching patients found.</div>
+                         <div className="type-secondary p-4 text-center text-slate-400">No matching patients found.</div>
                       )}
                    </div>
                  )}
@@ -1142,21 +1142,21 @@ const Appointments = ({ data, setData, onLogout }) => {
                 <input
                   type="text"
                   placeholder="First Name *"
-                  className={`w-full p-1.5 border rounded text-[13px] outline-none ${invalidFields.includes('newPatientName') ? 'border-red-500' : 'border-teal-200'}`}
+                  className={`type-body w-full p-1.5 border rounded outline-none ${invalidFields.includes('newPatientName') ? 'border-red-500' : 'border-teal-200'}`}
                   value={newPatientDetails.firstName}
                   onChange={(e) => handlePatientNameInput('firstName', e.target.value)}
                 />
                 <input
                   type="text"
                   placeholder="Middle"
-                  className="w-full p-1.5 border border-teal-200 rounded text-[13px] outline-none"
+                  className="type-body w-full p-1.5 border border-teal-200 rounded outline-none"
                   value={newPatientDetails.middleName}
                   onChange={(e) => handlePatientNameInput('middleName', e.target.value)}
                 />
                 <input
                   type="text"
                   placeholder="Last Name"
-                  className="w-full p-1.5 border border-teal-200 rounded text-[13px] outline-none"
+                  className="type-body w-full p-1.5 border border-teal-200 rounded outline-none"
                   value={newPatientDetails.lastName}
                   onChange={(e) => handlePatientNameInput('lastName', e.target.value)}
                 />
@@ -1167,7 +1167,7 @@ const Appointments = ({ data, setData, onLogout }) => {
                 <input
                   type="tel"
                   placeholder="Phone *"
-                  className={`w-full p-1.5 border rounded text-[13px] outline-none ${invalidFields.includes('newPatientPhone') ? 'border-red-500' : 'border-teal-200'}`}
+                  className={`type-body w-full p-1.5 border rounded outline-none ${invalidFields.includes('newPatientPhone') ? 'border-red-500' : 'border-teal-200'}`}
                   value={newPatientDetails.phone}
                   onChange={(e) => handlePatientPhoneInput(e.target.value)}
                 />
@@ -1175,12 +1175,12 @@ const Appointments = ({ data, setData, onLogout }) => {
                   <input
                     type="tel" // usage of tel on age helps mobile keyboards
                     placeholder="Age *"
-                    className={`w-1/2 p-1.5 border rounded text-[13px] outline-none ${invalidFields.includes('newPatientAge') ? 'border-red-500' : 'border-teal-200'}`}
+                    className={`type-body w-1/2 p-1.5 border rounded outline-none ${invalidFields.includes('newPatientAge') ? 'border-red-500' : 'border-teal-200'}`}
                     value={newPatientDetails.age}
                     onChange={(e) => handlePatientAgeInput(e.target.value)}
                   />
                   <select
-                    className="w-1/2 p-1.5 border border-teal-200 rounded text-[13px]"
+                    className="type-body w-1/2 p-1.5 border border-teal-200 rounded"
                     value={newPatientDetails.gender}
                     onChange={(e) => setNewPatientDetails({ ...newPatientDetails, gender: e.target.value })}
                   >
@@ -1192,7 +1192,7 @@ const Appointments = ({ data, setData, onLogout }) => {
                 type="text"
                 placeholder="Address *"
                 // 👇 The check here matches the string pushed above
-                className={`w-full p-1.5 border rounded text-[13px] outline-none ${invalidFields.includes('newPatientAddress') ? 'border-red-500' : 'border-teal-200'
+                className={`type-body w-full p-1.5 border rounded outline-none ${invalidFields.includes('newPatientAddress') ? 'border-red-500' : 'border-teal-200'
                   }`}
                 value={newPatientDetails.address}
                 onChange={(e) => handlePatientAddressInput(e.target.value)}
@@ -1201,12 +1201,12 @@ const Appointments = ({ data, setData, onLogout }) => {
           )}
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Department</label>
-              <select className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50" value={newAppt.department} onChange={(e) => setNewAppt({ ...newAppt, department: e.target.value, doctorId: '', time: '' })}><option value="">All</option>{departments.map(d => <option key={d} value={d}>{d}</option>)}</select>
+              <label className="type-label block text-slate-500 mb-1 uppercase">Department</label>
+              <select className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50" value={newAppt.department} onChange={(e) => setNewAppt({ ...newAppt, department: e.target.value, doctorId: '', time: '' })}><option value="">All</option>{departments.map(d => <option key={d} value={d}>{d}</option>)}</select>
             </div>
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Doctor <span className="text-red-500">*</span></label>
-              <select className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 outline-none ${invalidFields.includes('doctorId') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.doctorId} onChange={(e) => { const doc = getDoctorById(e.target.value); setNewAppt({ ...newAppt, doctorId: e.target.value, department: doc ? doc.department : newAppt.department, time: '' }); }}>
+              <label className="type-label block text-slate-500 mb-1 uppercase">Doctor <span className="text-red-500">*</span></label>
+              <select className={`type-body w-full p-2 border rounded-lg bg-slate-50 outline-none ${invalidFields.includes('doctorId') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.doctorId} onChange={(e) => { const doc = getDoctorById(e.target.value); setNewAppt({ ...newAppt, doctorId: e.target.value, department: doc ? doc.department : newAppt.department, time: '' }); }}>
                 <option value="">Select</option>
                 {/* FIX: Filter Doctors - Must be 'Available' AND match department */}
                 {data.doctors
@@ -1216,9 +1216,9 @@ const Appointments = ({ data, setData, onLogout }) => {
               </select>
             </div>
           </div>
-          <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Select Date <span className="text-red-500">*</span></label><input type="date" min={new Date().toISOString().split('T')[0]} max={maxDateStr} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 outline-none ${invalidFields.includes('date') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.date} onChange={(e) => setNewAppt({ ...newAppt, date: e.target.value, time: '' })} /></div>
+          <div><label className="type-label block text-slate-500 mb-1 uppercase">Select Date <span className="text-red-500">*</span></label><input type="date" min={new Date().toISOString().split('T')[0]} max={maxDateStr} className={`type-body w-full p-2 border rounded-lg bg-slate-50 outline-none ${invalidFields.includes('date') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.date} onChange={(e) => setNewAppt({ ...newAppt, date: e.target.value, time: '' })} /></div>
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Available Slots <span className="text-red-500">*</span></label>
+            <label className="type-label block text-slate-500 mb-1 uppercase">Available Slots <span className="text-red-500">*</span></label>
             <div className={`rounded-lg ${invalidFields.includes('time') ? 'border border-red-500 p-1' : ''}`}>
               <TimeSlotPicker selectedTime={newAppt.time} onSelect={(t) => setNewAppt({ ...newAppt, time: t })} doctor={getDoctorById(newAppt.doctorId)} date={newAppt.date} appointments={data.calendar30 || []} clinic={data.clinic} />
             </div>
@@ -1230,15 +1230,15 @@ const Appointments = ({ data, setData, onLogout }) => {
         <button
           onClick={confirmReschedule}
           disabled={isSubmitting}
-          className="w-full bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+          className="type-section-title w-full bg-teal-600 text-white py-1.5 rounded-lg flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
         >
           {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Updating...</> : 'Update Appointment'}
         </button>
       }>
         <div className="space-y-3">
-          {actionAppt && (<div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex items-center justify-between mb-2"><span className="text-[11px] font-bold text-slate-500 uppercase">Currently Scheduled:</span><span className="text-[13px] font-bold text-slate-700">{actionAppt.date} at {actionAppt.time}</span></div>)}
+          {actionAppt && (<div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex items-center justify-between mb-2"><span className="type-utility text-slate-500 uppercase">Currently Scheduled:</span><span className="type-body text-slate-700">{actionAppt.date} at {actionAppt.time}</span></div>)}
           <AlertMessage message={modalError} />
-          <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">New Date</label><input type="date" min={new Date().toISOString().split('T')[0]} max={maxDateStr} className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50" value={rescheduleData.date} onChange={(e) => setRescheduleData({ ...rescheduleData, date: e.target.value, time: '' })} /></div><div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Available Slots</label><TimeSlotPicker selectedTime={rescheduleData.time} onSelect={(t) => setRescheduleData({ ...rescheduleData, time: t })} doctor={getDoctorById(actionAppt?.doctorId)} date={rescheduleData.date} appointments={data.calendar30 || []} clinic={data.clinic} /></div>
+          <div><label className="type-label block text-slate-500 mb-1 uppercase">New Date</label><input type="date" min={new Date().toISOString().split('T')[0]} max={maxDateStr} className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50" value={rescheduleData.date} onChange={(e) => setRescheduleData({ ...rescheduleData, date: e.target.value, time: '' })} /></div><div><label className="type-label block text-slate-500 mb-1 uppercase">Available Slots</label><TimeSlotPicker selectedTime={rescheduleData.time} onSelect={(t) => setRescheduleData({ ...rescheduleData, time: t })} doctor={getDoctorById(actionAppt?.doctorId)} date={rescheduleData.date} appointments={data.calendar30 || []} clinic={data.clinic} /></div>
         </div>
       </Modal>
 
@@ -1249,7 +1249,7 @@ const Appointments = ({ data, setData, onLogout }) => {
             {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Cancelling...</> : 'Yes, Cancel'}
           </button>
         </div>
-      }><div className="text-[13px] text-slate-600">Are you sure you want to cancel?</div></Modal>
+      }><div className="type-body text-slate-600">Are you sure you want to cancel?</div></Modal>
     </div>
   );
 };

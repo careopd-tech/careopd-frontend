@@ -31,11 +31,11 @@ const QueueCard = ({ appt, isActive, onClick }) => {
         </div>
         
         {isCompleted ? (
-           <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-green-600 bg-green-100 px-1.5 py-0.5 rounded">
+           <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-green-600 bg-green-100 px-1.5 py-0.5 rounded">
              <CheckCircle size={10} /> Done
            </span>
         ) : (
-           <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${isActive ? 'bg-teal-100 text-teal-700' : 'bg-amber-100 text-amber-700'}`}>
+           <span className={`text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${isActive ? 'bg-teal-100 text-teal-700' : 'bg-amber-100 text-amber-700'}`}>
              {isActive ? 'In Consult' : 'Waiting'}
            </span>
         )}

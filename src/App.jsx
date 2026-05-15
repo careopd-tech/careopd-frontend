@@ -189,7 +189,7 @@ const App = () => {
       </DateProvider>
       
       {/* Floating Version Tag for Deployment Validation */}
-      <div className="fixed bottom-1 right-2 text-[10px] font-bold text-slate-400/50 pointer-events-none z-[9999]">
+      <div className="fixed bottom-1 right-2 text-[11px] font-bold text-slate-400/50 pointer-events-none z-[9999]">
         v1.0.0
       </div>
     </>

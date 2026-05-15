@@ -18,7 +18,7 @@ const StatusBadge = ({ status }) => {
   };
 
   return (
-    <div className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider ${styles[status] || 'text-slate-600'}`}>
+    <div className={`type-utility flex items-center gap-1.5 uppercase ${styles[status] || 'text-slate-600'}`}>
       <div className={`w-1.5 h-1.5 rounded-full ${dotStyles[status] || 'bg-slate-400'}`}></div>
       {status}
     </div>

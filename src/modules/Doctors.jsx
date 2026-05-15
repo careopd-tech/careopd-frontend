@@ -518,17 +518,17 @@ const Doctors = ({ data, setData, onLogout }) => {
         <div className={`flex-1 min-w-0 flex flex-col ${isInactive ? 'opacity-70' : ''}`}>
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2.5 mt-0.5">
-              <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-500 text-[13px] flex-shrink-0 overflow-hidden">
+              <div className="type-card-title w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 flex-shrink-0 overflow-hidden">
                 {typeof doc.photo === 'string' && doc.photo.length > 50 ? <img src={doc.photo} alt="Doc" className="w-full h-full object-cover"/> : <Building2 size={16} className="text-slate-400" />}
               </div>
               <div>
-                <h4 className="font-bold text-[13px] text-slate-800 leading-tight">{doc.name}</h4>
-                <p className="text-[10px] text-slate-500 uppercase leading-tight mt-0.5">{doc.department}</p>
-                <p className="text-[10px] text-slate-400 leading-tight mt-1">Mobile: {doc.phone || 'Not Added'}</p>
+                <h4 className="type-card-title text-slate-800 leading-tight">{doc.name}</h4>
+                <p className="type-utility uppercase text-slate-500 leading-tight mt-0.5">{doc.department}</p>
+                <p className="type-label text-slate-400 leading-tight mt-1">Mobile: {doc.phone || 'Not Added'}</p>
               </div>
             </div>
             <div className="flex items-center gap-1.5 mt-1">
-              <span className={`text-[10px] font-bold uppercase transition-colors ${!isInactive ? 'text-teal-600' : 'text-slate-400'}`}>
+              <span className={`type-utility uppercase transition-colors ${!isInactive ? 'text-teal-600' : 'text-slate-400'}`}>
                 {!isInactive ? 'Active' : 'Inactive'}
               </span>
               <button 
@@ -546,7 +546,7 @@ const Doctors = ({ data, setData, onLogout }) => {
         <div className="flex flex-row md:flex-col landscape:flex-col gap-1.5 border-t md:border-t-0 landscape:border-t-0 md:border-l landscape:border-l border-slate-100 pt-1.5 mt-1.5 md:pt-0 landscape:pt-0 md:mt-0 landscape:mt-0 md:pl-3 landscape:pl-3 items-center md:items-stretch landscape:items-stretch justify-between md:justify-start landscape:justify-start flex-shrink-0 md:w-32 landscape:w-32">
           <button 
             onClick={() => handleEditDoctor(doc)} 
-            className={`flex-1 md:flex-none landscape:flex-none w-full h-7 landscape:h-auto md:landscape:h-7 landscape:py-1 md:landscape:py-0 px-3 text-[10px] font-bold text-teal-600 bg-teal-50 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-all ${
+            className={`type-label flex-1 md:flex-none landscape:flex-none w-full h-7 landscape:h-auto md:landscape:h-7 landscape:py-1 md:landscape:py-0 px-3 text-teal-600 bg-teal-50 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-all ${
               isInactive ? 'opacity-50 cursor-default pointer-events-none' : 'hover:bg-teal-100 active:scale-95'
             }`}
           >
@@ -554,7 +554,7 @@ const Doctors = ({ data, setData, onLogout }) => {
           </button>
           <button 
             onClick={() => { setSelectedDoctor(doc); setCalendarDate(new Date().toISOString().split('T')[0]); setIsCalendarModalOpen(true); }} 
-            className={`flex-1 md:flex-none landscape:flex-none w-full h-7 landscape:h-auto md:landscape:h-7 landscape:py-1 md:landscape:py-0 px-3 text-[10px] font-bold text-blue-600 bg-blue-50 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-all ${
+            className={`type-label flex-1 md:flex-none landscape:flex-none w-full h-7 landscape:h-auto md:landscape:h-7 landscape:py-1 md:landscape:py-0 px-3 text-blue-600 bg-blue-50 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-all ${
               isInactive ? 'opacity-50 cursor-default pointer-events-none' : 'hover:bg-blue-100 active:scale-95'
             }`}
           >
@@ -578,8 +578,8 @@ const Doctors = ({ data, setData, onLogout }) => {
         >
           <div className={`flex items-center gap-1.5 ${colorClass}`}>
             <Icon size={14} />
-            <h3 className="text-[11px] font-bold uppercase tracking-wider">{title}</h3>
-            <span className="ml-1.5 text-[10px] text-slate-400 font-normal">
+            <h3 className="type-section-title">{title}</h3>
+            <span className="type-label ml-1.5 text-slate-400 font-normal">
                 {(!loading || items.length > 0) ? `(${items.length})` : ''}
             </span>
           </div>
@@ -591,7 +591,7 @@ const Doctors = ({ data, setData, onLogout }) => {
             {loading && items.length === 0 ? (
                 <DoctorSkeleton />
             ) : (
-                items.length > 0 ? items.map(renderDoctorCard) : <div className="text-center py-6 text-slate-400 text-[11px] italic">No doctors in this section</div>
+                items.length > 0 ? items.map(renderDoctorCard) : <div className="type-secondary text-center py-6 text-slate-400 italic">No doctors in this section</div>
             )}
           </div>
         )}
@@ -605,7 +605,7 @@ const Doctors = ({ data, setData, onLogout }) => {
       {notification && (
         <div className={`fixed top-6 right-6 z-[100] px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 bg-white border-l-4 ${notification.type === 'success' ? 'border-teal-500 text-teal-800' : 'border-red-500 text-red-800'}`}>
           {notification.type === 'success' ? <CheckIcon size={20} className="text-teal-500" /> : <AlertCircle size={20} className="text-red-500" />}
-          <span className="text-[13px] font-bold">{notification.message}</span>
+          <span className="type-body">{notification.message}</span>
         </div>
       )}
 
@@ -635,8 +635,8 @@ const Doctors = ({ data, setData, onLogout }) => {
                 <button key={i} onClick={() => setStatusFilter(s.filterKey === statusFilter && s.isToggle ? '' : s.filterKey)}
                   className={`flex-1 p-1.5 landscape:p-1 md:landscape:p-1.5 rounded-xl border transition-all duration-200 text-center relative select-none flex flex-col items-center justify-center ${s.color} 
                     ${isActive ? 'border-slate-400 shadow-inner scale-[0.98]' : 'border-slate-100 hover:opacity-90 hover:shadow-sm active:scale-95 active:shadow-inner'}`}>
-                  <div className="text-[17px] md:text-[19px] font-bold leading-tight">{s.val}</div>
-                  <div className="text-[9px] md:text-[10px] font-semibold uppercase mt-0.5">{s.label}</div>
+                  <div className="type-page-title leading-tight">{s.val}</div>
+                  <div className="type-utility uppercase mt-0.5">{s.label}</div>
                 </button>
               );
             })}
@@ -663,14 +663,14 @@ const Doctors = ({ data, setData, onLogout }) => {
       {/* FILTER MODAL */}
       <Modal isOpen={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)} title="Filter Doctors" footer={
           <div className="flex gap-2">
-             <button onClick={() => { setDeptFilter(''); setIsFilterModalOpen(false); }} className="flex-1 py-1.5 text-[15px] text-slate-600 font-medium border border-slate-200 rounded-lg bg-white">Clear</button>
-             <button onClick={() => setIsFilterModalOpen(false)} className="flex-1 bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium">Apply</button>
+             <button onClick={() => { setDeptFilter(''); setIsFilterModalOpen(false); }} className="type-section-title flex-1 py-1.5 text-slate-600 border border-slate-200 rounded-lg bg-white">Clear</button>
+             <button onClick={() => setIsFilterModalOpen(false)} className="type-section-title flex-1 bg-teal-600 text-white py-1.5 rounded-lg">Apply</button>
           </div>
         }>
         <div className="space-y-3">
            <div>
-              <label className="block text-[13px] font-bold text-slate-700 mb-1">Department</label>
-              <select className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[13px] focus:ring-1 focus:ring-teal-500" value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
+              <label className="type-body block text-slate-700 mb-1">Department</label>
+              <select className="type-body w-full p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500" value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
                 <option value="">All Departments</option>{departments.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
            </div>
@@ -697,7 +697,7 @@ const Doctors = ({ data, setData, onLogout }) => {
             ) : (
               <button 
                 onClick={() => setAddDoctorTab(addDoctorTab === 'working_hours' ? 'professional' : 'personal')} 
-                className="flex-1 py-1.5 text-[15px] text-slate-600 font-medium border border-slate-200 rounded-lg bg-white"
+                className="type-section-title flex-1 py-1.5 text-slate-600 border border-slate-200 rounded-lg bg-white"
               >
                 Previous
               </button>
@@ -707,7 +707,7 @@ const Doctors = ({ data, setData, onLogout }) => {
               <button 
                 onClick={handleSaveDoctor}
                 disabled={isSavingDoctor}
-                className="flex-1 bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                className="type-section-title flex-1 bg-teal-600 text-white py-1.5 rounded-lg flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {isSavingDoctor
                   ? <><Loader2 size={16} className="animate-spin" /> {newDoctor._id ? 'Updating...' : 'Creating...'}</>
@@ -716,7 +716,7 @@ const Doctors = ({ data, setData, onLogout }) => {
             ) : (
               <button 
                 onClick={() => setAddDoctorTab(addDoctorTab === 'personal' ? 'professional' : 'working_hours')} 
-                className="flex-1 bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium"
+                className="type-section-title flex-1 bg-teal-600 text-white py-1.5 rounded-lg"
               >
                 Next
               </button>
@@ -727,9 +727,9 @@ const Doctors = ({ data, setData, onLogout }) => {
         <div className="space-y-4">
           <AlertMessage message={modalError} />
           <div className="flex border-b border-slate-200">
-            <button onClick={() => setAddDoctorTab('personal')} className={`flex-1 py-1.5 text-[11px] uppercase font-bold tracking-wide border-b-2 transition-colors ${addDoctorTab === 'personal' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Personal</button>
-            <button onClick={() => setAddDoctorTab('professional')} className={`flex-1 py-1.5 text-[11px] uppercase font-bold tracking-wide border-b-2 transition-colors ${addDoctorTab === 'professional' ? 'border-teal-700 text-teal-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Professional</button>
-            <button onClick={() => setAddDoctorTab('working_hours')} className={`flex-1 py-1.5 text-[11px] uppercase font-bold tracking-wide border-b-2 transition-colors ${addDoctorTab === 'working_hours' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Hours</button>
+            <button onClick={() => setAddDoctorTab('personal')} className={`type-utility flex-1 py-1.5 uppercase border-b-2 transition-colors ${addDoctorTab === 'personal' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Personal</button>
+            <button onClick={() => setAddDoctorTab('professional')} className={`type-utility flex-1 py-1.5 uppercase border-b-2 transition-colors ${addDoctorTab === 'professional' ? 'border-teal-700 text-teal-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Professional</button>
+            <button onClick={() => setAddDoctorTab('working_hours')} className={`type-utility flex-1 py-1.5 uppercase border-b-2 transition-colors ${addDoctorTab === 'working_hours' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Hours</button>
           </div>
 
           <div className="min-h-[160px]">
@@ -745,7 +745,7 @@ const Doctors = ({ data, setData, onLogout }) => {
                       ) : (
                         <div className={`flex flex-col items-center ${invalidFields.includes('photo') ? 'text-red-500' : 'text-slate-400'}`}>
                            <Plus size={16} />
-                           <span className="text-[8px] font-bold mt-0.5 uppercase">Photo <span className="text-red-500">*</span></span>
+                           <span className="type-utility mt-0.5 uppercase">Photo <span className="text-red-500">*</span></span>
                         </div>
                       )}
                     </div>
@@ -761,26 +761,26 @@ const Doctors = ({ data, setData, onLogout }) => {
                 <div>
                   {/* NEW: Split Name Inputs */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Full Name <span className="text-red-500">*</span></label>
+                  <label className="type-label block text-slate-500 mb-0.5 uppercase">Full Name <span className="text-red-500">*</span></label>
                   <div className="grid grid-cols-3 gap-2">
                     <input 
                       type="text" 
                       placeholder="First *" 
-                      className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('firstName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} 
+                      className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('firstName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} 
                       value={newDoctor.firstName} 
                       onChange={(e) => handleDocNameInput('firstName', e.target.value)} 
                     />
                     <input 
                       type="text" 
                       placeholder="Middle" 
-                      className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:ring-1 focus:ring-teal-500 outline-none" 
+                      className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 focus:ring-1 focus:ring-teal-500 outline-none" 
                       value={newDoctor.middleName} 
                       onChange={(e) => handleDocNameInput('middleName', e.target.value)} 
                     />
                     <input 
                       type="text" 
                       placeholder="Last *" 
-                      className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('lastName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} 
+                      className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('lastName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} 
                       value={newDoctor.lastName} 
                       onChange={(e) => handleDocNameInput('lastName', e.target.value)} 
                     />
@@ -789,23 +789,23 @@ const Doctors = ({ data, setData, onLogout }) => {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Phone <span className="text-red-500">*</span></label>
-                    <input type="tel" maxLength={10} placeholder="Mobile number" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('phone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.phone} onChange={handlePhoneInput} />
+                    <label className="type-label block text-slate-500 mb-0.5 uppercase">Phone <span className="text-red-500">*</span></label>
+                    <input type="tel" maxLength={10} placeholder="Mobile number" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('phone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.phone} onChange={handlePhoneInput} />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Gender <span className="text-red-500">*</span></label>
-                    <select className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:ring-1 focus:ring-teal-500 outline-none" value={newDoctor.gender} onChange={e => setNewDoctor({...newDoctor, gender: e.target.value})}>
+                    <label className="type-label block text-slate-500 mb-0.5 uppercase">Gender <span className="text-red-500">*</span></label>
+                    <select className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 focus:ring-1 focus:ring-teal-500 outline-none" value={newDoctor.gender} onChange={e => setNewDoctor({...newDoctor, gender: e.target.value})}>
                       <option value="M">Male</option><option value="F">Female</option><option value="O">Other</option>
                     </select>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Email <span className="text-red-500">*</span></label>
-                  <input type="email" placeholder="Email address" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('email') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.email} onChange={e => setNewDoctor({...newDoctor, email: e.target.value})} />
+                  <label className="type-label block text-slate-500 mb-0.5 uppercase">Email <span className="text-red-500">*</span></label>
+                  <input type="email" placeholder="Email address" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('email') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.email} onChange={e => setNewDoctor({...newDoctor, email: e.target.value})} />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Address <span className="text-red-500">*</span></label>
-                  <input type="text" placeholder="Full residential address" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('address') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.address} onChange={e => setNewDoctor({...newDoctor, address: e.target.value})} />
+                  <label className="type-label block text-slate-500 mb-0.5 uppercase">Address <span className="text-red-500">*</span></label>
+                  <input type="text" placeholder="Full residential address" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('address') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.address} onChange={e => setNewDoctor({...newDoctor, address: e.target.value})} />
                 </div>
               </div>
             )}
@@ -813,9 +813,9 @@ const Doctors = ({ data, setData, onLogout }) => {
             {addDoctorTab === 'professional' && (
               <div className="space-y-2.5 animate-fadeIn">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Specialization <span className="text-red-500">*</span></label>
+                  <label className="type-label block text-slate-500 mb-0.5 uppercase">Specialization <span className="text-red-500">*</span></label>
                   <select 
-                    className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('department') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
+                    className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('department') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
                     value={isNewDept ? 'add_new' : newDoctor.department} 
                     onChange={e => {
                       if (e.target.value === 'add_new') {
@@ -835,24 +835,24 @@ const Doctors = ({ data, setData, onLogout }) => {
                     <input 
                       type="text" 
                       placeholder="Enter New Specialization *" 
-                      className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 mt-2 animate-fadeIn outline-none ${invalidFields.includes('department') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
+                      className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 mt-2 animate-fadeIn outline-none ${invalidFields.includes('department') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
                       value={newDeptName} 
                       onChange={e => setNewDeptName(e.target.value)} 
                     />
                   )}
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Qualifications <span className="text-red-500">*</span></label>
-                  <input type="text" placeholder="e.g. MBBS, MD" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('qualification') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.qualification} onChange={handleQualificationInput} />
+                  <label className="type-label block text-slate-500 mb-0.5 uppercase">Qualifications <span className="text-red-500">*</span></label>
+                  <input type="text" placeholder="e.g. MBBS, MD" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('qualification') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.qualification} onChange={handleQualificationInput} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Experience (Months) <span className="text-red-500">*</span></label>
-                    <input type="number" placeholder="Months" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('experience') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.experience} onChange={handleExperienceInput} />
+                    <label className="type-label block text-slate-500 mb-0.5 uppercase">Experience (Months) <span className="text-red-500">*</span></label>
+                    <input type="number" placeholder="Months" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('experience') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.experience} onChange={handleExperienceInput} />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Reg. Number <span className="text-red-500">*</span></label>
-                    <input type="text" maxLength={20} placeholder="Medical Reg No." className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('regNo') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.regNo} onChange={e => setNewDoctor({...newDoctor, regNo: e.target.value})} />
+                    <label className="type-label block text-slate-500 mb-0.5 uppercase">Reg. Number <span className="text-red-500">*</span></label>
+                    <input type="text" maxLength={20} placeholder="Medical Reg No." className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('regNo') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.regNo} onChange={e => setNewDoctor({...newDoctor, regNo: e.target.value})} />
                   </div>
                 </div>
               </div>
@@ -863,8 +863,8 @@ const Doctors = ({ data, setData, onLogout }) => {
                 <div className="rounded-lg border border-teal-100 bg-teal-50 px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <div>
-                      <p className="text-[11px] font-bold uppercase tracking-wide text-teal-700">Clinic Schedule</p>
-                      <p className="text-[12px] text-teal-900">{formatClinicScheduleSummary(clinicSchedule)}</p>
+                      <p className="type-utility uppercase text-teal-700">Clinic Schedule</p>
+                      <p className="type-secondary text-teal-900">{formatClinicScheduleSummary(clinicSchedule)}</p>
                     </div>
                     <button
                       type="button"
@@ -875,7 +875,7 @@ const Doctors = ({ data, setData, onLogout }) => {
                         eveningStart: '',
                         eveningEnd: ''
                       }))}
-                      className="rounded-md border border-teal-200 bg-white px-2.5 py-1 text-[11px] font-bold text-teal-700 transition-colors hover:bg-teal-100"
+                      className="type-label rounded-md border border-teal-200 bg-white px-2.5 py-1 text-teal-700 transition-colors hover:bg-teal-100"
                     >
                       Use Clinic Hours
                     </button>
@@ -883,48 +883,48 @@ const Doctors = ({ data, setData, onLogout }) => {
                 </div>
 
                 <div>
-                  <h4 className="text-[11px] font-bold text-slate-700 uppercase tracking-wide mb-1 border-b border-slate-100 pb-1">Morning Shift</h4>
+                  <h4 className="type-utility uppercase text-slate-700 mb-1 border-b border-slate-100 pb-1">Morning Shift</h4>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Start Time <span className="text-red-500">*</span></label>
-                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('morningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningStart} onChange={e => setNewDoctor({...newDoctor, morningStart: e.target.value})} />
+                      <label className="type-label block text-slate-500 mb-0.5 uppercase">Start Time <span className="text-red-500">*</span></label>
+                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('morningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningStart} onChange={e => setNewDoctor({...newDoctor, morningStart: e.target.value})} />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">End Time <span className="text-red-500">*</span></label>
-                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('morningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningEnd} onChange={e => setNewDoctor({...newDoctor, morningEnd: e.target.value})} />
+                      <label className="type-label block text-slate-500 mb-0.5 uppercase">End Time <span className="text-red-500">*</span></label>
+                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('morningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningEnd} onChange={e => setNewDoctor({...newDoctor, morningEnd: e.target.value})} />
                     </div>
                   </div>
                 </div>
 
                 <div>
                   <div className="mb-1 flex items-center justify-between border-b border-slate-100 pb-1">
-                    <h4 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">Evening Shift</h4>
+                    <h4 className="type-utility uppercase text-slate-700">Evening Shift</h4>
                     <button
                       type="button"
                       onClick={() => setNewDoctor(prev => ({ ...prev, eveningStart: '', eveningEnd: '' }))}
-                      className="text-[10px] font-bold uppercase tracking-wide text-slate-400 transition-colors hover:text-red-500"
+                      className="type-utility uppercase text-slate-400 transition-colors hover:text-red-500"
                     >
                       Clear
                     </button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">Start Time</label>
-                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('eveningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningStart} onChange={e => setNewDoctor({...newDoctor, eveningStart: e.target.value})} />
+                      <label className="type-label block text-slate-500 mb-0.5 uppercase">Start Time</label>
+                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('eveningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningStart} onChange={e => setNewDoctor({...newDoctor, eveningStart: e.target.value})} />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-0.5 uppercase">End Time</label>
-                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('eveningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningEnd} onChange={e => setNewDoctor({...newDoctor, eveningEnd: e.target.value})} />
+                      <label className="type-label block text-slate-500 mb-0.5 uppercase">End Time</label>
+                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('eveningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningEnd} onChange={e => setNewDoctor({...newDoctor, eveningEnd: e.target.value})} />
                     </div>
                   </div>
-                  <p className="mt-1 text-[10px] text-slate-400">Optional. Leave this blank if the doctor follows a single continuous shift.</p>
+                  <p className="type-label mt-1 text-slate-400">Optional. Leave this blank if the doctor follows a single continuous shift.</p>
                 </div>
                 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase">Working Days <span className="text-red-500">*</span></label>
+                  <label className="type-label block text-slate-500 mb-1.5 uppercase">Working Days <span className="text-red-500">*</span></label>
                   <div className="flex gap-1 flex-wrap">
                     {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                      <label key={day} className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded text-[11px] cursor-pointer hover:bg-slate-100">
+                      <label key={day} className="type-label flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded cursor-pointer hover:bg-slate-100">
                         <input type="checkbox" defaultChecked={day !== 'Sun'} className="accent-teal-600" />
                         <span>{day}</span>
                       </label>
@@ -946,7 +946,7 @@ const Doctors = ({ data, setData, onLogout }) => {
           <button
             onClick={confirmStatusChange}
             disabled={isStatusSubmitting}
-            className={`w-full py-1.5 rounded-lg text-[15px] font-medium text-white flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed ${activeModal?.subType === 'activate' ? 'bg-teal-600' : 'bg-red-600'}`}
+            className={`type-section-title w-full py-1.5 rounded-lg text-white flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed ${activeModal?.subType === 'activate' ? 'bg-teal-600' : 'bg-red-600'}`}
           >
             {isStatusSubmitting
               ? <><Loader2 size={16} className="animate-spin" /> Updating...</>
@@ -958,14 +958,14 @@ const Doctors = ({ data, setData, onLogout }) => {
           <AlertMessage message={modalError} />
           
           {/* Dynamic Warning Message */}
-          <div className={`p-2 rounded-lg flex gap-2 text-[13px] ${activeModal?.subType === 'activate' ? 'bg-teal-50 text-teal-800' : 'bg-amber-50 text-amber-800'}`}>
+          <div className={`type-body p-2 rounded-lg flex gap-2 ${activeModal?.subType === 'activate' ? 'bg-teal-50 text-teal-800' : 'bg-amber-50 text-amber-800'}`}>
              <AlertTriangle size={16} className="shrink-0" />
              <p>{activeModal?.subType === 'activate' ? 'This action will allow new appointments.' : 'This action blocks new appointments.'}</p>
           </div>
 
           <div>
-            <label className="block text-[13px] font-bold text-slate-700 mb-1">Reason</label>
-            <select className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50" value={reason} onChange={(e) => setReason(e.target.value)}>
+            <label className="type-body block text-slate-700 mb-1">Reason</label>
+            <select className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50" value={reason} onChange={(e) => setReason(e.target.value)}>
               <option value="">Select Reason...</option>
               {activeModal?.subType === 'activate' ? (
                   <>
@@ -986,9 +986,9 @@ const Doctors = ({ data, setData, onLogout }) => {
           {/* Conditional Remarks Box */}
           {reason === 'Others' && (
              <div className="animate-fadeIn">
-                <label className="block text-[13px] font-bold text-slate-700 mb-1">Remarks</label>
+                <label className="type-body block text-slate-700 mb-1">Remarks</label>
                 <textarea 
-                  className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 outline-none focus:ring-1 focus:ring-teal-500" 
+                  className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none focus:ring-1 focus:ring-teal-500" 
                   rows="3"
                   placeholder="Enter specific details..."
                   value={customReason}
@@ -1002,11 +1002,11 @@ const Doctors = ({ data, setData, onLogout }) => {
       <Modal isOpen={isCalendarModalOpen} onClose={() => { setIsCalendarModalOpen(false); setSelectedDoctor(null); }} title={selectedDoctor ? `${selectedDoctor.name}'s Calendar` : "Doctor Calendar"}>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <label className="text-[13px] font-bold text-slate-700">Select Date</label>
-           <input type="date" min={todayStr} max={maxDateStr} className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[13px] focus:ring-1 focus:ring-teal-500" value={calendarDate} onChange={(e) => setCalendarDate(e.target.value)} />
+            <label className="type-body text-slate-700">Select Date</label>
+           <input type="date" min={todayStr} max={maxDateStr} className="type-body p-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500" value={calendarDate} onChange={(e) => setCalendarDate(e.target.value)} />
           </div>
           <div>
-            <h4 className="text-[11px] font-bold text-slate-500 uppercase mb-2">Available & Booked Slots</h4>
+            <h4 className="type-utility uppercase text-slate-500 mb-2">Available & Booked Slots</h4>
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
               {selectedDoctor && generateSlots(selectedDoctor, calendarDate).map((slot, idx) => (
                 <div key={idx} className={`p-2 rounded-lg border text-center flex flex-col items-center justify-center ${
@@ -1015,8 +1015,8 @@ const Doctors = ({ data, setData, onLogout }) => {
                   slot.status === 'Off-Duty' ? 'bg-slate-50 border-slate-200 text-slate-400 opacity-60' :
                   'bg-blue-50 border-blue-200 text-blue-700'
                 }`}>
-                  <span className="text-[11px] font-bold">{slot.time}</span>
-                  <span className="text-[9px] mt-0.5">{slot.status}</span>
+                  <span className="type-label">{slot.time}</span>
+                  <span className="type-label mt-0.5">{slot.status}</span>
                 </div>
               ))}
             </div>

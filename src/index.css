@@ -80,3 +80,54 @@ select,
     --app-height: 100svh;
   }
 }
+
+@layer components {
+  .type-hero {
+    font-size: 24px;
+    line-height: 1.2;
+    font-weight: 700;
+  }
+
+  .type-page-title {
+    font-size: 17px;
+    line-height: 1.2;
+    font-weight: 700;
+  }
+
+  .type-section-title {
+    font-size: 15px;
+    line-height: 1.25;
+    font-weight: 600;
+  }
+
+  .type-card-title {
+    font-size: 14px;
+    line-height: 1.3;
+    font-weight: 600;
+  }
+
+  .type-body {
+    font-size: 13px;
+    line-height: 1.4;
+    font-weight: 500;
+  }
+
+  .type-secondary {
+    font-size: 12px;
+    line-height: 1.35;
+    font-weight: 500;
+  }
+
+  .type-label {
+    font-size: 11px;
+    line-height: 1.3;
+    font-weight: 600;
+  }
+
+  .type-utility {
+    font-size: 11px;
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+  }
+}

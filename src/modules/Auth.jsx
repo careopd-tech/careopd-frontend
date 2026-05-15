@@ -296,7 +296,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
 
         <div className="mt-8 text-center text-[12px] text-slate-400 font-medium">
           &copy; {new Date().getFullYear()} CareOPD Systems. All rights reserved.
-          <p className="mt-1 text-[10px] text-slate-300 font-bold tracking-wider">v1.0.0</p>
+          <p className="mt-1 text-[11px] text-slate-300 font-bold tracking-wider">v1.0.0</p>
         </div>
       </div>
     );
@@ -519,7 +519,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
 
       <div className="mt-8 text-center text-[12px] text-slate-400 font-medium">
         &copy; {new Date().getFullYear()} CareOPD Systems. All rights reserved.
-        <p className="mt-1 text-[10px] text-slate-300 font-bold tracking-wider">v1.0.0</p>
+        <p className="mt-1 text-[11px] text-slate-300 font-bold tracking-wider">v1.0.0</p>
       </div>
     </div>
   );

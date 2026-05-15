@@ -39,8 +39,15 @@ const DEFAULT_POLICIES = [
   }
 ];
 
+const normalizeSearchText = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
 const Settings = ({ data, setData, onLogout }) => {
   const [expandedSection, setExpandedSection] = useState('clinic');
+  const [searchQuery, setSearchQuery] = useState('');
   const [editModal, setEditModal] = useState(null);
   const [formData, setFormData] = useState({});
   const [modalError, setModalError] = useState('');
@@ -611,8 +618,8 @@ const Settings = ({ data, setData, onLogout }) => {
       className="flex justify-between items-center p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-teal-300 transition-colors cursor-pointer group"
     >
       <div className="min-w-0 pr-2">
-        <h4 className="text-[13px] font-bold text-slate-800 truncate group-hover:text-teal-700 transition-colors">{title}</h4>
-        {subtitle && <p className="text-[11px] text-slate-500 truncate mt-0.5">{subtitle}</p>}
+        <h4 className="type-card-title text-slate-800 truncate group-hover:text-teal-700 transition-colors">{title}</h4>
+        {subtitle && <p className="type-label text-slate-500 truncate mt-0.5">{subtitle}</p>}
       </div>
       <button 
         onClick={(e) => { e.stopPropagation(); onEdit(); }}
@@ -623,23 +630,42 @@ const Settings = ({ data, setData, onLogout }) => {
     </div>
   );
 
-  const renderAccordion = (id, title, icon, colorClass, children) => {
-    const isExpanded = expandedSection === id;
-    const Icon = icon;
+  const renderAccordion = (sectionOrId, legacyTitle, legacyIcon, legacyColorClass, legacyChildren) => {
+    const isSectionObject = typeof sectionOrId === 'object' && sectionOrId !== null && 'id' in sectionOrId;
+    const matchedSection = isSectionObject
+      ? sectionOrId
+      : visibleSections.find(section => section.id === sectionOrId) || sections.find(section => section.id === sectionOrId);
+    if (isSearchMode && !matchedSection) {
+      return null;
+    }
+
+    const id = isSectionObject ? sectionOrId.id : sectionOrId;
+    const title = isSectionObject ? sectionOrId.title : legacyTitle;
+    const icon = isSectionObject ? sectionOrId.icon : legacyIcon;
+    const colorClass = isSectionObject ? sectionOrId.colorClass : legacyColorClass;
+    const visibleItems = matchedSection?.visibleItems || [];
+    const isExpanded = isSearchMode ? true : expandedSection === id;
+    const Icon = typeof icon === 'function' ? icon : null;
     return (
       <div className={`flex flex-col border-b border-slate-100 ${isExpanded ? 'flex-1 min-h-0' : 'flex-none'}`}>
         <button 
-          onClick={() => setExpandedSection(isExpanded ? null : id)}
+          onClick={() => {
+            if (!isSearchMode) {
+              setExpandedSection(isExpanded ? null : id);
+            }
+          }}
           // MATCHING APPOINTMENTS STYLE:
           // px-3 py-2.5 (was px-4 py-3)
-          className={`flex-none flex items-center justify-between px-3 py-2.5 bg-white hover:bg-slate-50 transition-colors z-10 shadow-sm ${isExpanded ? 'border-b border-slate-100' : 'border-transparent'}`}
+          className={`flex-none flex items-center justify-between px-3 py-2.5 bg-white transition-colors z-10 shadow-sm ${isSearchMode ? 'cursor-default' : 'hover:bg-slate-50'} ${isExpanded ? 'border-b border-slate-100' : 'border-transparent'}`}
         >
           {/* gap-1.5 (was gap-2) */}
           <div className={`flex items-center gap-1.5 ${colorClass}`}>
             {/* Icon size 14 (was 16) */}
-            <Icon size={14} />
+            {Icon ? <Icon size={14} /> : null}
             {/* Text 11px (was 12px) */}
-            <h3 className="text-[11px] font-bold uppercase tracking-wider">{title}</h3>
+            <h3 className="type-section-title">{title}</h3>
+            {isSearchMode && <span className="type-label text-red-500 ml-1">(Filtered)</span>}
+            {isSearchMode && <span className="type-label text-slate-400">({visibleItems.length})</span>}
           </div>
           {/* Arrow size 14 (was 16) */}
           {isExpanded ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
@@ -648,7 +674,13 @@ const Settings = ({ data, setData, onLogout }) => {
           // MATCHING CONTENT STYLE:
           // p-2 space-y-1.5 (was p-3 space-y-2)
           <div className="flex-1 overflow-y-auto bg-slate-50/50 p-2 space-y-1.5 scrollbar-hide animate-fadeIn">
-            {children}
+            {isSearchMode
+              ? visibleItems.map(item => (
+                  <React.Fragment key={item.key}>
+                    {item.render()}
+                  </React.Fragment>
+                ))
+              : legacyChildren}
           </div>
         )}
       </div>
@@ -692,6 +724,352 @@ const Settings = ({ data, setData, onLogout }) => {
       ]
     }
   ];
+  const searchTerm = normalizeSearchText(searchQuery);
+  const isSearchMode = searchTerm.length > 0;
+  const matchesSearch = (...values) => values.some(value => normalizeSearchText(value).includes(searchTerm));
+
+  const renderPrimaryButton = ({ onClick, icon: Icon, label, className }) => (
+    <button
+      onClick={onClick}
+      className={className}
+    >
+      {typeof Icon === 'function' ? <Icon size={14} /> : null}
+      {label}
+    </button>
+  );
+
+  const renderUserAccessCard = (user) => {
+    const isProtectedOwner = user.role === 'super_admin';
+    return (
+      <div key={user._id} className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <h4 className="type-card-title text-slate-800 truncate">{user.name}</h4>
+            <span className={`type-utility px-1.5 py-0.5 rounded-full ${
+              user.status === 'Inactive'
+                ? 'bg-slate-100 text-slate-500'
+                : user.status === 'Pending'
+                  ? 'bg-amber-50 text-amber-700'
+                  : 'bg-teal-50 text-teal-700'
+            }`}>
+              {user.status || 'Active'}
+            </span>
+          </div>
+          <p className="type-label text-slate-500 truncate mt-0.5">{user.email} • {user.phone}</p>
+          <p className="type-label text-slate-400 truncate mt-0.5">
+            {roleLabels[user.role] || user.role}
+          </p>
+        </div>
+        <div className="flex flex-col gap-1.5 flex-shrink-0">
+          {!isProtectedOwner && user.status === 'Active' && (
+            <button
+              type="button"
+              onClick={() => openTransferConfirm(user)}
+              className="type-label px-2.5 py-1.5 rounded-md transition-colors bg-amber-50 text-amber-700 hover:bg-amber-100"
+            >
+              Transfer Ownership
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={user.status === 'Inactive'}
+            onClick={() => handleResetAccessUser(user)}
+            className={`type-label px-2.5 py-1.5 rounded-md transition-colors ${user.status === 'Inactive' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+          >
+            {user.status === 'Pending' ? 'Resend Activation' : 'Reset Password'}
+          </button>
+          <button
+            type="button"
+            disabled={isProtectedOwner}
+            onClick={() => openStatusConfirm(user)}
+            className={`type-label px-2.5 py-1.5 rounded-md transition-colors ${
+              isProtectedOwner
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                : user.status === 'Inactive'
+                  ? 'bg-green-50 text-green-700 hover:bg-green-100'
+                  : 'bg-red-50 text-red-600 hover:bg-red-100'
+            }`}
+          >
+            {isProtectedOwner ? 'Owner' : user.status === 'Inactive' ? 'Reactivate' : 'Deactivate'}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderRolePermissionCard = (roleKey) => {
+    const roleSearchText = `${roleLabels[roleKey]} permissions role access clinic admin doctor`;
+    const showAllForRole = isSearchMode && matchesSearch(roleSearchText);
+    const filteredGroups = permissionGroups
+      .map(group => {
+        const groupMatches = showAllForRole || (isSearchMode && matchesSearch(group.title));
+        const visibleItems = group.items.filter(item =>
+          showAllForRole ||
+          groupMatches ||
+          !isSearchMode ||
+          matchesSearch(item.label, item.key, roleLabels[roleKey], group.title)
+        );
+        return visibleItems.length > 0 ? { ...group, items: visibleItems } : null;
+      })
+      .filter(Boolean);
+
+    if (isSearchMode && filteredGroups.length === 0) {
+      return null;
+    }
+
+    return (
+      <div key={roleKey} className="p-3 bg-white border border-slate-200 rounded-lg shadow-sm space-y-3">
+        <div>
+          <h4 className="type-card-title text-slate-800">{roleLabels[roleKey]}</h4>
+          <p className="type-label text-slate-500 mt-0.5">Permission profile for all users in this role.</p>
+        </div>
+        {filteredGroups.map(group => (
+          <div key={`${roleKey}-${group.title}`} className="space-y-2">
+            <p className="type-utility uppercase text-slate-400">{group.title}</p>
+            {group.items.map(item => (
+              <label key={`${roleKey}-${item.key}`} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-slate-50 border border-slate-100">
+                <span className="type-secondary text-slate-700">{item.label}</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(permissionProfiles?.[roleKey]?.[item.key])}
+                  onChange={() => toggleRolePermission(roleKey, item.key)}
+                  className="accent-teal-600"
+                />
+              </label>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const getSectionItems = () => {
+    const clinicItems = [];
+
+    if (canManageClinicSettings) {
+      clinicItems.push(
+        {
+          key: 'clinic-code',
+          searchText: `clinic code join sign in secure code ${data.clinic?.clinicCode || ''}`,
+          render: () => (
+            <div className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm">
+              <p className="type-label text-slate-500 uppercase">Clinic Code</p>
+              <p className="type-page-title tracking-[0.18em] text-teal-600 mt-1">
+                {data.clinic?.clinicCode ? `${data.clinic.clinicCode.slice(0, 4)}-${data.clinic.clinicCode.slice(4)}` : 'Not Available'}
+              </p>
+              <p className="type-secondary text-slate-400 mt-1">Share this code with your clinic team for secure sign-in.</p>
+            </div>
+          )
+        },
+        {
+          key: 'clinic-details',
+          searchText: `clinic details clinic name address ${data.clinic?.name || ''} ${data.clinic?.address || ''}`,
+          render: () => (
+            <SettingItem
+              title="Clinic Details"
+              subtitle={(data.clinic?.name || 'My Clinic') + " • " + (data.clinic?.address || 'Set address...')}
+              onEdit={() => openEdit({ title: 'Edit Clinic Details', type: 'clinic_details', initialData: { name: data.clinic?.name, address: data.clinic?.address } })}
+            />
+          )
+        },
+        {
+          key: 'clinic-schedule',
+          searchText: `clinic schedule timings hours appointment window working hours ${formatClinicScheduleSummary(data.clinic || clinicSchedule)}`,
+          render: () => (
+            <SettingItem
+              title="Clinic Schedule"
+              subtitle={formatClinicScheduleSummary(data.clinic || clinicSchedule)}
+              onEdit={() => openEdit({
+                title: 'Edit Clinic Schedule',
+                type: 'clinic_schedule',
+                initialData: {
+                  workingHoursStart: clinicSchedule.workingHoursStart,
+                  workingHoursEnd: clinicSchedule.workingHoursEnd,
+                  appointmentWindowMinutes: clinicSchedule.appointmentWindowMinutes
+                }
+              })}
+            />
+          )
+        }
+      );
+
+      if (canUpgradeSolo) {
+        clinicItems.push({
+          key: 'upgrade-clinic',
+          searchText: 'upgrade clinic add receptionists multiple doctors growing clinic expand practice',
+          render: () => (
+            <SettingItem
+              title="Upgrade to Clinic"
+              subtitle="Add receptionists, manage multiple doctors, and scale your growing clinic."
+              onEdit={openUpgradeModal}
+            />
+          )
+        });
+      }
+    }
+
+    const catalogItems = canManageCatalog ? [
+      {
+        key: 'catalog-complaints',
+        searchText: `chief complaints clinical catalog symptoms ${(clinicalCatalog.complaints || []).length} items`,
+        render: () => <SettingItem title="Chief Complaints" subtitle={`${(clinicalCatalog.complaints || []).length} items`} onEdit={() => setClinicalLibraryType('complaint')} />
+      },
+      {
+        key: 'catalog-drugs',
+        searchText: `drug master medicines prescriptions catalog ${(clinicalCatalog.drugs || []).length} items`,
+        render: () => <SettingItem title="Drug Master" subtitle={`${(clinicalCatalog.drugs || []).length} items`} onEdit={() => setClinicalLibraryType('drug')} />
+      },
+      {
+        key: 'catalog-lab-tests',
+        searchText: `lab tests diagnostics catalog ${(clinicalCatalog.labTests || []).length} items`,
+        render: () => <SettingItem title="Lab Tests" subtitle={`${(clinicalCatalog.labTests || []).length} items`} onEdit={() => setClinicalLibraryType('lab_test')} />
+      }
+    ] : [];
+
+    const accessItems = canManageAccess
+      ? [
+          ...(accessLoading
+            ? [{
+                key: 'access-loading',
+                searchText: 'users access loading',
+                render: () => <div className="type-secondary p-4 text-center text-slate-400">Loading users...</div>
+              }]
+            : accessUsers.length === 0
+              ? [{
+                  key: 'access-empty',
+                  searchText: 'users access no users found',
+                  render: () => <div className="type-secondary p-4 text-center text-slate-400">No users found</div>
+                }]
+              : accessUsers.map(user => ({
+                  key: `access-user-${user._id}`,
+                  searchText: `${user.name} ${user.email} ${user.phone} ${user.status} ${roleLabels[user.role] || user.role} users access transfer ownership reset password resend activation reactivate deactivate`,
+                  render: () => renderUserAccessCard(user)
+                }))),
+          {
+            key: 'access-add-admin',
+            searchText: 'add admin invite clinic admin users access create user',
+            render: () => renderPrimaryButton({
+              onClick: openAccessModal,
+              icon: UserPlus,
+              label: 'Add Admin',
+              className: 'type-secondary w-full mt-1.5 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100'
+            })
+          }
+        ]
+      : [];
+
+    const permissionItems = canManageRolePermissions
+      ? [
+          {
+            key: 'permissions-info',
+            searchText: 'delegate daily operations ownership permissions role controls clinic admins doctors manage workspace',
+            render: () => (
+              <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
+                <p className="type-secondary text-amber-800">Delegate daily operations without sharing ownership.</p>
+                <p className="type-label text-amber-700 mt-1">These controls decide which parts of the workspace clinic admins and doctors can manage.</p>
+              </div>
+            )
+          },
+          ...['clinic_admin', 'doctor'].map(roleKey => ({
+            key: `permissions-${roleKey}`,
+            searchText: `${roleLabels[roleKey]} permissions role access ${permissionGroups.map(group => `${group.title} ${group.items.map(item => item.label).join(' ')}`).join(' ')}`,
+            render: () => renderRolePermissionCard(roleKey)
+          })),
+          {
+            key: 'permissions-save',
+            searchText: 'save role permissions clinic admin doctor access',
+            render: () => (
+              <button
+                onClick={handleSavePermissionProfiles}
+                disabled={permissionsLoading}
+                className="type-secondary w-full py-2 text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors disabled:opacity-70"
+              >
+                {permissionsLoading ? 'Saving...' : 'Save Role Permissions'}
+              </button>
+            )
+          }
+        ]
+      : [];
+
+    const whatsappItems = canManageCommunication
+      ? [
+          ...clinicTemplates.map((tpl, idx) => ({
+            key: `template-${idx}`,
+            searchText: `${tpl.title} ${tpl.text} whatsapp template communication message`,
+            render: () => (
+              <SettingItem
+                title={tpl.title}
+                subtitle={tpl.text}
+                onEdit={() => openEdit({ title: 'Edit Template', type: 'template', index: idx, initialData: { title: tpl.title, text: tpl.text } })}
+              />
+            )
+          })),
+          {
+            key: 'template-add',
+            searchText: 'add new template whatsapp settings communication',
+            render: () => renderPrimaryButton({
+              onClick: () => openEdit({ title: 'Add New Template', type: 'template', initialData: { title: '', text: '' } }),
+              icon: Plus,
+              label: 'Add Template',
+              className: 'type-secondary w-full mt-1.5 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100'
+            })
+          }
+        ]
+      : [];
+
+    const policyItems = canManagePolicies
+      ? [
+          ...clinicPolicies.map((pol, idx) => ({
+            key: `policy-${idx}`,
+            searchText: `${pol.title} ${pol.text} policy settings`,
+            render: () => (
+              <SettingItem
+                title={pol.title}
+                subtitle={pol.text}
+                onEdit={() => openEdit({ title: 'Edit Policy', type: 'policy', index: idx, initialData: { title: pol.title, text: pol.text } })}
+              />
+            )
+          })),
+          {
+            key: 'policy-add',
+            searchText: 'add new policy clinic policy settings',
+            render: () => renderPrimaryButton({
+              onClick: () => openEdit({ title: 'Add New Policy', type: 'policy', initialData: { title: '', text: '' } }),
+              icon: Plus,
+              label: 'Add Policy',
+              className: 'type-secondary w-full mt-1.5 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100'
+            })
+          }
+        ]
+      : [];
+
+    return [
+      { id: 'clinic', title: 'Clinic Settings', icon: Building2, colorClass: 'text-blue-600', items: clinicItems },
+      { id: 'clinical-library', title: 'Clinical Catalog', icon: FileText, colorClass: 'text-teal-600', items: catalogItems },
+      { id: 'access', title: 'Users & Access', icon: Users, colorClass: 'text-indigo-600', items: accessItems },
+      { id: 'permissions', title: 'Role Permissions', icon: ShieldCheck, colorClass: 'text-amber-600', items: permissionItems },
+      { id: 'whatsapp', title: 'Whatsapp Settings', icon: MessageCircle, colorClass: 'text-green-600', items: whatsappItems },
+      { id: 'policy', title: 'Policy Settings', icon: FileText, colorClass: 'text-purple-600', items: policyItems }
+    ].filter(section => section.items.length > 0);
+  };
+
+  const sections = getSectionItems();
+  const visibleSections = sections
+    .map(section => {
+      const showAllItems = isSearchMode && matchesSearch(section.title, section.id);
+      const visibleItems = showAllItems
+        ? section.items
+        : section.items.filter(item => !isSearchMode || matchesSearch(item.searchText, section.title));
+      return visibleItems.length > 0 ? { ...section, visibleItems } : null;
+    })
+    .filter(Boolean);
+  const hasVisibleSearchResults = visibleSections.length > 0;
+
+  const getCatalogIdentity = (item = {}) => {
+    const label = String(item.label || '').trim().toLowerCase();
+    const group = String(item.group || item.category || '').trim().toLowerCase();
+    return `${label}::${group}`;
+  };
 
   const handleClinicalCatalogUpdate = (itemType, updatedItem) => {
     const typeMap = {
@@ -706,9 +1084,26 @@ const Settings = ({ data, setData, onLogout }) => {
       ...prev,
       clinicalCatalog: {
         ...(prev.clinicalCatalog || {}),
-        [targetKey]: (prev.clinicalCatalog?.[targetKey] || []).some(item => item._id === updatedItem._id)
-          ? (prev.clinicalCatalog?.[targetKey] || []).map(item => item._id === updatedItem._id ? updatedItem : item)
-          : [...(prev.clinicalCatalog?.[targetKey] || []), updatedItem]
+        [targetKey]: (() => {
+          const currentItems = prev.clinicalCatalog?.[targetKey] || [];
+          const updatedIdentity = getCatalogIdentity(updatedItem);
+          const matchesUpdatedItem = (item) => (
+            (updatedItem?._id && item._id === updatedItem._id) ||
+            (updatedItem?.seedKey && item.seedKey === updatedItem.seedKey) ||
+            (updatedItem?.normalizedLabel && updatedItem?.group && item.normalizedLabel === updatedItem.normalizedLabel && String(item.group || item.category || '').trim().toLowerCase() === String(updatedItem.group || updatedItem.category || '').trim().toLowerCase()) ||
+            (updatedIdentity !== '::' && getCatalogIdentity(item) === updatedIdentity)
+          );
+
+          if (updatedItem?.active === false) {
+            return currentItems.filter(item => !matchesUpdatedItem(item));
+          }
+
+          if (currentItems.some(matchesUpdatedItem)) {
+            return currentItems.map(item => (matchesUpdatedItem(item) ? updatedItem : item));
+          }
+
+          return [...currentItems, updatedItem];
+        })()
       }
     }));
   };
@@ -718,13 +1113,14 @@ const Settings = ({ data, setData, onLogout }) => {
       {notification && (
         <div className={`fixed top-6 right-6 z-[100] px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 bg-white border-l-4 ${notification.type === 'success' ? 'border-teal-500 text-teal-800' : 'border-red-500 text-red-800'}`}>
           {notification.type === 'success' ? <CheckCircle size={20} className="text-teal-500" /> : <AlertCircle size={20} className="text-red-500" />}
-          <span className="text-[13px] font-bold">{notification.message}</span>
+          <span className="type-body">{notification.message}</span>
         </div>
       )}
 
       <ModuleHeader
         title="Settings"
-        showSearch={false}
+        searchVal={searchQuery}
+        onSearch={setSearchQuery}
         notifications={notificationStack}
         onClearAll={handleClearNotifications}
         onDismiss={handleDismissNotification}
@@ -734,16 +1130,24 @@ const Settings = ({ data, setData, onLogout }) => {
       {/* Container Padding: p-2 gap-2 to match other pages */}
       <div className="flex-1 flex flex-col min-h-0 p-2 gap-2 max-w-3xl mx-auto w-full">
         <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          {isSearchMode && !hasVisibleSearchResults && (
+            <div className="flex-1 flex items-center justify-center p-6 bg-slate-50/50 border-b border-slate-100">
+              <div className="text-center">
+                <p className="type-section-title text-slate-700">No matching settings</p>
+                <p className="type-secondary text-slate-400 mt-1">Try searching by clinic code, ownership, schedule, passwords, or policies.</p>
+              </div>
+            </div>
+          )}
           
           {/* 1. CLINIC */}
           {canManageClinicSettings && renderAccordion('clinic', 'Clinic Settings', Building2, 'text-blue-600', 
             <>
               <div className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm">
-                <p className="text-[11px] font-bold text-slate-500 uppercase">Clinic Code</p>
-                <p className="text-[18px] font-bold tracking-[0.18em] text-teal-600 mt-1">
+                <p className="type-label text-slate-500 uppercase">Clinic Code</p>
+                <p className="type-page-title tracking-[0.18em] text-teal-600 mt-1">
                   {data.clinic?.clinicCode ? `${data.clinic.clinicCode.slice(0, 4)}-${data.clinic.clinicCode.slice(4)}` : 'Not Available'}
                 </p>
-                <p className="text-[10px] text-slate-400 mt-1">Share this code with your clinic team for secure sign-in.</p>
+                <p className="type-secondary text-slate-400 mt-1">Share this code with your clinic team for secure sign-in.</p>
               </div>
               <SettingItem 
                 title="Clinic Details" 
@@ -765,8 +1169,8 @@ const Settings = ({ data, setData, onLogout }) => {
               />
               {canUpgradeSolo && (
                 <SettingItem
-                  title="Upgrade Practice"
-                  subtitle="Convert solo doctor setup into a clinic workspace"
+                  title="Upgrade to Clinic"
+                  subtitle="Add receptionists, manage multiple doctors, and scale your growing clinic."
                   onEdit={openUpgradeModal}
                 />
               )}
@@ -796,9 +1200,9 @@ const Settings = ({ data, setData, onLogout }) => {
           {canManageAccess && renderAccordion('access', 'Users & Access', Users, 'text-indigo-600',
             <>
               {accessLoading ? (
-                <div className="p-4 text-center text-[12px] text-slate-400 font-medium">Loading users...</div>
+                <div className="type-secondary p-4 text-center text-slate-400">Loading users...</div>
               ) : accessUsers.length === 0 ? (
-                <div className="p-4 text-center text-[12px] text-slate-400 font-medium">No users found</div>
+                <div className="type-secondary p-4 text-center text-slate-400">No users found</div>
               ) : (
                 accessUsers.map(user => {
                   const isProtectedOwner = user.role === 'super_admin';
@@ -806,8 +1210,8 @@ const Settings = ({ data, setData, onLogout }) => {
                     <div key={user._id} className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <h4 className="text-[13px] font-bold text-slate-800 truncate">{user.name}</h4>
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                          <h4 className="type-card-title text-slate-800 truncate">{user.name}</h4>
+                          <span className={`type-utility px-1.5 py-0.5 rounded-full ${
                             user.status === 'Inactive'
                               ? 'bg-slate-100 text-slate-500'
                               : user.status === 'Pending'
@@ -818,7 +1222,7 @@ const Settings = ({ data, setData, onLogout }) => {
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-500 truncate mt-0.5">{user.email} • {user.phone}</p>
-                        <p className="text-[10px] text-slate-400 truncate mt-0.5">
+                        <p className="text-[11px] text-slate-400 truncate mt-0.5">
                           {roleLabels[user.role] || user.role}
                         </p>
                       </div>
@@ -827,7 +1231,7 @@ const Settings = ({ data, setData, onLogout }) => {
                           <button
                             type="button"
                             onClick={() => openTransferConfirm(user)}
-                            className="px-2.5 py-1.5 rounded-md text-[11px] font-bold transition-colors bg-amber-50 text-amber-700 hover:bg-amber-100"
+                            className="type-label px-2.5 py-1.5 rounded-md transition-colors bg-amber-50 text-amber-700 hover:bg-amber-100"
                           >
                             Transfer Ownership
                           </button>
@@ -836,7 +1240,7 @@ const Settings = ({ data, setData, onLogout }) => {
                           type="button"
                           disabled={user.status === 'Inactive'}
                           onClick={() => handleResetAccessUser(user)}
-                          className={`px-2.5 py-1.5 rounded-md text-[11px] font-bold transition-colors ${user.status === 'Inactive' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+                          className={`type-label px-2.5 py-1.5 rounded-md transition-colors ${user.status === 'Inactive' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
                         >
                           {user.status === 'Pending' ? 'Resend Activation' : 'Reset Password'}
                         </button>
@@ -844,7 +1248,7 @@ const Settings = ({ data, setData, onLogout }) => {
                           type="button"
                           disabled={isProtectedOwner}
                           onClick={() => openStatusConfirm(user)}
-                          className={`px-2.5 py-1.5 rounded-md text-[11px] font-bold transition-colors ${
+                          className={`type-label px-2.5 py-1.5 rounded-md transition-colors ${
                             isProtectedOwner
                               ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                               : user.status === 'Inactive'
@@ -862,7 +1266,7 @@ const Settings = ({ data, setData, onLogout }) => {
 
               <button
                 onClick={openAccessModal}
-                className="w-full mt-1.5 py-2 text-[12px] font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100"
+                className="type-secondary w-full mt-1.5 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100"
               >
                 <UserPlus size={14} /> Add Admin
               </button>
@@ -872,21 +1276,21 @@ const Settings = ({ data, setData, onLogout }) => {
           {canManageRolePermissions && renderAccordion('permissions', 'Role Permissions', ShieldCheck, 'text-amber-600',
             <div className="space-y-3">
               <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
-                <p className="text-[12px] font-bold text-amber-800">Delegate daily operations without sharing ownership.</p>
-                <p className="text-[11px] text-amber-700 mt-1">These controls decide which parts of the workspace clinic admins and doctors can manage.</p>
+                <p className="type-secondary text-amber-800">Delegate daily operations without sharing ownership.</p>
+                <p className="type-label text-amber-700 mt-1">These controls decide which parts of the workspace clinic admins and doctors can manage.</p>
               </div>
               {['clinic_admin', 'doctor'].map(roleKey => (
                 <div key={roleKey} className="p-3 bg-white border border-slate-200 rounded-lg shadow-sm space-y-3">
                   <div>
-                    <h4 className="text-[13px] font-bold text-slate-800">{roleLabels[roleKey]}</h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Permission profile for all users in this role.</p>
+                    <h4 className="type-card-title text-slate-800">{roleLabels[roleKey]}</h4>
+                    <p className="type-label text-slate-500 mt-0.5">Permission profile for all users in this role.</p>
                   </div>
                   {permissionGroups.map(group => (
                     <div key={`${roleKey}-${group.title}`} className="space-y-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{group.title}</p>
+                      <p className="type-utility uppercase text-slate-400">{group.title}</p>
                       {group.items.map(item => (
                         <label key={`${roleKey}-${item.key}`} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-slate-50 border border-slate-100">
-                          <span className="text-[12px] text-slate-700">{item.label}</span>
+                          <span className="type-secondary text-slate-700">{item.label}</span>
                           <input
                             type="checkbox"
                             checked={Boolean(permissionProfiles?.[roleKey]?.[item.key])}
@@ -902,7 +1306,7 @@ const Settings = ({ data, setData, onLogout }) => {
               <button
                 onClick={handleSavePermissionProfiles}
                 disabled={permissionsLoading}
-                className="w-full py-2 text-[12px] font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors disabled:opacity-70"
+                className="type-secondary w-full py-2 text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors disabled:opacity-70"
               >
                 {permissionsLoading ? 'Saving...' : 'Save Role Permissions'}
               </button>
@@ -923,7 +1327,7 @@ const Settings = ({ data, setData, onLogout }) => {
 
               <button 
                 onClick={() => openEdit({ title: 'Add New Template', type: 'template', initialData: { title: '', text: '' } })}
-                className="w-full mt-1.5 py-2 text-[12px] font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100"
+                className="type-secondary w-full mt-1.5 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100"
               >
                 <Plus size={14} /> Add Template
               </button>
@@ -944,7 +1348,7 @@ const Settings = ({ data, setData, onLogout }) => {
 
               <button 
                 onClick={() => openEdit({ title: 'Add New Policy', type: 'policy', initialData: { title: '', text: '' } })}
-                className="w-full mt-1.5 py-2 text-[12px] font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100"
+                className="type-secondary w-full mt-1.5 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100"
               >
                 <Plus size={14} /> Add Policy
               </button>
@@ -955,7 +1359,7 @@ const Settings = ({ data, setData, onLogout }) => {
 
       {/* EDIT MODAL */}
       <Modal isOpen={!!editModal} onClose={() => { setEditModal(null); setModalError(''); setInvalidFields([]); }} title={editModal?.title} footer={
-          <button onClick={handleSaveSetting} disabled={loading} className="w-full bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70 hover:bg-teal-700 transition-colors">
+          <button onClick={handleSaveSetting} disabled={loading} className="type-section-title w-full bg-teal-600 text-white py-1.5 rounded-lg disabled:opacity-70 hover:bg-teal-700 transition-colors">
              {loading ? 'Saving...' : 'Save Changes'}
           </button>
         }>
@@ -964,34 +1368,34 @@ const Settings = ({ data, setData, onLogout }) => {
            
            {editModal?.type === 'clinic_details' && (
              <>
-               <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Clinic Name *</label><input type="text" className="w-full p-2 border border-slate-200 rounded-lg text-[13px] outline-none focus:ring-1 focus:ring-teal-500" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
-               <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Address *</label><textarea className="w-full p-2 border border-slate-200 rounded-lg text-[13px] h-20 outline-none focus:ring-1 focus:ring-teal-500" value={formData.address || ''} onChange={e => setFormData({...formData, address: e.target.value})} /></div>
+               <div><label className="type-label block text-slate-500 mb-1 uppercase">Clinic Name *</label><input type="text" className="type-body w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-500" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
+               <div><label className="type-label block text-slate-500 mb-1 uppercase">Address *</label><textarea className="type-body w-full p-2 border border-slate-200 rounded-lg h-20 outline-none focus:ring-1 focus:ring-teal-500" value={formData.address || ''} onChange={e => setFormData({...formData, address: e.target.value})} /></div>
              </>
            )}
 
            {editModal?.type === 'single_input' && (
-             <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">{editModal.inputLabel} *</label><input type="text" className="w-full p-2 border border-slate-200 rounded-lg text-[13px] outline-none focus:ring-1 focus:ring-teal-500" value={formData.value || ''} onChange={e => setFormData({...formData, value: e.target.value})} /></div>
+             <div><label className="type-label block text-slate-500 mb-1 uppercase">{editModal.inputLabel} *</label><input type="text" className="type-body w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-500" value={formData.value || ''} onChange={e => setFormData({...formData, value: e.target.value})} /></div>
            )}
 
            {editModal?.type === 'clinic_schedule' && (
              <>
                <div className="rounded-lg border border-teal-100 bg-teal-50 px-3 py-2">
-                 <p className="text-[11px] font-bold uppercase tracking-wide text-teal-700">Scheduling Rule</p>
-                 <p className="text-[12px] text-teal-900">Doctor working hours and appointment slots will follow this clinic schedule.</p>
+                 <p className="type-utility uppercase text-teal-700">Scheduling Rule</p>
+                 <p className="type-secondary text-teal-900">Doctor working hours and appointment slots will follow this clinic schedule.</p>
                </div>
                <div className="grid grid-cols-2 gap-2">
                  <div>
-                   <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Clinic Start Time *</label>
-                   <input type="time" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('workingHoursStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.workingHoursStart || ''} onChange={e => setFormData({...formData, workingHoursStart: e.target.value})} />
+                   <label className="type-label block text-slate-500 mb-1 uppercase">Clinic Start Time *</label>
+                   <input type="time" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('workingHoursStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.workingHoursStart || ''} onChange={e => setFormData({...formData, workingHoursStart: e.target.value})} />
                  </div>
                  <div>
-                   <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Clinic End Time *</label>
-                   <input type="time" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('workingHoursEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.workingHoursEnd || ''} onChange={e => setFormData({...formData, workingHoursEnd: e.target.value})} />
+                   <label className="type-label block text-slate-500 mb-1 uppercase">Clinic End Time *</label>
+                   <input type="time" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('workingHoursEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.workingHoursEnd || ''} onChange={e => setFormData({...formData, workingHoursEnd: e.target.value})} />
                  </div>
                </div>
                <div>
-                 <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Appointment Window *</label>
-                 <select className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('appointmentWindowMinutes') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.appointmentWindowMinutes || clinicSchedule.appointmentWindowMinutes} onChange={e => setFormData({...formData, appointmentWindowMinutes: Number(e.target.value)})}>
+                 <label className="type-label block text-slate-500 mb-1 uppercase">Appointment Window *</label>
+                 <select className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('appointmentWindowMinutes') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.appointmentWindowMinutes || clinicSchedule.appointmentWindowMinutes} onChange={e => setFormData({...formData, appointmentWindowMinutes: Number(e.target.value)})}>
                    {APPOINTMENT_WINDOW_OPTIONS.map((minutes) => (
                      <option key={minutes} value={minutes}>{minutes} minutes</option>
                    ))}
@@ -1002,11 +1406,11 @@ const Settings = ({ data, setData, onLogout }) => {
 
            {(editModal?.type === 'template' || editModal?.type === 'policy') && (
              <>
-               <div><label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Title *</label><input type="text" className="w-full p-2 border border-slate-200 rounded-lg text-[13px] outline-none focus:ring-1 focus:ring-teal-500" value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} /></div>
+               <div><label className="type-label block text-slate-500 mb-1 uppercase">Title *</label><input type="text" className="type-body w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-500" value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} /></div>
                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Content *</label>
-                  <textarea className="w-full p-2 border border-slate-200 rounded-lg text-[13px] h-32 outline-none focus:ring-1 focus:ring-teal-500 resize-none" value={formData.text || ''} onChange={e => setFormData({...formData, text: e.target.value})} />
-                  {editModal.type === 'template' && <p className="text-[10px] text-slate-400 mt-1">Variables: {'{patient_name}, {doctor_name}, {time}, {date}'}</p>}
+                  <label className="type-label block text-slate-500 mb-1 uppercase">Content *</label>
+                  <textarea className="type-body w-full p-2 border border-slate-200 rounded-lg h-32 outline-none focus:ring-1 focus:ring-teal-500 resize-none" value={formData.text || ''} onChange={e => setFormData({...formData, text: e.target.value})} />
+                  {editModal.type === 'template' && <p className="type-label text-slate-400 mt-1">Variables: {'{patient_name}, {doctor_name}, {time}, {date}'}</p>}
                </div>
              </>
            )}
@@ -1014,7 +1418,7 @@ const Settings = ({ data, setData, onLogout }) => {
       </Modal>
 
       <Modal isOpen={upgradeModalOpen} onClose={() => { setUpgradeModalOpen(false); setModalError(''); setInvalidFields([]); }} title="Add Establishment Details" footer={
-          <button onClick={handleUpgradeToClinic} disabled={loading} className="w-full bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70 hover:bg-teal-700 transition-colors">
+          <button onClick={handleUpgradeToClinic} disabled={loading} className="type-section-title w-full bg-teal-600 text-white py-1.5 rounded-lg disabled:opacity-70 hover:bg-teal-700 transition-colors">
              {loading ? 'Upgrading...' : 'Upgrade to Clinic'}
           </button>
         }>
@@ -1022,39 +1426,39 @@ const Settings = ({ data, setData, onLogout }) => {
           <AlertMessage message={modalError} />
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Clinic Name <span className="text-red-500">*</span></label>
-            <input type="text" placeholder="CareOPD Medical Center" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('clinicName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.clinicName} onChange={e => setUpgradeData({...upgradeData, clinicName: e.target.value})} />
+            <label className="type-label block text-slate-500 mb-1 uppercase">Clinic Name <span className="text-red-500">*</span></label>
+            <input type="text" placeholder="CareOPD Medical Center" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('clinicName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.clinicName} onChange={e => setUpgradeData({...upgradeData, clinicName: e.target.value})} />
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Clinical Establishment (CE) Number <span className="text-red-500">*</span></label>
-            <input type="text" placeholder="CE registration number" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('clinicalEstablishmentNo') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.clinicalEstablishmentNo} onChange={e => setUpgradeData({...upgradeData, clinicalEstablishmentNo: e.target.value})} />
+            <label className="type-label block text-slate-500 mb-1 uppercase">Clinical Establishment (CE) Number <span className="text-red-500">*</span></label>
+            <input type="text" placeholder="CE registration number" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('clinicalEstablishmentNo') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.clinicalEstablishmentNo} onChange={e => setUpgradeData({...upgradeData, clinicalEstablishmentNo: e.target.value})} />
           </div>
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Date of Issue <span className="text-red-500">*</span></label>
-              <input type="date" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('ceIssueDate') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.ceIssueDate} onChange={e => setUpgradeData({...upgradeData, ceIssueDate: e.target.value})} />
+              <label className="type-label block text-slate-500 mb-1 uppercase">Date of Issue <span className="text-red-500">*</span></label>
+              <input type="date" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('ceIssueDate') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.ceIssueDate} onChange={e => setUpgradeData({...upgradeData, ceIssueDate: e.target.value})} />
             </div>
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Registering State Authority <span className="text-red-500">*</span></label>
-              <input type="text" placeholder="e.g. Delhi Health Authority" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('registeringAuthority') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.registeringAuthority} onChange={e => setUpgradeData({...upgradeData, registeringAuthority: e.target.value})} />
+              <label className="type-label block text-slate-500 mb-1 uppercase">Registering State Authority <span className="text-red-500">*</span></label>
+              <input type="text" placeholder="e.g. Delhi Health Authority" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('registeringAuthority') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.registeringAuthority} onChange={e => setUpgradeData({...upgradeData, registeringAuthority: e.target.value})} />
             </div>
           </div>
 
           <label className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer">
             <input type="checkbox" checked={upgradeData.createAdmin} onChange={e => setUpgradeData({...upgradeData, createAdmin: e.target.checked})} className="accent-teal-600" />
             <UserPlus size={14} className="text-slate-500" />
-            <span className="text-[13px] font-bold text-slate-700">Create clinic admin</span>
+            <span className="type-body text-slate-700">Create clinic admin</span>
           </label>
 
           {upgradeData.createAdmin && (
             <div className="space-y-2 animate-fadeIn">
-              <input type="text" placeholder="Admin name *" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('adminName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminName} onChange={e => setUpgradeData({...upgradeData, adminName: e.target.value})} />
-              <input type="email" placeholder="Admin email *" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('adminEmail') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminEmail} onChange={e => setUpgradeData({...upgradeData, adminEmail: e.target.value})} />
+              <input type="text" placeholder="Admin name *" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('adminName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminName} onChange={e => setUpgradeData({...upgradeData, adminName: e.target.value})} />
+              <input type="email" placeholder="Admin email *" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('adminEmail') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminEmail} onChange={e => setUpgradeData({...upgradeData, adminEmail: e.target.value})} />
               <div className="grid grid-cols-2 gap-2">
-                <input type="tel" maxLength={10} placeholder="Admin phone *" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('adminPhone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminPhone} onChange={e => setUpgradeData({...upgradeData, adminPhone: e.target.value.replace(/\D/g, '')})} />
-                <input type="password" placeholder="Password *" className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('adminPassword') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminPassword} onChange={e => setUpgradeData({...upgradeData, adminPassword: e.target.value})} />
+                <input type="tel" maxLength={10} placeholder="Admin phone *" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('adminPhone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminPhone} onChange={e => setUpgradeData({...upgradeData, adminPhone: e.target.value.replace(/\D/g, '')})} />
+                <input type="password" placeholder="Password *" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('adminPassword') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminPassword} onChange={e => setUpgradeData({...upgradeData, adminPassword: e.target.value})} />
               </div>
             </div>
           )}
@@ -1062,7 +1466,7 @@ const Settings = ({ data, setData, onLogout }) => {
       </Modal>
 
       <Modal isOpen={accessModalOpen} onClose={() => { setAccessModalOpen(false); setModalError(''); setInvalidFields([]); }} title="Add Clinic Admin" footer={
-          <button onClick={handleCreateAccessUser} disabled={loading} className="w-full bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70 hover:bg-teal-700 transition-colors">
+          <button onClick={handleCreateAccessUser} disabled={loading} className="type-section-title w-full bg-teal-600 text-white py-1.5 rounded-lg disabled:opacity-70 hover:bg-teal-700 transition-colors">
              {loading ? 'Creating...' : 'Create Admin'}
           </button>
         }>
@@ -1070,34 +1474,34 @@ const Settings = ({ data, setData, onLogout }) => {
           <AlertMessage message={modalError} />
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Full Name <span className="text-red-500">*</span></label>
+            <label className="type-label block text-slate-500 mb-1 uppercase">Full Name <span className="text-red-500">*</span></label>
             <input
               type="text"
               placeholder="Full name"
-              className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('name') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
+              className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('name') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
               value={accessData.name}
               onChange={e => setAccessData({ ...accessData, name: e.target.value })}
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Email ID <span className="text-red-500">*</span></label>
+            <label className="type-label block text-slate-500 mb-1 uppercase">Email ID <span className="text-red-500">*</span></label>
             <input
               type="email"
               placeholder="user@clinic.com"
-              className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('email') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
+              className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('email') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
               value={accessData.email}
               onChange={e => setAccessData({ ...accessData, email: e.target.value })}
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Mobile Number <span className="text-red-500">*</span></label>
+            <label className="type-label block text-slate-500 mb-1 uppercase">Mobile Number <span className="text-red-500">*</span></label>
             <input
               type="tel"
               maxLength={10}
               placeholder="10-digit number"
-              className={`w-full p-2 border rounded-lg text-[13px] outline-none focus:ring-1 ${invalidFields.includes('phone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
+              className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('phone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
               value={accessData.phone}
               onChange={e => setAccessData({ ...accessData, phone: e.target.value.replace(/\D/g, '') })}
             />
@@ -1115,7 +1519,7 @@ const Settings = ({ data, setData, onLogout }) => {
               type="button"
               onClick={closeTransferConfirm}
               disabled={loading}
-              className="w-full bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70 hover:bg-slate-50 transition-colors"
+              className="type-section-title w-full bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg disabled:opacity-70 hover:bg-slate-50 transition-colors"
             >
               Cancel
             </button>
@@ -1123,7 +1527,7 @@ const Settings = ({ data, setData, onLogout }) => {
               type="button"
               onClick={handleTransferOwnership}
               disabled={loading}
-              className="w-full bg-amber-600 text-white py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70 hover:bg-amber-700 transition-colors"
+              className="type-section-title w-full bg-amber-600 text-white py-1.5 rounded-lg disabled:opacity-70 hover:bg-amber-700 transition-colors"
             >
               {loading ? 'Transferring...' : 'Transfer Ownership'}
             </button>
@@ -1133,20 +1537,20 @@ const Settings = ({ data, setData, onLogout }) => {
         <div className="space-y-3">
           <AlertMessage message={modalError} />
           <div className="bg-amber-50 border border-amber-100 rounded-lg p-3">
-            <p className="text-[13px] font-bold text-amber-900">{transferConfirmUser?.name}</p>
-            <p className="text-[11px] text-amber-800 mt-0.5">{transferConfirmUser?.email}</p>
-            <p className="text-[10px] text-amber-700 mt-1">{roleLabels[transferConfirmUser?.role] || transferConfirmUser?.role}</p>
+            <p className="type-body text-amber-900">{transferConfirmUser?.name}</p>
+            <p className="type-label text-amber-800 mt-0.5">{transferConfirmUser?.email}</p>
+            <p className="type-label text-amber-700 mt-1">{roleLabels[transferConfirmUser?.role] || transferConfirmUser?.role}</p>
           </div>
-          <p className="text-[13px] text-slate-600 leading-relaxed">
+          <p className="type-body text-slate-600 leading-relaxed">
             This will make the selected user the new clinic owner and super admin. Your account will fall back to {savedUser.doctorId ? 'Doctor' : 'Clinic Admin'} access.
           </p>
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Reason</label>
+            <label className="type-label block text-slate-500 mb-1 uppercase">Reason</label>
             <textarea
               value={transferRemark}
               onChange={e => setTransferRemark(e.target.value)}
               placeholder="Optional note for audit history"
-              className="w-full p-2 border border-slate-200 rounded-lg text-[13px] h-24 outline-none focus:ring-1 focus:ring-amber-500 resize-none"
+              className="type-body w-full p-2 border border-slate-200 rounded-lg h-24 outline-none focus:ring-1 focus:ring-amber-500 resize-none"
               disabled={loading}
             />
           </div>
@@ -1163,7 +1567,7 @@ const Settings = ({ data, setData, onLogout }) => {
               type="button"
               onClick={closeStatusConfirm}
               disabled={loading}
-              className="w-full bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70 hover:bg-slate-50 transition-colors"
+              className="type-section-title w-full bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg disabled:opacity-70 hover:bg-slate-50 transition-colors"
             >
               Cancel
             </button>
@@ -1171,7 +1575,7 @@ const Settings = ({ data, setData, onLogout }) => {
               type="button"
               onClick={() => handleToggleAccessUser()}
               disabled={loading}
-              className={`w-full text-white py-1.5 rounded-lg text-[15px] font-medium disabled:opacity-70 transition-colors ${
+              className={`type-section-title w-full text-white py-1.5 rounded-lg disabled:opacity-70 transition-colors ${
                 statusConfirmUser?.status === 'Inactive'
                   ? 'bg-teal-600 hover:bg-teal-700'
                   : 'bg-red-600 hover:bg-red-700'
@@ -1185,10 +1589,10 @@ const Settings = ({ data, setData, onLogout }) => {
         <div className="space-y-3">
           <AlertMessage message={modalError} />
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-            <p className="text-[13px] font-bold text-slate-800">{statusConfirmUser?.name}</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">{statusConfirmUser?.email}</p>
+            <p className="type-body text-slate-800">{statusConfirmUser?.name}</p>
+            <p className="type-label text-slate-500 mt-0.5">{statusConfirmUser?.email}</p>
           </div>
-          <p className="text-[13px] text-slate-600 leading-relaxed">
+          <p className="type-body text-slate-600 leading-relaxed">
             {statusConfirmUser?.status === 'Inactive'
               ? statusConfirmUser?.activationPending
                 ? 'This will restore the invite. The user will remain Pending until they open the activation link and set a password.'
@@ -1196,12 +1600,12 @@ const Settings = ({ data, setData, onLogout }) => {
               : 'This will immediately block the selected user from signing in.'}
           </p>
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase">Remark</label>
+            <label className="type-label block text-slate-500 mb-1 uppercase">Remark</label>
             <textarea
               value={statusRemark}
               onChange={e => setStatusRemark(e.target.value)}
               placeholder="Optional reason or internal note"
-              className="w-full p-2 border border-slate-200 rounded-lg text-[13px] h-24 outline-none focus:ring-1 focus:ring-teal-500 resize-none"
+              className="type-body w-full p-2 border border-slate-200 rounded-lg h-24 outline-none focus:ring-1 focus:ring-teal-500 resize-none"
               disabled={loading}
             />
           </div>

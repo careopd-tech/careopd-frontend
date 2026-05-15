@@ -79,8 +79,8 @@ const ModuleHeader = ({
         
         {/* TITLE */}
         <div className="flex items-center flex-shrink-0">
-           <h1 className="text-[17px] font-bold text-slate-800 capitalize tracking-wide hidden md:block">{title}</h1>
-           <h1 className="text-[17px] font-bold text-slate-800 capitalize tracking-wide md:hidden">{shortTitle || title}</h1>
+           <h1 className="type-page-title text-slate-800 capitalize hidden md:block">{title}</h1>
+           <h1 className="type-page-title text-slate-800 capitalize md:hidden">{shortTitle || title}</h1>
         </div>
         
         {/* SEARCH */}
@@ -91,7 +91,7 @@ const ModuleHeader = ({
               <input 
                 type="text" 
                 placeholder="Search..." 
-                className="w-full pl-8 pr-2 py-[7px] bg-slate-50 border-none rounded-lg text-[13px] focus:ring-1 focus:ring-teal-500 outline-none transition-all placeholder:text-slate-400"
+                className="type-body w-full pl-8 pr-2 py-[7px] bg-slate-50 border-none rounded-lg focus:ring-1 focus:ring-teal-500 outline-none transition-all placeholder:text-slate-400"
                 value={searchVal}
                 onChange={(e) => onSearch(e.target.value)}
               />
@@ -137,14 +137,14 @@ const ModuleHeader = ({
                 <div className={`${POPUP_CLASSES} w-80`}> {/* <-- explicitly w-80 here */}
                     <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                       <div className="flex items-center gap-2">
-                        <h3 className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">Notifications</h3>
-                        <span className="bg-teal-100 text-teal-700 text-[10px] font-bold px-1.5 rounded-full">{unreadCount}</span>
+                        <h3 className="type-utility text-slate-700 uppercase">Notifications</h3>
+                        <span className="type-label bg-teal-100 text-teal-700 px-1.5 rounded-full">{unreadCount}</span>
                       </div>
                       
                       {/* CLEAR ALL BUTTON */}
                       <div className="flex items-center gap-2">
                         {unreadCount > 0 && (
-                            <button onClick={() => onClearAll?.()} className="text-[10px] font-bold text-teal-600 hover:text-teal-700 hover:underline">
+                            <button onClick={() => onClearAll?.()} className="type-label text-teal-600 hover:text-teal-700 hover:underline">
                                 Clear All
                             </button>
                         )}
@@ -154,7 +154,7 @@ const ModuleHeader = ({
                     
                     <div className="max-h-[300px] overflow-y-auto scrollbar-hide">
                       {safeNotifications.length === 0 ? (
-                        <div className="p-6 text-center text-slate-400 text-[12px] italic">No new notifications</div>
+                        <div className="type-secondary p-6 text-center text-slate-400 italic">No new notifications</div>
                       ) : (
                         <div className="divide-y divide-slate-50">
                           {safeNotifications.map((notif) => (
@@ -163,8 +163,8 @@ const ModuleHeader = ({
                                  {notif.type === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
                                </div>
                                <div className="flex-1 min-w-0 pr-4"> {/* Padding Right for X button */}
-                                 <p className="text-[12px] text-slate-700 font-medium leading-tight">{notif.message}</p>
-                                 <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-400">
+                                 <p className="type-secondary text-slate-700 leading-tight">{notif.message}</p>
+                                 <div className="type-label flex items-center gap-1 mt-1 text-slate-400">
                                    <Clock size={10} /> <span>{notif.timestamp}</span>
                                  </div>
                                </div>
@@ -194,7 +194,7 @@ const ModuleHeader = ({
                 }}
                 className="flex items-center gap-1.5 pl-1 pr-1 py-1 rounded-full hover:bg-slate-100 transition-colors outline-none"
               >
-                 <div className="w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-[11px] font-bold border border-teal-200">
+                 <div className="type-label w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center border border-teal-200">
                    {initials}
                  </div>
                  <ChevronDown size={12} className="text-slate-400 hidden md:block" />
@@ -203,28 +203,28 @@ const ModuleHeader = ({
               {isProfileOpen && (
                 <div className={`${POPUP_CLASSES} w-50`}> {/* <-- explicitly w-50 here for tight fit */}
                     <div className="px-4 py-3 border-b border-slate-50 bg-slate-50/30">
-                      <p className="text-[13px] font-bold text-slate-800">{displayName}</p>
-                      {displayEmail && <p className="text-[10px] text-slate-400 truncate">{displayEmail}</p>}
+                      <p className="type-body text-slate-800">{displayName}</p>
+                      {displayEmail && <p className="type-label text-slate-400 truncate">{displayEmail}</p>}
                     </div>
                     
                     <div className="p-1">
                       <button 
                         onClick={() => { setIsAccountModalOpen(true); setIsProfileOpen(false); }}
-                        className="w-full text-left px-3 py-2.5 text-[13px] font-medium text-slate-600 hover:bg-slate-50 hover:text-teal-700 rounded-lg flex items-center gap-3 transition-colors"
+                        className="type-body w-full text-left px-3 py-2.5 text-slate-600 hover:bg-slate-50 hover:text-teal-700 rounded-lg flex items-center gap-3 transition-colors"
                       >
                         <User size={15} /> My Account
                       </button>
 
                       <button 
                         onClick={() => { setIsPasswordModalOpen(true); setIsProfileOpen(false); }}
-                        className="w-full text-left px-3 py-2.5 text-[13px] font-medium text-slate-600 hover:bg-slate-50 hover:text-teal-700 rounded-lg flex items-center gap-3 transition-colors mt-1"
+                        className="type-body w-full text-left px-3 py-2.5 text-slate-600 hover:bg-slate-50 hover:text-teal-700 rounded-lg flex items-center gap-3 transition-colors mt-1"
                       >
                         <KeyRound size={15} /> Change Password
                       </button>
                       
                       <button 
                         onClick={onLogout}
-                        className="w-full text-left px-3 py-2.5 text-[13px] font-bold text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-3 transition-colors mt-1 border-t border-slate-50"
+                        className="type-body w-full text-left px-3 py-2.5 text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-3 transition-colors mt-1 border-t border-slate-50"
                       >
                         <LogOut size={15} /> Sign Out
                       </button>

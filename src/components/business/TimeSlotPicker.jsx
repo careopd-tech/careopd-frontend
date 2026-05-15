@@ -132,7 +132,7 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, cl
             className={`flex flex-col items-center justify-center p-2 rounded-lg text-center transition-all border ${colorClass}`}
           >
             <span className="text-[11px] font-bold">{slot.time}</span>
-            <span className="text-[9px] mt-0.5">{label}</span>
+            <span className="text-[11px] mt-0.5">{label}</span>
           </button>
         );
       })}

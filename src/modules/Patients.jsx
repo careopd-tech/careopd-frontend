@@ -336,19 +336,19 @@ const renderPatientCard = (p) => {
         <div className="flex-1 min-w-0">
           <div className="flex justify-between items-start mb-1.5">
             <div className="flex items-center gap-1.5 mt-0.5">
-              <h3 className="font-bold text-[13px] text-slate-800 leading-tight">{p.name || 'Unknown Name'}</h3>
+              <h3 className="type-card-title text-slate-800 leading-tight">{p.name || 'Unknown Name'}</h3>
             </div>
-            <div className={`px-2 py-0.5 rounded flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider ${p.type === 'New' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
+            <div className={`type-utility px-2 py-0.5 rounded flex items-center gap-1.5 uppercase ${p.type === 'New' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
                <div className={`w-1.5 h-1.5 rounded-full ${p.type === 'New' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
                {p.type || 'New'}
             </div>
           </div>
           <p className="text-[11px] text-slate-500 leading-tight mt-0.5">{p.gender || '?'}, {p.age || '?'} Yrs • {p.phone || 'No Phone'}</p>
-          <p className="text-[10px] text-slate-400 mt-1.5">Last Visit: {formatDate(p.lastVisit)}</p>
+          <p className="text-[11px] text-slate-400 mt-1.5">Last Visit: {formatDate(p.lastVisit)}</p>
         </div>
         <div className="flex flex-row md:flex-col gap-1.5 border-t md:border-t-0 md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 justify-end flex-shrink-0 md:w-32">          
-          <button onClick={() => openEditModal(p, 'demographics')} className="flex-1 md:flex-none w-full h-7 text-[10px] font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-colors"><Edit2 size={12} /> Edit Profile</button>
-          <button onClick={() => openHistoryModal(p)} className="flex-1 md:flex-none w-full h-7 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-colors"><Clock size={12} /> View History</button>
+          <button onClick={() => openEditModal(p, 'demographics')} className="type-label flex-1 md:flex-none w-full h-7 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-colors"><Edit2 size={12} /> Edit Profile</button>
+          <button onClick={() => openHistoryModal(p)} className="type-label flex-1 md:flex-none w-full h-7 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-colors"><Clock size={12} /> View History</button>
         </div>
       </div>
     );
@@ -359,7 +359,7 @@ const renderPatientCard = (p) => {
       {notification && (
         <div className={`fixed top-6 right-6 z-[100] px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 bg-white border-l-4 ${notification.type === 'success' ? 'border-teal-500 text-teal-800' : 'border-red-500 text-red-800'}`}>
           {notification.type === 'success' ? <CheckCircle size={20} className="text-teal-500" /> : <AlertCircle size={20} className="text-red-500" />}
-          <span className="text-[13px] font-bold">{notification.message}</span>
+          <span className="type-body">{notification.message}</span>
         </div>
       )}
 
@@ -389,8 +389,8 @@ const renderPatientCard = (p) => {
               return (
                 <button key={i} onClick={() => { if(s.isToggle) { setTypeFilter(isActive ? '' : s.filterKey); }}}
                   className={`flex-1 p-1.5 rounded-xl border transition-all duration-200 text-center flex flex-col items-center justify-center ${s.color} ${isActive ? 'border-slate-400 shadow-inner ring-2 ring-slate-200' : 'border-slate-100 hover:shadow-sm'}`}>
-                  <div className="text-[17px] font-bold leading-tight">{s.val}</div>
-                  <div className="text-[9px] font-semibold uppercase mt-0.5">{s.label}</div>
+                  <div className="type-page-title leading-tight">{s.val}</div>
+                  <div className="type-utility uppercase mt-0.5">{s.label}</div>
                 </button>
               );
             })}
@@ -405,10 +405,10 @@ const renderPatientCard = (p) => {
             <div className="flex items-center justify-between px-3 py-2.5 bg-white border-b border-slate-100 shadow-sm flex-none">
                  <div className="flex items-center gap-1.5">
                     <Users size={14} className="text-teal-700" />
-                    <h3 className="text-[11px] font-bold uppercase tracking-wider text-teal-700">
-                      Patients {hasActiveFilters && <span className="text-red-500 ml-1.5 text-[10px]">(Filtered)</span>}
+                    <h3 className="type-section-title text-teal-700">
+                      Patients {hasActiveFilters && <span className="type-label text-red-500 ml-1.5">(Filtered)</span>}
                     </h3>
-                    <span className="ml-1.5 text-[10px] text-slate-400 font-normal">
+                    <span className="type-label ml-1.5 text-slate-400 font-normal">
                       Showing {patients.length} of {totalPatients}
                     </span>
                  </div>
@@ -425,7 +425,7 @@ const renderPatientCard = (p) => {
               ) : isSearching ? (
                  <div className="py-10 text-center text-slate-400 flex flex-col items-center gap-2">
                    <Loader2 className="animate-spin text-teal-600" size={24}/>
-                   <span className="text-xs">Searching directory...</span>
+                   <span className="type-secondary">Searching directory...</span>
                  </div>
               ) : patients && patients.length > 0 ? (
                  <div className="space-y-1.5">
@@ -436,7 +436,7 @@ const renderPatientCard = (p) => {
                       <button 
                         onClick={handleLoadMore} 
                         disabled={isFetchingMore} 
-                        className="w-full py-2 mt-2 text-[10px] font-bold text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5"
+                        className="type-label w-full py-2 mt-2 text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5"
                       >
                          {isFetchingMore ? <Loader2 size={12} className="animate-spin" /> : <ChevronDown size={12} />}
                          {isFetchingMore ? 'Loading...' : 'Load More Results'}
@@ -445,7 +445,7 @@ const renderPatientCard = (p) => {
                  </div>
               ) : (
                  <div className="py-10 text-center text-slate-400 flex flex-col items-center gap-2">
-                   <span className="text-xs">
+                   <span className="type-secondary">
                      {hasActiveFilters ? "No patients match your active filters." : "No patients found."}
                    </span>
                  </div>
@@ -458,48 +458,48 @@ const renderPatientCard = (p) => {
         <FAB icon={Plus} onClick={() => { setNewPatient(defaultPatientState); setAddPatientTab('demographics'); setIsAddPatientModalOpen(true); }} />
       )}
 
-      <Modal isOpen={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)} title="Advanced Filters" footer={<div className="flex gap-2"><button onClick={() => { setDateRange({ from: '', to: '' }); setIsFilterModalOpen(false); }} className="flex-1 py-1.5 text-[15px] text-slate-600 font-medium border border-slate-200 rounded-lg bg-white">Clear</button><button onClick={() => setIsFilterModalOpen(false)} className="flex-1 bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium">Apply Filters</button></div>}>
+      <Modal isOpen={isFilterModalOpen} onClose={() => setIsFilterModalOpen(false)} title="Advanced Filters" footer={<div className="flex gap-2"><button onClick={() => { setDateRange({ from: '', to: '' }); setIsFilterModalOpen(false); }} className="type-section-title flex-1 py-1.5 text-slate-600 border border-slate-200 rounded-lg bg-white">Clear</button><button onClick={() => setIsFilterModalOpen(false)} className="type-section-title flex-1 bg-teal-600 text-white py-1.5 rounded-lg">Apply Filters</button></div>}>
         <div className="space-y-3">
            <div>
-              <label className="block text-[13px] font-bold text-slate-700 mb-1">Date Range (Last Visit)</label>
+              <label className="type-body block text-slate-700 mb-1">Date Range (Last Visit)</label>
               <div className="grid grid-cols-2 gap-2">
-                <div><span className="text-[11px] font-bold text-teal-700 uppercase block mb-1">From</span><input type="date" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[13px] focus:ring-1 focus:ring-teal-500" value={dateRange.from} onChange={(e) => setDateRange({...dateRange, from: e.target.value})} /></div>
-                <div><span className="text-[11px] font-bold text-teal-700 uppercase block mb-1">To</span><input type="date" className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[13px] focus:ring-1 focus:ring-teal-500" value={dateRange.to} onChange={(e) => setDateRange({...dateRange, to: e.target.value})} /></div>
+                <div><span className="type-utility uppercase text-teal-700 block mb-1">From</span><input type="date" className="type-body w-full p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500" value={dateRange.from} onChange={(e) => setDateRange({...dateRange, from: e.target.value})} /></div>
+                <div><span className="type-utility uppercase text-teal-700 block mb-1">To</span><input type="date" className="type-body w-full p-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500" value={dateRange.to} onChange={(e) => setDateRange({...dateRange, to: e.target.value})} /></div>
               </div>
            </div>
         </div>
       </Modal>
 
-      <Modal isOpen={isAddPatientModalOpen} onClose={() => { setIsAddPatientModalOpen(false); setModalError(''); setInvalidFields([]); setAddPatientTab('demographics'); setNewPatient(defaultPatientState); }} title={newPatient._id ? "Update Patient Profile" : "Add New Patient"} footer={<div className="flex gap-2 w-full">{addPatientTab === 'demographics' ? <div className="flex-1" /> : <button onClick={() => setAddPatientTab('demographics')} className="flex-1 py-1.5 text-[15px] text-slate-600 font-medium border border-slate-200 rounded-lg bg-white">Previous</button>} {addPatientTab === 'contact' ? <button onClick={handleSavePatient} disabled={isSubmitting} className="flex-1 bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium flex justify-center items-center gap-2 disabled:opacity-70">{isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Saving...</> : newPatient._id ? "Update Profile" : "Create Profile"}</button> : <button onClick={() => setAddPatientTab('contact')} className="flex-1 bg-teal-600 text-white py-1.5 rounded-lg text-[15px] font-medium">Next</button>}</div>}>
+      <Modal isOpen={isAddPatientModalOpen} onClose={() => { setIsAddPatientModalOpen(false); setModalError(''); setInvalidFields([]); setAddPatientTab('demographics'); setNewPatient(defaultPatientState); }} title={newPatient._id ? "Update Patient Profile" : "Add New Patient"} footer={<div className="flex gap-2 w-full">{addPatientTab === 'demographics' ? <div className="flex-1" /> : <button onClick={() => setAddPatientTab('demographics')} className="type-section-title flex-1 py-1.5 text-slate-600 border border-slate-200 rounded-lg bg-white">Previous</button>} {addPatientTab === 'contact' ? <button onClick={handleSavePatient} disabled={isSubmitting} className="type-section-title flex-1 bg-teal-600 text-white py-1.5 rounded-lg flex justify-center items-center gap-2 disabled:opacity-70">{isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Saving...</> : newPatient._id ? "Update Profile" : "Create Profile"}</button> : <button onClick={() => setAddPatientTab('contact')} className="type-section-title flex-1 bg-teal-600 text-white py-1.5 rounded-lg">Next</button>}</div>}>
         <div className="space-y-4">
           <AlertMessage message={modalError} />
           <div className="flex border-b border-slate-200">
-            <button onClick={() => setAddPatientTab('demographics')} className={`flex-1 py-1.5 text-[11px] uppercase font-bold tracking-wide border-b-2 transition-colors ${addPatientTab === 'demographics' ? 'border-teal-700 text-teal-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Demographics</button>
-            <button onClick={() => setAddPatientTab('contact')} className={`flex-1 py-1.5 text-[11px] uppercase font-bold tracking-wide border-b-2 transition-colors ${addPatientTab === 'contact' ? 'border-teal-700 text-teal-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Contact</button>
+            <button onClick={() => setAddPatientTab('demographics')} className={`type-utility flex-1 py-1.5 uppercase border-b-2 transition-colors ${addPatientTab === 'demographics' ? 'border-teal-700 text-teal-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Demographics</button>
+            <button onClick={() => setAddPatientTab('contact')} className={`type-utility flex-1 py-1.5 uppercase border-b-2 transition-colors ${addPatientTab === 'contact' ? 'border-teal-700 text-teal-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Contact</button>
           </div>
           <div className="min-h-[160px]">
             {addPatientTab === 'demographics' && (
               <div className="space-y-2.5 animate-fadeIn">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Full Name <span className="text-red-500">*</span></label>
+                  <label className="type-label block text-slate-500 mb-0.5 uppercase">Full Name <span className="text-red-500">*</span></label>
                   <div className="grid grid-cols-3 gap-2">
-                    <input type="text" placeholder="First Name *" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('firstName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.firstName} onChange={(e) => handlePatientNameInput('firstName', e.target.value)} />
-                    <input type="text" placeholder="Middle" className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:ring-1 focus:ring-teal-500 outline-none" value={newPatient.middleName} onChange={(e) => handlePatientNameInput('middleName', e.target.value)} />
-                    <input type="text" placeholder="Last Name" className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 focus:ring-1 focus:ring-teal-500 outline-none" value={newPatient.lastName} onChange={(e) => handlePatientNameInput('lastName', e.target.value)} />
+                    <input type="text" placeholder="First Name *" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('firstName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.firstName} onChange={(e) => handlePatientNameInput('firstName', e.target.value)} />
+                    <input type="text" placeholder="Middle" className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 focus:ring-1 focus:ring-teal-500 outline-none" value={newPatient.middleName} onChange={(e) => handlePatientNameInput('middleName', e.target.value)} />
+                    <input type="text" placeholder="Last Name" className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 focus:ring-1 focus:ring-teal-500 outline-none" value={newPatient.lastName} onChange={(e) => handlePatientNameInput('lastName', e.target.value)} />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <div><label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Age <span className="text-red-500">*</span></label><input type="tel" placeholder="Years" maxLength={3} className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('age') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.age} onChange={e => setNewPatient({...newPatient, age: e.target.value.replace(/\D/g, '')})} /></div>
-                  <div><label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Gender <span className="text-red-500">*</span></label><select className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 outline-none" value={newPatient.gender} onChange={e => setNewPatient({...newPatient, gender: e.target.value})}><option value="M">Male</option><option value="F">Female</option><option value="O">Other</option></select></div>
+                  <div><label className="type-label block text-slate-500 mb-0.5 uppercase">Age <span className="text-red-500">*</span></label><input type="tel" placeholder="Years" maxLength={3} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('age') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.age} onChange={e => setNewPatient({...newPatient, age: e.target.value.replace(/\D/g, '')})} /></div>
+                  <div><label className="type-label block text-slate-500 mb-0.5 uppercase">Gender <span className="text-red-500">*</span></label><select className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none" value={newPatient.gender} onChange={e => setNewPatient({...newPatient, gender: e.target.value})}><option value="M">Male</option><option value="F">Female</option><option value="O">Other</option></select></div>
                 </div>
-                <div><label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Blood Group</label><select className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 outline-none" value={newPatient.bloodGroup} onChange={e => setNewPatient({...newPatient, bloodGroup: e.target.value})}><option value="">Unknown</option>{['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => <option key={bg} value={bg}>{bg}</option>)}</select></div>
+                <div><label className="type-label block text-slate-500 mb-0.5 uppercase">Blood Group</label><select className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none" value={newPatient.bloodGroup} onChange={e => setNewPatient({...newPatient, bloodGroup: e.target.value})}><option value="">Unknown</option>{['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => <option key={bg} value={bg}>{bg}</option>)}</select></div>
               </div>
             )}
             {addPatientTab === 'contact' && (
               <div className="space-y-2.5 animate-fadeIn">
-                <div><label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Phone <span className="text-red-500">*</span></label><input type="tel" maxLength={10} placeholder="Mobile number" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('phone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.phone} onChange={e => setNewPatient({...newPatient, phone: e.target.value.replace(/\D/g, '')})} /></div>
-                <div><label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Email</label><input type="email" placeholder="Email address" className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-50 outline-none" value={newPatient.email} onChange={e => setNewPatient({...newPatient, email: e.target.value})} /></div>
-                <div><label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase">Address <span className="text-red-500">*</span></label><input type="text" placeholder="Full residential address" className={`w-full p-2 border rounded-lg text-[13px] bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('address') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.address} onChange={e => setNewPatient({...newPatient, address: e.target.value})} /></div>
+                <div><label className="type-label block text-slate-500 mb-0.5 uppercase">Phone <span className="text-red-500">*</span></label><input type="tel" maxLength={10} placeholder="Mobile number" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('phone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.phone} onChange={e => setNewPatient({...newPatient, phone: e.target.value.replace(/\D/g, '')})} /></div>
+                <div><label className="type-label block text-slate-500 mb-0.5 uppercase">Email</label><input type="email" placeholder="Email address" className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none" value={newPatient.email} onChange={e => setNewPatient({...newPatient, email: e.target.value})} /></div>
+                <div><label className="type-label block text-slate-500 mb-0.5 uppercase">Address <span className="text-red-500">*</span></label><input type="text" placeholder="Full residential address" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('address') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.address} onChange={e => setNewPatient({...newPatient, address: e.target.value})} /></div>
               </div>
             )}
           </div>
@@ -509,7 +509,7 @@ const renderPatientCard = (p) => {
         isOpen={isHistoryModalOpen} 
         onClose={() => { setIsHistoryModalOpen(false); setPatientHistory([]); setSelectedHistoryPatient(null); }} 
         title={`Visit History: ${selectedHistoryPatient?.name || ''}`} 
-        footer={<button onClick={() => setIsHistoryModalOpen(false)} className="w-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors py-1.5 rounded-lg text-[15px] font-medium">Close</button>}
+        footer={<button onClick={() => setIsHistoryModalOpen(false)} className="type-section-title w-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors py-1.5 rounded-lg">Close</button>}
       >
         <div className="-mx-2 px-2">
              <PatientHistoryList 
