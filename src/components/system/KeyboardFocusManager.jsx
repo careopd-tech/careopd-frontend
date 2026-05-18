@@ -14,7 +14,14 @@ const isScrollable = (element) => {
   return /(auto|scroll)/.test(style.overflowY) && element.scrollHeight > element.clientHeight;
 };
 
+const findManagedScrollRoot = (target) => (
+  target instanceof Element ? target.closest('[data-careopd-scroll-root]') : null
+);
+
 const findScrollContainer = (target) => {
+  const managedRoot = findManagedScrollRoot(target);
+  if (managedRoot) return managedRoot;
+
   let element = target instanceof Element ? target.parentElement : null;
 
   while (element && element !== document.body) {
@@ -51,6 +58,8 @@ const scrollFocusedFieldIntoView = (target) => {
   if (overshootBottom <= 0 && overshootTop <= 0) return;
 
   const delta = overshootBottom > 0 ? overshootBottom : -overshootTop;
+
+  target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 
   if (scrollContainer === document.scrollingElement || scrollContainer === document.documentElement) {
     window.scrollBy({ top: delta, behavior: 'smooth' });
