@@ -1,11 +1,17 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
+import { CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const UPDATE_SUCCESS_FLAG = 'careopd:app-updated';
 let updateCheckIntervalId;
 
 function UpdatePrompt() {
   const registrationRef = useRef(null);
+  const updateTimeoutRef = useRef(null);
+  const successTimeoutRef = useRef(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [showUpdatedNotice, setShowUpdatedNotice] = useState(false);
 
   const checkForServiceWorkerUpdate = () => {
     const registration = registrationRef.current;
@@ -40,6 +46,36 @@ function UpdatePrompt() {
   });
 
   useEffect(() => {
+    if (!window.sessionStorage.getItem(UPDATE_SUCCESS_FLAG)) {
+      return undefined;
+    }
+
+    window.sessionStorage.removeItem(UPDATE_SUCCESS_FLAG);
+    setShowUpdatedNotice(true);
+    successTimeoutRef.current = window.setTimeout(() => {
+      setShowUpdatedNotice(false);
+    }, 4000);
+
+    return () => {
+      if (successTimeoutRef.current) {
+        window.clearTimeout(successTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleControllerChange = () => {
+      window.sessionStorage.setItem(UPDATE_SUCCESS_FLAG, String(Date.now()));
+    };
+
+    navigator.serviceWorker?.addEventListener('controllerchange', handleControllerChange);
+
+    return () => {
+      navigator.serviceWorker?.removeEventListener('controllerchange', handleControllerChange);
+    };
+  }, []);
+
+  useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         checkForServiceWorkerUpdate();
@@ -52,6 +88,9 @@ function UpdatePrompt() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      if (updateTimeoutRef.current) {
+        window.clearTimeout(updateTimeoutRef.current);
+      }
       window.removeEventListener('focus', checkForServiceWorkerUpdate);
       window.removeEventListener('online', checkForServiceWorkerUpdate);
       window.removeEventListener('careopd:check-app-update', checkForServiceWorkerUpdate);
@@ -59,27 +98,72 @@ function UpdatePrompt() {
     };
   }, []);
 
-  // If there's an update, show a persistent floating toast
+  const handleUpdate = async () => {
+    setIsUpdating(true);
+
+    updateTimeoutRef.current = window.setTimeout(() => {
+      setIsUpdating(false);
+    }, 12000);
+
+    try {
+      await updateServiceWorker(true);
+    } catch (error) {
+      console.log('SW update failed', error);
+      setIsUpdating(false);
+      if (updateTimeoutRef.current) {
+        window.clearTimeout(updateTimeoutRef.current);
+      }
+    }
+  };
+
+  if (showUpdatedNotice && !needRefresh) {
+    return (
+      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[10000] animate-fadeIn w-[calc(100%-1.5rem)] max-w-[320px]">
+        <div className="bg-white rounded-xl shadow-xl border border-green-100 px-4 py-3 flex items-start gap-3">
+          <div className="w-9 h-9 bg-green-50 text-green-600 rounded-full flex items-center justify-center flex-shrink-0">
+            <CheckCircle2 size={18} />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-[14px] font-bold text-slate-800 leading-tight">App Updated</h3>
+            <p className="text-[12px] text-slate-500 mt-0.5 leading-snug">You are now on the latest CareOPD version.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (needRefresh) {
     return (
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 md:bottom-6 z-[10000] animate-slideUp w-[calc(100%-2rem)] max-w-[320px]">
+      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[10000] animate-slideUp w-[calc(100%-1.5rem)] max-w-[340px]">
         <div className="bg-white rounded-xl shadow-2xl border border-teal-100 p-4 max-w-[320px] w-full flex flex-col gap-3">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center flex-shrink-0">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
+              {isUpdating ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
             </div>
             <div>
-              <h3 className="text-[14px] font-bold text-slate-800 leading-tight">Update Available</h3>
-              <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">Please update to latest version and continue.</p>
+              <h3 className="text-[14px] font-bold text-slate-800 leading-tight">
+                {isUpdating ? 'Updating CareOPD' : 'Update Available'}
+              </h3>
+              <p className="text-[12px] text-slate-500 mt-0.5 leading-snug">
+                {isUpdating
+                  ? 'Downloading the latest version and refreshing your app...'
+                  : 'A newer app version is ready. Update now for the latest fixes and improvements.'}
+              </p>
             </div>
           </div>
           <button
-            onClick={() => updateServiceWorker(true)}
-            className="w-full bg-teal-600 hover:bg-teal-700 text-white text-[13px] font-bold py-2 rounded-lg transition-colors shadow-sm"
+            onClick={handleUpdate}
+            disabled={isUpdating}
+            className="w-full bg-teal-600 hover:bg-teal-700 text-white text-[13px] font-bold py-2 rounded-lg transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            Update Now
+            {isUpdating ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Updating...
+              </>
+            ) : (
+              'Update Now'
+            )}
           </button>
         </div>
       </div>

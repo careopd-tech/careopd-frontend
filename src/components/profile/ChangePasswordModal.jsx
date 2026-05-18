@@ -138,7 +138,7 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
         )}
 
         <div>
-          <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Current Password <span className="text-red-500">*</span></label>
+          <label className="block text-[12px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Current Password <span className="text-red-500">*</span></label>
           <PasswordField 
             placeholder="••••••••" 
             value={passwords.current} 
@@ -149,7 +149,7 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
         </div>
 
         <div>
-          <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase tracking-wide">New Password <span className="text-red-500">*</span></label>
+          <label className="block text-[12px] font-bold text-slate-500 mb-1 uppercase tracking-wide">New Password <span className="text-red-500">*</span></label>
           <PasswordField 
             placeholder="••••••••" 
             value={passwords.new} 
@@ -160,7 +160,7 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
         </div>
 
         <div>
-          <label className="block text-[11px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Confirm New Password <span className="text-red-500">*</span></label>
+          <label className="block text-[12px] font-bold text-slate-500 mb-1 uppercase tracking-wide">Confirm New Password <span className="text-red-500">*</span></label>
           <PasswordField 
             placeholder="••••••••" 
             value={passwords.confirm} 

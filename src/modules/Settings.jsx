@@ -662,7 +662,7 @@ const Settings = ({ data, setData, onLogout }) => {
           <div className={`flex items-center gap-1.5 ${colorClass}`}>
             {/* Icon size 14 (was 16) */}
             {Icon ? <Icon size={14} /> : null}
-            {/* Text 11px (was 12px) */}
+            {/* Compact title sizing */}
             <h3 className="type-section-title">{title}</h3>
             {isSearchMode && <span className="type-label text-red-500 ml-1">(Filtered)</span>}
             {isSearchMode && <span className="type-label text-slate-400">({visibleItems.length})</span>}
@@ -1221,8 +1221,8 @@ const Settings = ({ data, setData, onLogout }) => {
                             {user.status || 'Active'}
                           </span>
                         </div>
-                        <p className="text-[11px] text-slate-500 truncate mt-0.5">{user.email} • {user.phone}</p>
-                        <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                        <p className="text-[12px] text-slate-500 truncate mt-0.5">{user.email} • {user.phone}</p>
+                        <p className="text-[12px] text-slate-400 truncate mt-0.5">
                           {roleLabels[user.role] || user.role}
                         </p>
                       </div>

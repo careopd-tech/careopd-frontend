@@ -158,7 +158,7 @@ const MyAccountModal = ({ isOpen, onClose }) => {
           
           {/* Name */}
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase flex items-center gap-1.5">
+            <label className="block text-[12px] font-bold text-slate-500 mb-0.5 uppercase flex items-center gap-1.5">
               <User size={12} /> Full Name
             </label>
             <input 
@@ -174,7 +174,7 @@ const MyAccountModal = ({ isOpen, onClose }) => {
 
           {/* Email */}
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase flex items-center gap-1.5">
+            <label className="block text-[12px] font-bold text-slate-500 mb-0.5 uppercase flex items-center gap-1.5">
               <Mail size={12} /> Email Address
             </label>
             <input 
@@ -188,7 +188,7 @@ const MyAccountModal = ({ isOpen, onClose }) => {
           <div className="grid grid-cols-2 gap-2">
             {/* Phone */}
             <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase flex items-center gap-1.5">
+                <label className="block text-[12px] font-bold text-slate-500 mb-0.5 uppercase flex items-center gap-1.5">
                 <Phone size={12} /> Phone
                 </label>
                 <input 
@@ -205,7 +205,7 @@ const MyAccountModal = ({ isOpen, onClose }) => {
 
             {/* Role */}
             <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-0.5 uppercase flex items-center gap-1.5">
+                <label className="block text-[12px] font-bold text-slate-500 mb-0.5 uppercase flex items-center gap-1.5">
                 <Shield size={12} /> Role
                 </label>
                 <div className="w-full p-2 border border-indigo-100 bg-indigo-50 rounded-lg text-[13px] text-indigo-700 font-bold truncate">

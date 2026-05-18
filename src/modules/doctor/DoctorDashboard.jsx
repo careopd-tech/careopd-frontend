@@ -107,16 +107,16 @@ const [isSubmitting, setIsSubmitting] = useState(false);
           </div>
           <div>
             <h1 className="text-[13px] md:text-[14px] font-bold text-slate-800 leading-tight">CareOPD Clinical</h1>
-            <p className="text-[11px] md:text-[11px] font-medium text-slate-500 uppercase tracking-wide">Dr. {doctorName}</p>
+            <p className="text-[12px] md:text-[12px] font-medium text-slate-500 uppercase tracking-wide">Dr. {doctorName}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 md:gap-4">
           <div className="text-right hidden md:block">
             <div className="text-[12px] font-bold text-teal-700">{new Date(safeCurrentDate).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</div>
-            <div className="text-[11px] text-slate-400">Live Workspace</div>
+            <div className="text-[12px] text-slate-400">Live Workspace</div>
           </div>
           <div className="hidden md:block h-8 w-px bg-slate-200 mx-1"></div>
-          <button onClick={onLogout} className="flex items-center gap-1.5 p-2 text-[11px] font-bold text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+          <button onClick={onLogout} className="flex items-center gap-1.5 p-2 text-[12px] font-bold text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
             <LogOut size={16} className="md:w-3.5 md:h-3.5" /> <span className="hidden md:inline">Exit</span>
           </button>
         </div>
@@ -130,10 +130,10 @@ const [isSubmitting, setIsSubmitting] = useState(false);
         <div className={`bg-white rounded-xl border border-slate-200 shadow-sm flex-col overflow-hidden w-full landscape:w-[35%] landscape:min-w-[280px] landscape:max-w-[350px] md:w-[30%] md:min-w-[300px] md:max-w-[380px] ${activeAppt ? 'hidden landscape:flex md:flex' : 'flex'}`}>
           
           <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 flex-shrink-0">
-            <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+            <h2 className="text-[12px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
               <Users size={14} className="text-teal-600"/> Today's Queue
             </h2>
-            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${waitingCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+            <span className={`text-[12px] font-bold px-2 py-0.5 rounded-full ${waitingCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
               {waitingCount} Waiting
             </span>
           </div>
@@ -142,7 +142,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
             {isLoading ? (
               <div className="flex flex-col items-center justify-center h-32 text-slate-400 gap-2">
                 <Loader2 size={20} className="animate-spin text-teal-500" />
-                <span className="text-[11px]">Syncing queue...</span>
+                <span className="text-[12px]">Syncing queue...</span>
               </div>
             ) : queue.length > 0 ? (
               queue.map(appt => (
@@ -157,7 +157,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
               <div className="flex flex-col items-center justify-center h-48 text-slate-400 text-center px-4">
                 <CheckCircle size={32} className="mb-2 opacity-20 text-green-500" />
                 <p className="text-[12px] font-medium text-slate-600">Queue is clear</p>
-                <p className="text-[11px] mt-1">No appointments scheduled for today.</p>
+                <p className="text-[12px] mt-1">No appointments scheduled for today.</p>
               </div>
             )}
           </div>
@@ -185,14 +185,14 @@ const [isSubmitting, setIsSubmitting] = useState(false);
                         <h2 className="text-[15px] md:text-lg font-bold text-slate-800 leading-tight truncate max-w-[180px] md:max-w-none">
                             {activeAppt.patientId?.name || 'Unknown Patient'}
                         </h2>
-                        <p className="text-[11px] md:text-[12px] text-slate-500 mt-0.5 font-medium">
+                        <p className="text-[12px] md:text-[12px] text-slate-500 mt-0.5 font-medium">
                             {activeAppt.patientId?.gender || 'U'} • {activeAppt.patientId?.age ? `${activeAppt.patientId.age} Yrs` : 'Age Unknown'}
                         </p>
                       </div>
                    </div>
 
                    <div className="text-right">
-                      <div className="text-[11px] md:text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Time</div>
+                      <div className="text-[12px] md:text-[12px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Time</div>
                       <div className="text-[13px] md:text-[14px] font-bold text-teal-700">{activeAppt.time}</div>
                    </div>
                 </div>
@@ -212,7 +212,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
               <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-6 text-center">
                  <Activity size={48} className="mb-3 opacity-20 text-teal-600" />
                  <p className="text-[14px] font-medium text-slate-600">No Patient Selected</p>
-                 <p className="text-[11px] mt-1 max-w-[200px]">Select a patient from the queue to begin the consultation.</p>
+                 <p className="text-[12px] mt-1 max-w-[200px]">Select a patient from the queue to begin the consultation.</p>
               </div>
            )}
         </div>

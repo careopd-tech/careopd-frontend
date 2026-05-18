@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { Building2, Stethoscope, ShieldCheck, ArrowLeft, Loader2, KeyRound } from 'lucide-react';
 import AlertMessage from '../components/ui/AlertMessage';
 import API_BASE_URL from '../config';
@@ -160,7 +160,7 @@ const Onboarding = ({ setAuthState }) => {
           <p className="text-slate-500 mb-6">Your account is fully set up and ready to use.</p>
           {createdClinicCode && (
             <div className="mb-6 p-4 rounded-2xl border border-teal-100 bg-teal-50">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-teal-700 mb-1">Your Clinic Code</p>
+              <p className="text-[12px] font-bold uppercase tracking-wide text-teal-700 mb-1">Your Clinic Code</p>
               <p className="text-[22px] font-bold tracking-[0.2em] text-slate-800">{createdClinicCode}</p>
               <p className="text-[12px] text-slate-500 mt-2">Save and share it securely with your team so they can join your clinic&apos;s network on CareOPD.</p>
             </div>
@@ -193,13 +193,13 @@ const Onboarding = ({ setAuthState }) => {
             <button type="button" onClick={() => handleSelectType('Solo')} className="p-6 border-2 border-slate-100 hover:border-teal-500 rounded-2xl flex flex-col items-center text-center group transition-all hover:shadow-md hover:bg-teal-50/30">
               <div className="w-16 h-16 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><Stethoscope size={32} /></div>
               <h3 className="font-bold text-slate-800 text-[15px]">Solo Doctor</h3>
-              <p className="text-[11px] text-slate-500 mt-2 leading-tight">I operate my own private practice independently.</p>
+              <p className="text-[12px] text-slate-500 mt-2 leading-tight">I operate my own private practice independently.</p>
             </button>
 
             <button type="button" onClick={() => handleSelectType('Clinic')} className="p-6 border-2 border-slate-100 hover:border-blue-500 rounded-2xl flex flex-col items-center text-center group transition-all hover:shadow-md hover:bg-blue-50/30">
               <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><Building2 size={32} /></div>
               <h3 className="font-bold text-slate-800 text-[15px]">Clinic / Poly</h3>
-              <p className="text-[11px] text-slate-500 mt-2 leading-tight">We have an admin desk and multiple doctors.</p>
+              <p className="text-[12px] text-slate-500 mt-2 leading-tight">We have an admin desk and multiple doctors.</p>
             </button>
           </div>
         )}

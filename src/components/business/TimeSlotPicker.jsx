@@ -92,7 +92,7 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, cl
   if (processedSlots.length === 0) {
     return (
       <div className="p-4 text-center border border-amber-100 rounded-lg bg-amber-50">
-        <p className="text-[11px] text-amber-700 font-bold uppercase">No slots available for this date</p>
+        <p className="text-[12px] text-amber-700 font-bold uppercase">No slots available for this date</p>
       </div>
     );
   }
@@ -131,8 +131,8 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, cl
             onClick={() => onSelect(slot.time)}
             className={`flex flex-col items-center justify-center p-2 rounded-lg text-center transition-all border ${colorClass}`}
           >
-            <span className="text-[11px] font-bold">{slot.time}</span>
-            <span className="text-[11px] mt-0.5">{label}</span>
+            <span className="text-[12px] font-bold">{slot.time}</span>
+            <span className="text-[12px] mt-0.5">{label}</span>
           </button>
         );
       })}

@@ -25,17 +25,17 @@ const QueueCard = ({ appt, isActive, onClick }) => {
       <div className="flex justify-between items-start mb-1.5 pl-1">
         <div className="flex items-center gap-1.5">
           <Clock size={12} className={isActive ? 'text-teal-600' : 'text-slate-400'} />
-          <span className={`text-[11px] font-bold ${isActive ? 'text-teal-700' : 'text-slate-600'}`}>
+          <span className={`text-[12px] font-bold ${isActive ? 'text-teal-700' : 'text-slate-600'}`}>
             {appt.time}
           </span>
         </div>
         
         {isCompleted ? (
-           <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-green-600 bg-green-100 px-1.5 py-0.5 rounded">
+           <span className="flex items-center gap-1 text-[12px] font-bold uppercase tracking-wider text-green-600 bg-green-100 px-1.5 py-0.5 rounded">
              <CheckCircle size={10} /> Done
            </span>
         ) : (
-           <span className={`text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${isActive ? 'bg-teal-100 text-teal-700' : 'bg-amber-100 text-amber-700'}`}>
+           <span className={`text-[12px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${isActive ? 'bg-teal-100 text-teal-700' : 'bg-amber-100 text-amber-700'}`}>
              {isActive ? 'In Consult' : 'Waiting'}
            </span>
         )}
@@ -43,7 +43,7 @@ const QueueCard = ({ appt, isActive, onClick }) => {
       
       <div className="pl-1 pr-6">
         <h4 className="font-bold text-[13px] text-slate-800 truncate">{patient.name || 'Unknown Patient'}</h4>
-        <p className="text-[11px] text-slate-500 mt-0.5">
+        <p className="text-[12px] text-slate-500 mt-0.5">
           {patient.gender || 'U'}, {patient.age ? `${patient.age} Yrs` : 'Age Unknown'}
         </p>
       </div>

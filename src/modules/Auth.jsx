@@ -296,7 +296,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
 
         <div className="mt-8 text-center text-[12px] text-slate-400 font-medium">
           &copy; {new Date().getFullYear()} CareOPD Systems. All rights reserved.
-          <p className="mt-1 text-[11px] text-slate-300 font-bold tracking-wider">v1.0.0</p>
+          <p className="mt-1 text-[12px] text-slate-300 font-bold tracking-wider">v1.0.0</p>
         </div>
       </div>
     );
@@ -354,7 +354,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
                   onChange={e => setClinicCode(normalizeClinicCode(e.target.value))}
                 />
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">Use the 8-character clinic code shared by your clinic.</p>
+              <p className="text-[12px] text-slate-400 mt-1">Use the 8-character clinic code shared by your clinic.</p>
             </div>
           )}
 
@@ -519,7 +519,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
 
       <div className="mt-8 text-center text-[12px] text-slate-400 font-medium">
         &copy; {new Date().getFullYear()} CareOPD Systems. All rights reserved.
-        <p className="mt-1 text-[11px] text-slate-300 font-bold tracking-wider">v1.0.0</p>
+        <p className="mt-1 text-[12px] text-slate-300 font-bold tracking-wider">v1.0.0</p>
       </div>
     </div>
   );

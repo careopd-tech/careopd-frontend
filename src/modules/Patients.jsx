@@ -343,8 +343,8 @@ const renderPatientCard = (p) => {
                {p.type || 'New'}
             </div>
           </div>
-          <p className="text-[11px] text-slate-500 leading-tight mt-0.5">{p.gender || '?'}, {p.age || '?'} Yrs • {p.phone || 'No Phone'}</p>
-          <p className="text-[11px] text-slate-400 mt-1.5">Last Visit: {formatDate(p.lastVisit)}</p>
+          <p className="text-[12px] text-slate-500 leading-tight mt-0.5">{p.gender || '?'}, {p.age || '?'} Yrs • {p.phone || 'No Phone'}</p>
+          <p className="text-[12px] text-slate-400 mt-1.5">Last Visit: {formatDate(p.lastVisit)}</p>
         </div>
         <div className="flex flex-row md:flex-col gap-1.5 border-t md:border-t-0 md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 justify-end flex-shrink-0 md:w-32">          
           <button onClick={() => openEditModal(p, 'demographics')} className="type-label flex-1 md:flex-none w-full h-7 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-colors"><Edit2 size={12} /> Edit Profile</button>
