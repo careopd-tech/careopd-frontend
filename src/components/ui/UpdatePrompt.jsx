@@ -118,7 +118,7 @@ function UpdatePrompt() {
 
   if (showUpdatedNotice && !needRefresh) {
     return (
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[10000] animate-fadeIn w-[calc(100%-1.5rem)] max-w-[320px]">
+      <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fadeIn pointer-events-none">
         <div className="bg-white rounded-xl shadow-xl border border-green-100 px-4 py-3 flex items-start gap-3">
           <div className="w-9 h-9 bg-green-50 text-green-600 rounded-full flex items-center justify-center flex-shrink-0">
             <CheckCircle2 size={18} />
@@ -134,7 +134,7 @@ function UpdatePrompt() {
 
   if (needRefresh) {
     return (
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[10000] animate-slideUp w-[calc(100%-1.5rem)] max-w-[340px]">
+      <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/20 backdrop-blur-[2px] animate-fadeIn">
         <div className="bg-white rounded-xl shadow-2xl border border-teal-100 p-4 max-w-[320px] w-full flex flex-col gap-3">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center flex-shrink-0">
