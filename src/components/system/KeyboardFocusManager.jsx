@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 
 const FOCUSABLE_FORM_SELECTOR = 'input, textarea, select, [contenteditable="true"]';
 const KEYBOARD_SCROLL_PADDING = 18;
+const KEYBOARD_OPEN_THRESHOLD = 120;
+const VIEWPORT_HEIGHT_CHANGE_THRESHOLD = 24;
 
 const isMobilePointer = () => {
   if (typeof window === 'undefined') return false;
@@ -41,6 +43,20 @@ const getVisibleViewport = () => {
   };
 };
 
+const getViewportMetrics = () => {
+  const viewport = window.visualViewport;
+  const height = viewport?.height || window.innerHeight;
+  const offsetTop = viewport?.offsetTop || 0;
+  const keyboardHeight = Math.max(0, window.innerHeight - height - offsetTop);
+
+  return {
+    height,
+    offsetTop,
+    keyboardHeight,
+    keyboardOpen: keyboardHeight > KEYBOARD_OPEN_THRESHOLD
+  };
+};
+
 const scrollFocusedFieldIntoView = (target) => {
   if (!(target instanceof HTMLElement) || !target.matches(FOCUSABLE_FORM_SELECTOR)) return;
   if (!isMobilePointer()) return;
@@ -72,6 +88,7 @@ const scrollFocusedFieldIntoView = (target) => {
 const KeyboardFocusManager = () => {
   useEffect(() => {
     let focusTimer;
+    let lastViewportMetrics = getViewportMetrics();
 
     const handleFocusIn = (event) => {
       window.clearTimeout(focusTimer);
@@ -79,6 +96,16 @@ const KeyboardFocusManager = () => {
     };
 
     const handleViewportChange = () => {
+      const nextMetrics = getViewportMetrics();
+      const heightChanged = Math.abs(nextMetrics.height - lastViewportMetrics.height) > VIEWPORT_HEIGHT_CHANGE_THRESHOLD;
+      const keyboardStateChanged = nextMetrics.keyboardOpen !== lastViewportMetrics.keyboardOpen;
+
+      lastViewportMetrics = nextMetrics;
+
+      if (!heightChanged && !keyboardStateChanged) {
+        return;
+      }
+
       const activeElement = document.activeElement;
       window.clearTimeout(focusTimer);
       focusTimer = window.setTimeout(() => scrollFocusedFieldIntoView(activeElement), 120);
@@ -86,13 +113,11 @@ const KeyboardFocusManager = () => {
 
     document.addEventListener('focusin', handleFocusIn);
     window.visualViewport?.addEventListener('resize', handleViewportChange);
-    window.visualViewport?.addEventListener('scroll', handleViewportChange);
 
     return () => {
       window.clearTimeout(focusTimer);
       document.removeEventListener('focusin', handleFocusIn);
       window.visualViewport?.removeEventListener('resize', handleViewportChange);
-      window.visualViewport?.removeEventListener('scroll', handleViewportChange);
     };
   }, []);
 
