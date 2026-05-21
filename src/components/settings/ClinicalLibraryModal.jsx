@@ -695,7 +695,7 @@ const ClinicalLibraryModal = ({
                 <button
                   type="button"
                   onClick={() => (isEditing ? handleSave(item) : openInlineEditor(item))}
-                  disabled={isSaving || isDeleting}
+                  disabled={isSaving || isPinning || isDeleting}
                   aria-label={isEditing ? 'Save item' : 'Edit item'}
                   title={isEditing ? 'Save' : 'Edit'}
                   className={`${actionButtonClass} ${
@@ -710,8 +710,8 @@ const ClinicalLibraryModal = ({
                 <button
                   type="button"
                   onClick={() => requestDeleteItem(item)}
-                  disabled={isSaving || isDeleting}
-                  className={`${actionButtonClass} text-orange-400 hover:bg-orange-50 hover:text-orange-600 disabled:opacity-50`}
+                  disabled={isSaving || isPinning || isDeleting}
+                  className={`${actionButtonClass} text-orange-400 hover:bg-orange-50 hover:text-orange-600 disabled:cursor-not-allowed`}
                   aria-label={`Remove ${item.label || 'item'}`}
                   title="Delete"
                 >
@@ -811,10 +811,9 @@ const ClinicalLibraryModal = ({
                     <Trash2 size={18} />
                   </div>
                   <div className="min-w-0">
-                    <h4 className="type-section-title text-slate-800">Remove Item</h4>
-                    <p className="type-secondary text-slate-500 mt-1">
+                    <h4 className="type-section-title text-slate-800">
                       Remove "{confirmDeleteItem.label}" from {title}?
-                    </p>
+                    </h4>
                   </div>
                 </div>
               </div>
