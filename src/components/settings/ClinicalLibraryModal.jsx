@@ -91,7 +91,10 @@ const ClinicalLibraryModal = ({
     if (!isOpen) return;
 
     setSavedOrderKeys((prev) => {
-      const currentKeys = new Set(items.map(getItemKey));
+      const currentKeys = new Set([
+        ...items.map(getItemKey),
+        ...pendingItems.map(getItemKey)
+      ]);
       const retainedKeys = prev.filter((key) => currentKeys.has(key));
       const retainedSet = new Set(retainedKeys);
       const missingKeys = getInitialOrderedItems(items)
@@ -104,7 +107,7 @@ const ClinicalLibraryModal = ({
 
       return [...retainedKeys, ...missingKeys];
     });
-  }, [items, isOpen, itemType]);
+  }, [items, pendingItems, isOpen, itemType]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -692,7 +695,7 @@ const ClinicalLibraryModal = ({
                 <button
                   type="button"
                   onClick={() => (isEditing ? handleSave(item) : openInlineEditor(item))}
-                  disabled={isSaving || isPinning || isDeleting}
+                  disabled={isSaving || isDeleting}
                   aria-label={isEditing ? 'Save item' : 'Edit item'}
                   title={isEditing ? 'Save' : 'Edit'}
                   className={`${actionButtonClass} ${
@@ -707,7 +710,7 @@ const ClinicalLibraryModal = ({
                 <button
                   type="button"
                   onClick={() => requestDeleteItem(item)}
-                  disabled={isSaving || isPinning || isDeleting}
+                  disabled={isSaving || isDeleting}
                   className={`${actionButtonClass} text-orange-400 hover:bg-orange-50 hover:text-orange-600 disabled:opacity-50`}
                   aria-label={`Remove ${item.label || 'item'}`}
                   title="Delete"
