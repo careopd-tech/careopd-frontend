@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Edit2, Pin, Plus, Save, Search, Trash2, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Edit2, Loader2, Pin, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import Modal from '../ui/Modal';
 import AlertMessage from '../ui/AlertMessage';
 import API_BASE_URL from '../../config';
@@ -31,6 +31,7 @@ const ClinicalLibraryModal = ({
   const [savingKey, setSavingKey] = useState('');
   const [pinningKey, setPinningKey] = useState('');
   const [deletingKey, setDeletingKey] = useState('');
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState(null);
   const [savedOrderKeys, setSavedOrderKeys] = useState([]);
   const listRef = useRef(null);
 
@@ -82,6 +83,7 @@ const ClinicalLibraryModal = ({
     setSavingKey('');
     setPinningKey('');
     setDeletingKey('');
+    setConfirmDeleteItem(null);
     setSavedOrderKeys(getInitialOrderedItems(items).map(getItemKey));
   }, [isOpen, itemType]);
 
@@ -138,19 +140,21 @@ const ClinicalLibraryModal = ({
 
   const displayItems = useMemo(() => {
     const pendingDisplayItems = pendingItems.map((item) => ({ ...item, isNew: true }));
-
-    const itemMap = new Map(items.map((item) => [getItemKey(item), item]));
+    const savedDisplayItems = items.map((item) => ({ ...item, isNew: false }));
+    const itemMap = new Map([
+      ...savedDisplayItems.map((item) => [getItemKey(item), item]),
+      ...pendingDisplayItems.map((item) => [getItemKey(item), item])
+    ]);
     const orderedKeys = savedOrderKeys.length > 0
       ? savedOrderKeys
       : getInitialOrderedItems(items).map(getItemKey);
     const orderedKeySet = new Set(orderedKeys);
-    const orderedSavedItems = [
+    const orderedDisplayItems = [
       ...orderedKeys.map((key) => itemMap.get(key)).filter(Boolean),
-      ...items.filter((item) => !orderedKeySet.has(getItemKey(item)))
+      ...[...pendingDisplayItems, ...savedDisplayItems].filter((item) => !orderedKeySet.has(getItemKey(item)))
     ];
-    const savedDisplayItems = orderedSavedItems.map((item) => ({ ...item, isNew: false }));
 
-    return [...pendingDisplayItems, ...savedDisplayItems];
+    return orderedDisplayItems;
   }, [items, pendingItems, savedOrderKeys]);
 
   const groupedCatalog = useMemo(() => {
@@ -211,6 +215,7 @@ const ClinicalLibraryModal = ({
   }, [groupedCatalog, searchQuery]);
 
   const isSearchMode = normalizeKey(searchQuery).length > 0;
+  const hasEditingGroup = pendingGroups.some((group) => group.isEditing);
 
   const resetDraftForKey = (key) => {
     setDrafts((prev) => {
@@ -339,6 +344,7 @@ const ClinicalLibraryModal = ({
     };
 
     setPendingItems((prev) => [newItem, ...prev]);
+    setSavedOrderKeys((prev) => [tempId, ...prev.filter((entry) => entry !== tempId)]);
     setEditingKeys((prev) => [tempId, ...prev]);
     setDrafts((prev) => ({
       ...prev,
@@ -369,6 +375,7 @@ const ClinicalLibraryModal = ({
 
     if (item.isNew) {
       setPendingItems((prev) => prev.filter((entry) => entry.tempId !== key));
+      setSavedOrderKeys((prev) => prev.filter((entry) => entry !== key));
     }
     setError('');
   };
@@ -416,7 +423,13 @@ const ClinicalLibraryModal = ({
       onCatalogUpdate(itemType, result);
       if (item.isNew) {
         const resultKey = getItemKey(result);
-        setSavedOrderKeys((prev) => [resultKey, ...prev.filter((entry) => entry !== resultKey)]);
+        setSavedOrderKeys((prev) => {
+          const withoutResultKey = prev.filter((entry) => entry !== resultKey);
+          if (!withoutResultKey.includes(key)) {
+            return [resultKey, ...withoutResultKey];
+          }
+          return withoutResultKey.map((entry) => (entry === key ? resultKey : entry));
+        });
       }
       setEditingKeys((prev) => prev.filter((entry) => entry !== key));
       resetDraftForKey(key);
@@ -464,7 +477,7 @@ const ClinicalLibraryModal = ({
     }
   };
 
-  const handleDelete = async (item) => {
+  const requestDeleteItem = (item) => {
     const key = getItemKey(item);
 
     if (item.isNew) {
@@ -472,9 +485,17 @@ const ClinicalLibraryModal = ({
       return;
     }
 
-    if (!window.confirm(`Remove "${item.label}" from ${title}?`)) {
+    setConfirmDeleteItem(item);
+    setError('');
+  };
+
+  const handleDelete = async () => {
+    if (!confirmDeleteItem) {
       return;
     }
+
+    const item = confirmDeleteItem;
+    const key = getItemKey(item);
 
     try {
       setDeletingKey(key);
@@ -492,6 +513,7 @@ const ClinicalLibraryModal = ({
 
       setSavedOrderKeys((prev) => prev.filter((entry) => entry !== key));
       onCatalogUpdate(itemType, result);
+      setConfirmDeleteItem(null);
     } catch (err) {
       setError('Server connection error.');
     } finally {
@@ -657,7 +679,13 @@ const ClinicalLibraryModal = ({
                           : 'text-slate-500 hover:bg-slate-100'
                     }`}
                   >
-                    {isEditing ? <X size={12} /> : <Pin size={12} className={item.pinned === true ? 'fill-current' : ''} />}
+                    {isPinning ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : isEditing ? (
+                      <X size={12} />
+                    ) : (
+                      <Pin size={12} className={item.pinned === true ? 'fill-current' : ''} />
+                    )}
                   </button>
                 )}
 
@@ -673,18 +701,18 @@ const ClinicalLibraryModal = ({
                       : 'text-blue-700 hover:bg-blue-50'
                   }`}
                 >
-                  {isSaving ? <Save size={12} /> : isEditing ? <Save size={12} /> : <Edit2 size={12} />}
+                  {isSaving ? <Loader2 size={12} className="animate-spin" /> : isEditing ? <Save size={12} /> : <Edit2 size={12} />}
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => handleDelete(item)}
-                  disabled={isSaving || isDeleting}
+                  onClick={() => requestDeleteItem(item)}
+                  disabled={isSaving || isPinning || isDeleting}
                   className={`${actionButtonClass} text-orange-400 hover:bg-orange-50 hover:text-orange-600 disabled:opacity-50`}
                   aria-label={`Remove ${item.label || 'item'}`}
                   title="Delete"
                 >
-                  <Trash2 size={12} />
+                  {isDeleting ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                 </button>
               </div>
             </div>
@@ -712,6 +740,7 @@ const ClinicalLibraryModal = ({
         setSavingKey('');
         setPinningKey('');
         setDeletingKey('');
+        setConfirmDeleteItem(null);
         onClose();
       }}
       title={`${title} (${items.length})`}
@@ -721,9 +750,21 @@ const ClinicalLibraryModal = ({
         <button
           type="button"
           onClick={handleAddGroup}
-          className="type-section-title w-full bg-teal-600 text-white py-2 rounded-lg hover:bg-teal-700 transition-colors flex items-center justify-center gap-2"
+          className={`type-section-title w-full py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${
+            hasEditingGroup
+              ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+              : 'bg-teal-600 text-white hover:bg-teal-700'
+          }`}
         >
-          <Plus size={16} /> Add Category Group
+          {hasEditingGroup ? (
+            <>
+              <Save size={16} /> Save Current Category First
+            </>
+          ) : (
+            <>
+              <Plus size={16} /> Add Category Group
+            </>
+          )}
         </button>
       }
     >
@@ -757,6 +798,51 @@ const ClinicalLibraryModal = ({
             </div>
           )}
         </div>
+
+        {confirmDeleteItem && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fadeIn">
+            <div className="w-full max-w-sm bg-white rounded-xl shadow-2xl border border-orange-100 overflow-hidden">
+              <div className="p-4 border-b border-slate-100">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center flex-shrink-0">
+                    <Trash2 size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="type-section-title text-slate-800">Remove Item</h4>
+                    <p className="type-secondary text-slate-500 mt-1">
+                      Remove "{confirmDeleteItem.label}" from {title}?
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-3 bg-slate-50 flex items-center gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteItem(null)}
+                  disabled={Boolean(deletingKey)}
+                  className="type-label px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={Boolean(deletingKey)}
+                  className="type-label px-3 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-70 inline-flex items-center justify-center gap-2 min-w-[86px]"
+                >
+                  {deletingKey ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Removing
+                    </>
+                  ) : (
+                    'Remove'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Modal>
   );

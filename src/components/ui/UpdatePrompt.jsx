@@ -4,6 +4,7 @@ import { CheckCircle2, Loader2, RefreshCw, X } from 'lucide-react';
 import { isMandatoryUpdate } from '../../config/appVersion';
 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const UPDATE_SUCCESS_NOTICE_MS = 4000;
 const UPDATE_SUCCESS_FLAG = 'careopd:app-updated';
 let updateCheckIntervalId;
 
@@ -11,6 +12,7 @@ function UpdatePrompt() {
   const registrationRef = useRef(null);
   const updateTimeoutRef = useRef(null);
   const successTimeoutRef = useRef(null);
+  const successNoticeExpiresAtRef = useRef(0);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showUpdatedNotice, setShowUpdatedNotice] = useState(false);
   const [isUpdateDismissed, setIsUpdateDismissed] = useState(false);
@@ -20,6 +22,29 @@ function UpdatePrompt() {
     if (!registration) return;
 
     registration.update().catch((error) => console.log('SW update check failed', error));
+  };
+
+  const clearSuccessNoticeTimeout = () => {
+    if (successTimeoutRef.current) {
+      window.clearTimeout(successTimeoutRef.current);
+      successTimeoutRef.current = null;
+    }
+  };
+
+  const dismissUpdatedNotice = () => {
+    clearSuccessNoticeTimeout();
+    successNoticeExpiresAtRef.current = 0;
+    setShowUpdatedNotice(false);
+  };
+
+  const showUpdatedNoticeUntil = (expiresAt) => {
+    const remainingMs = Math.max(0, expiresAt - Date.now());
+    if (remainingMs <= 0) return;
+
+    clearSuccessNoticeTimeout();
+    successNoticeExpiresAtRef.current = expiresAt;
+    setShowUpdatedNotice(true);
+    successTimeoutRef.current = window.setTimeout(dismissUpdatedNotice, remainingMs);
   };
 
   const {
@@ -48,22 +73,39 @@ function UpdatePrompt() {
   });
 
   useEffect(() => {
-    if (!window.sessionStorage.getItem(UPDATE_SUCCESS_FLAG)) {
+    const updatedAt = Number(window.sessionStorage.getItem(UPDATE_SUCCESS_FLAG));
+
+    if (!updatedAt) {
       return undefined;
     }
 
     window.sessionStorage.removeItem(UPDATE_SUCCESS_FLAG);
-    setShowUpdatedNotice(true);
-    successTimeoutRef.current = window.setTimeout(() => {
-      setShowUpdatedNotice(false);
-    }, 4000);
+    showUpdatedNoticeUntil(updatedAt + UPDATE_SUCCESS_NOTICE_MS);
 
-    return () => {
-      if (successTimeoutRef.current) {
-        window.clearTimeout(successTimeoutRef.current);
+    return clearSuccessNoticeTimeout;
+  }, []);
+
+  useEffect(() => {
+    if (!showUpdatedNotice) {
+      return undefined;
+    }
+
+    const dismissIfExpired = () => {
+      if (successNoticeExpiresAtRef.current && Date.now() >= successNoticeExpiresAtRef.current) {
+        dismissUpdatedNotice();
       }
     };
-  }, []);
+
+    window.addEventListener('focus', dismissIfExpired);
+    window.addEventListener('pageshow', dismissIfExpired);
+    document.addEventListener('visibilitychange', dismissIfExpired);
+
+    return () => {
+      window.removeEventListener('focus', dismissIfExpired);
+      window.removeEventListener('pageshow', dismissIfExpired);
+      document.removeEventListener('visibilitychange', dismissIfExpired);
+    };
+  }, [showUpdatedNotice]);
 
   useEffect(() => {
     const handleControllerChange = () => {
@@ -127,14 +169,22 @@ function UpdatePrompt() {
   if (showUpdatedNotice && !needRefresh) {
     return (
       <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fadeIn pointer-events-none">
-        <div className="bg-white rounded-xl shadow-xl border border-green-100 px-4 py-3 flex items-start gap-3">
+        <div className="bg-white rounded-xl shadow-xl border border-green-100 px-4 py-3 flex items-start gap-3 pointer-events-auto">
           <div className="w-9 h-9 bg-green-50 text-green-600 rounded-full flex items-center justify-center flex-shrink-0">
             <CheckCircle2 size={18} />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h3 className="text-[14px] font-bold text-slate-800 leading-tight">App Updated</h3>
             <p className="text-[12px] text-slate-500 mt-0.5 leading-snug">You are now on the latest CareOPD version.</p>
           </div>
+          <button
+            type="button"
+            onClick={dismissUpdatedNotice}
+            className="-mr-1 -mt-1 p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+            aria-label="Dismiss app updated notification"
+          >
+            <X size={16} />
+          </button>
         </div>
       </div>
     );
