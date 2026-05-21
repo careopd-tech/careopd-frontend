@@ -1108,6 +1108,43 @@ const Settings = ({ data, setData, onLogout }) => {
     }));
   };
 
+  const handleClinicalCatalogGroupUpdate = (itemType, updatedGroup) => {
+    const typeMap = {
+      complaint: 'complaints',
+      drug: 'drugs',
+      lab_test: 'labTests'
+    };
+    const targetKey = typeMap[itemType];
+    if (!targetKey) return;
+
+    setData(prev => {
+      const catalogGroups = prev.clinicalCatalog?.catalogGroups || {};
+      const currentGroups = catalogGroups[targetKey] || [];
+      const groupName = String(updatedGroup.group || updatedGroup.category || '').trim().toLowerCase();
+      const matchesGroup = (group) => (
+        (updatedGroup?._id && group._id === updatedGroup._id) ||
+        (groupName && String(group.group || group.category || '').trim().toLowerCase() === groupName)
+      );
+
+      const nextGroups = updatedGroup?.active === false
+        ? currentGroups.filter(group => !matchesGroup(group))
+        : currentGroups.some(matchesGroup)
+          ? currentGroups.map(group => (matchesGroup(group) ? updatedGroup : group))
+          : [...currentGroups, updatedGroup];
+
+      return {
+        ...prev,
+        clinicalCatalog: {
+          ...(prev.clinicalCatalog || {}),
+          catalogGroups: {
+            ...catalogGroups,
+            [targetKey]: nextGroups
+          }
+        }
+      };
+    });
+  };
+
   return (
     <div className="h-full flex flex-col bg-slate-50">
       {notification && (
@@ -1619,7 +1656,9 @@ const Settings = ({ data, setData, onLogout }) => {
         title="Chief Complaints"
         itemType="complaint"
         items={clinicalCatalog.complaints || []}
+        groups={clinicalCatalog.catalogGroups?.complaints || []}
         onCatalogUpdate={handleClinicalCatalogUpdate}
+        onCatalogGroupUpdate={handleClinicalCatalogGroupUpdate}
       />
 
       <ClinicalLibraryModal
@@ -1629,7 +1668,9 @@ const Settings = ({ data, setData, onLogout }) => {
         title="Drug Master"
         itemType="drug"
         items={clinicalCatalog.drugs || []}
+        groups={clinicalCatalog.catalogGroups?.drugs || []}
         onCatalogUpdate={handleClinicalCatalogUpdate}
+        onCatalogGroupUpdate={handleClinicalCatalogGroupUpdate}
       />
 
       <ClinicalLibraryModal
@@ -1639,7 +1680,9 @@ const Settings = ({ data, setData, onLogout }) => {
         title="Lab Tests"
         itemType="lab_test"
         items={clinicalCatalog.labTests || []}
+        groups={clinicalCatalog.catalogGroups?.labTests || []}
         onCatalogUpdate={handleClinicalCatalogUpdate}
+        onCatalogGroupUpdate={handleClinicalCatalogGroupUpdate}
       />
 
     </div>

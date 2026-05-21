@@ -192,7 +192,7 @@ function UpdatePrompt() {
 
   if (needRefresh && (!isUpdateDismissed || isMandatoryUpdate)) {
     return (
-      <div className="fixed left-0 right-0 top-[max(0.75rem,env(safe-area-inset-top))] z-[10000] flex justify-center px-3 animate-fadeIn pointer-events-none">
+      <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-fadeIn pointer-events-none">
         <div className="bg-white rounded-xl shadow-2xl border border-teal-100 p-4 max-w-[340px] w-full flex flex-col gap-3 pointer-events-auto">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center flex-shrink-0">

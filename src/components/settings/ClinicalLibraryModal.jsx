@@ -17,7 +17,9 @@ const ClinicalLibraryModal = ({
   title,
   itemType,
   items = [],
-  onCatalogUpdate
+  groups = [],
+  onCatalogUpdate,
+  onCatalogGroupUpdate
 }) => {
   const supportsPin = itemType !== 'drug';
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,7 +33,10 @@ const ClinicalLibraryModal = ({
   const [savingKey, setSavingKey] = useState('');
   const [pinningKey, setPinningKey] = useState('');
   const [deletingKey, setDeletingKey] = useState('');
+  const [savingGroupId, setSavingGroupId] = useState('');
+  const [deletingGroupId, setDeletingGroupId] = useState('');
   const [confirmDeleteItem, setConfirmDeleteItem] = useState(null);
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState(null);
   const [savedOrderKeys, setSavedOrderKeys] = useState([]);
   const listRef = useRef(null);
 
@@ -48,21 +53,37 @@ const ClinicalLibraryModal = ({
 
   const getItemGroup = (item) => normalizeText(item.group || item.category || 'General') || 'General';
   const getPendingGroupKey = (groupId) => `pending-${groupId}`;
-  const buildGroupSlots = (catalogItems = []) => {
+
+  const buildGroupSlots = (sourceItems = [], sourceGroups = []) => {
     const slots = [];
-    const seen = new Set();
 
-    catalogItems.forEach((item, index) => {
-      const groupName = getItemGroup(item);
+    const addSlot = (groupName, index, placeholderId = '') => {
       const normalizedName = normalizeKey(groupName);
-      if (seen.has(normalizedName)) return;
+      const existingIndex = slots.findIndex((slot) => normalizeKey(slot.name) === normalizedName);
 
-      seen.add(normalizedName);
+      if (existingIndex >= 0) {
+        if (placeholderId && !slots[existingIndex].placeholderId) {
+          slots[existingIndex] = { ...slots[existingIndex], placeholderId };
+        }
+        return;
+      }
+
       slots.push({
         slotId: normalizedName || `group-${index}`,
         name: groupName,
-        pendingGroupId: ''
+        pendingGroupId: '',
+        placeholderId
       });
+    };
+
+    sourceItems.forEach((item, index) => {
+      addSlot(getItemGroup(item), index);
+    });
+
+    sourceGroups
+      .filter((group) => group?.active !== false)
+      .forEach((group, index) => {
+        addSlot(getItemGroup(group), sourceItems.length + index, group._id || '');
     });
 
     return slots;
@@ -77,13 +98,16 @@ const ClinicalLibraryModal = ({
     setDrafts({});
     setPendingItems([]);
     setPendingGroups([]);
-    setGroupSlots(buildGroupSlots(items));
+    setGroupSlots(buildGroupSlots(items, groups));
     setExpandedGroups({ General: true });
     setError('');
     setSavingKey('');
     setPinningKey('');
     setDeletingKey('');
+    setSavingGroupId('');
+    setDeletingGroupId('');
     setConfirmDeleteItem(null);
+    setConfirmDeleteGroup(null);
     setSavedOrderKeys(getInitialOrderedItems(items).map(getItemKey));
   }, [isOpen, itemType]);
 
@@ -116,14 +140,15 @@ const ClinicalLibraryModal = ({
       const next = [...prev];
       let changed = false;
 
-      items.forEach((item, index) => {
-        const groupName = getItemGroup(item);
+      [...items, ...groups.filter((group) => group?.active !== false)].forEach((entry, index) => {
+        const groupName = getItemGroup(entry);
         const normalizedName = normalizeKey(groupName);
         const existingIndex = next.findIndex((slot) => normalizeKey(slot.name) === normalizedName);
+        const placeholderId = entry._id && !entry.label ? entry._id : '';
 
         if (existingIndex >= 0) {
-          if (!next[existingIndex].name && groupName) {
-            next[existingIndex] = { ...next[existingIndex], name: groupName };
+          if ((!next[existingIndex].name && groupName) || (placeholderId && next[existingIndex].placeholderId !== placeholderId)) {
+            next[existingIndex] = { ...next[existingIndex], name: groupName, placeholderId };
             changed = true;
           }
           return;
@@ -132,14 +157,15 @@ const ClinicalLibraryModal = ({
         next.push({
           slotId: normalizedName || `group-${index}`,
           name: groupName,
-          pendingGroupId: ''
+          pendingGroupId: '',
+          placeholderId
         });
         changed = true;
       });
 
       return changed ? next : prev;
     });
-  }, [items, isOpen, itemType]);
+  }, [items, groups, isOpen, itemType]);
 
   const displayItems = useMemo(() => {
     const pendingDisplayItems = pendingItems.map((item) => ({ ...item, isNew: true }));
@@ -171,17 +197,23 @@ const ClinicalLibraryModal = ({
           name,
           items: [],
           pendingGroupId: extras.pendingGroupId || '',
+          placeholderId: extras.placeholderId || '',
           isPendingGroup: Boolean(extras.pendingGroupId)
         });
         groupOrder.push(key);
       } else if (name && !groupMap.get(key).name) {
         groupMap.get(key).name = name;
+      } else if (extras.placeholderId && !groupMap.get(key).placeholderId) {
+        groupMap.get(key).placeholderId = extras.placeholderId;
       }
       return groupMap.get(key);
     };
 
     groupSlots.forEach((slot) => {
-      ensureGroup(slot.slotId, slot.name, { pendingGroupId: slot.pendingGroupId || '' });
+      ensureGroup(slot.slotId, slot.name, {
+        pendingGroupId: slot.pendingGroupId || '',
+        placeholderId: slot.placeholderId || ''
+      });
     });
 
     displayItems.forEach((item) => {
@@ -277,7 +309,7 @@ const ClinicalLibraryModal = ({
     )));
   };
 
-  const handleDeleteGroup = (group) => {
+  const removeGroupLocally = (group) => {
     if (group.visibleItems.length > 0) {
       return;
     }
@@ -295,7 +327,53 @@ const ClinicalLibraryModal = ({
     setError('');
   };
 
-  const handleSaveGroup = (groupId) => {
+  const requestDeleteGroup = (group) => {
+    if (group.visibleItems.length > 0) {
+      return;
+    }
+
+    setConfirmDeleteGroup(group);
+    setError('');
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!confirmDeleteGroup) {
+      return;
+    }
+
+    const group = confirmDeleteGroup;
+
+    if (!group.placeholderId) {
+      removeGroupLocally(group);
+      setConfirmDeleteGroup(null);
+      return;
+    }
+
+    try {
+      setDeletingGroupId(group.id);
+      setError('');
+
+      const response = await fetch(`${API_BASE_URL}/api/clinical-catalog/groups/${group.placeholderId}?clinicId=${clinicId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return setError(result.error || 'Failed to remove category group.');
+      }
+
+      removeGroupLocally(group);
+      onCatalogGroupUpdate?.(itemType, result);
+      setConfirmDeleteGroup(null);
+    } catch (err) {
+      setError('Server connection error.');
+    } finally {
+      setDeletingGroupId('');
+    }
+  };
+
+  const handleSaveGroup = async (groupId) => {
     const targetGroup = pendingGroups.find((group) => group.id === groupId);
     const groupName = normalizeText(targetGroup?.name || '');
 
@@ -314,18 +392,48 @@ const ClinicalLibraryModal = ({
       return;
     }
 
-    setPendingGroups((prev) => prev.map((group) => (
-      group.id === groupId ? { ...group, name: groupName, isEditing: false } : group
-    )));
-    setGroupSlots((prev) => prev.map((slot) => (
-      slot.pendingGroupId === groupId ? { ...slot, name: groupName } : slot
-    )));
-    setExpandedGroups((prev) => ({
-      ...prev,
-      [getPendingGroupKey(groupId)]: true,
-      [normalizedGroupName]: true
-    }));
-    setError('');
+    try {
+      setSavingGroupId(groupId);
+      setError('');
+
+      const response = await fetch(`${API_BASE_URL}/api/clinical-catalog/groups`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clinicId,
+          type: itemType,
+          group: groupName
+        })
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return setError(result.error || 'Failed to save category group.');
+      }
+
+      onCatalogGroupUpdate?.(itemType, result);
+      setPendingGroups((prev) => prev.filter((group) => group.id !== groupId));
+      setGroupSlots((prev) => prev.map((slot) => (
+        slot.pendingGroupId === groupId
+          ? {
+              ...slot,
+              slotId: normalizedGroupName,
+              name: groupName,
+              pendingGroupId: '',
+              placeholderId: result._id || ''
+            }
+          : slot
+      )));
+      setExpandedGroups((prev) => {
+        const next = { ...prev, [normalizedGroupName]: true };
+        delete next[getPendingGroupKey(groupId)];
+        return next;
+      });
+    } catch (err) {
+      setError('Server connection error.');
+    } finally {
+      setSavingGroupId('');
+    }
   };
 
   const handleAddItem = (group) => {
@@ -550,7 +658,7 @@ const ClinicalLibraryModal = ({
               }
               if (event.key === 'Escape') {
                 event.preventDefault();
-                handleDeleteGroup(group);
+                removeGroupLocally(group);
               }
             }}
             placeholder="Add category group name"
@@ -560,15 +668,17 @@ const ClinicalLibraryModal = ({
           <button
             type="button"
             onClick={() => handleSaveGroup(pendingGroup.id)}
+            disabled={savingGroupId === pendingGroup.id}
             className={`${actionButtonClass} text-teal-700 hover:bg-teal-50`}
             aria-label="Save category group"
             title="Save"
           >
-            <Save size={12} />
+            {savingGroupId === pendingGroup.id ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
           </button>
           <button
             type="button"
-            onClick={() => handleDeleteGroup(group)}
+            onClick={() => removeGroupLocally(group)}
+            disabled={savingGroupId === pendingGroup.id}
             className={`${actionButtonClass} text-slate-500 hover:bg-slate-100`}
             aria-label="Cancel category group"
             title="Cancel"
@@ -626,10 +736,12 @@ const ClinicalLibraryModal = ({
           {canDeleteGroup && (
             <button
               type="button"
-              onClick={() => handleDeleteGroup(group)}
-              className="type-label w-full py-2 rounded-lg border border-dashed border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors inline-flex items-center justify-center gap-2"
+              onClick={() => requestDeleteGroup(group)}
+              disabled={deletingGroupId === group.id}
+              className="type-label w-full py-2 rounded-lg border border-dashed border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              <Trash2 size={14} /> Delete This Group
+              {deletingGroupId === group.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              Delete This Group
             </button>
           )}
         </div>
@@ -743,7 +855,10 @@ const ClinicalLibraryModal = ({
         setSavingKey('');
         setPinningKey('');
         setDeletingKey('');
+        setSavingGroupId('');
+        setDeletingGroupId('');
         setConfirmDeleteItem(null);
+        setConfirmDeleteGroup(null);
         onClose();
       }}
       title={`${title} (${items.length})`}
@@ -839,6 +954,50 @@ const ClinicalLibraryModal = ({
                     </>
                   ) : (
                     'Remove'
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {confirmDeleteGroup && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fadeIn">
+            <div className="w-full max-w-sm bg-white rounded-xl shadow-2xl border border-orange-100 overflow-hidden">
+              <div className="p-4 border-b border-slate-100">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-orange-50 text-orange-600 flex items-center justify-center flex-shrink-0">
+                    <Trash2 size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="type-section-title text-slate-800">
+                      Delete "{confirmDeleteGroup.name || 'this category group'}" category group?
+                    </h4>
+                  </div>
+                </div>
+              </div>
+              <div className="p-3 bg-slate-50 flex items-center gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteGroup(null)}
+                  disabled={Boolean(deletingGroupId)}
+                  className="type-label px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteGroup}
+                  disabled={Boolean(deletingGroupId)}
+                  className="type-label px-3 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-70 inline-flex items-center justify-center gap-2 min-w-[86px]"
+                >
+                  {deletingGroupId ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Deleting
+                    </>
+                  ) : (
+                    'Delete'
                   )}
                 </button>
               </div>
