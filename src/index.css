@@ -3,7 +3,7 @@
 /* --- ADD THIS BLOCK TO FIX THE BLACK FLASH --- */
 :root {
   color-scheme: light; /* 1. Forces browser native UI (scrollbars, dropdowns) to be light */
-  --app-height: 100dvh;
+  --app-height: 100vh;
   --bottom-safe-area: max(env(safe-area-inset-bottom), 0px);
   --keyboard-height: 0px;
 }
@@ -31,7 +31,9 @@ html,
 body,
 #root {
   width: 100%;
+  height: var(--app-height);
   min-height: var(--app-height);
+  max-height: var(--app-height);
   overflow: hidden;
 }
 
@@ -86,6 +88,12 @@ select,
 @supports (height: 100svh) {
   :root {
     --app-height: 100svh;
+  }
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --app-height: 100dvh;
   }
 }
 
