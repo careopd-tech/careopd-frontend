@@ -18,6 +18,7 @@ import {
   getCachedClinicalCatalog
 } from './utils/clinicalCatalog';
 import { getAvailableTabs } from './utils/permissions';
+import { APP_VERSION } from './config/appVersion';
 
 const getCachedClinic = () => {
   try {
@@ -190,7 +191,7 @@ const App = () => {
       
       {/* Floating Version Tag for Deployment Validation */}
       <div className="fixed bottom-1 right-2 text-[12px] font-bold text-slate-400/50 pointer-events-none z-[9999]">
-        v1.0.1
+        v{APP_VERSION}
       </div>
     </>
   );

@@ -3,6 +3,7 @@ import { Mail, KeyRound, Eye, EyeOff, CheckCircle, ArrowLeft, Loader2 } from 'lu
 import AlertMessage from '../components/ui/AlertMessage';
 import API_BASE_URL from '../config';
 import { updateSessionFromAuth } from '../utils/auth';
+import { APP_VERSION } from '../config/appVersion';
 
 // FIXED: Added setUserRole to props matching App.jsx
 const Auth = ({ authState, setAuthState, setUserRole }) => {
@@ -296,7 +297,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
 
         <div className="mt-8 text-center text-[12px] text-slate-400 font-medium">
           &copy; {new Date().getFullYear()} CareOPD Systems. All rights reserved.
-          <p className="mt-1 text-[12px] text-slate-300 font-bold tracking-wider">v1.0.1</p>
+          <p className="mt-1 text-[12px] text-slate-300 font-bold tracking-wider">v{APP_VERSION}</p>
         </div>
       </div>
     );
@@ -519,7 +520,7 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
 
       <div className="mt-8 text-center text-[12px] text-slate-400 font-medium">
         &copy; {new Date().getFullYear()} CareOPD Systems. All rights reserved.
-        <p className="mt-1 text-[12px] text-slate-300 font-bold tracking-wider">v1.0.1</p>
+        <p className="mt-1 text-[12px] text-slate-300 font-bold tracking-wider">v{APP_VERSION}</p>
       </div>
     </div>
   );

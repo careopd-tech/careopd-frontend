@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Loader2, RefreshCw, X } from 'lucide-react';
+import { isMandatoryUpdate } from '../../config/appVersion';
 
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 const UPDATE_SUCCESS_FLAG = 'careopd:app-updated';
@@ -12,6 +13,7 @@ function UpdatePrompt() {
   const successTimeoutRef = useRef(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showUpdatedNotice, setShowUpdatedNotice] = useState(false);
+  const [isUpdateDismissed, setIsUpdateDismissed] = useState(false);
 
   const checkForServiceWorkerUpdate = () => {
     const registration = registrationRef.current;
@@ -76,6 +78,12 @@ function UpdatePrompt() {
   }, []);
 
   useEffect(() => {
+    if (!needRefresh) {
+      setIsUpdateDismissed(false);
+    }
+  }, [needRefresh]);
+
+  useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         checkForServiceWorkerUpdate();
@@ -132,24 +140,36 @@ function UpdatePrompt() {
     );
   }
 
-  if (needRefresh) {
+  if (needRefresh && (!isUpdateDismissed || isMandatoryUpdate)) {
     return (
-      <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/20 backdrop-blur-[2px] animate-fadeIn">
-        <div className="bg-white rounded-xl shadow-2xl border border-teal-100 p-4 max-w-[320px] w-full flex flex-col gap-3">
+      <div className="fixed left-0 right-0 top-[max(0.75rem,env(safe-area-inset-top))] z-[10000] flex justify-center px-3 animate-fadeIn pointer-events-none">
+        <div className="bg-white rounded-xl shadow-2xl border border-teal-100 p-4 max-w-[340px] w-full flex flex-col gap-3 pointer-events-auto">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center flex-shrink-0">
               {isUpdating ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <h3 className="text-[14px] font-bold text-slate-800 leading-tight">
                 {isUpdating ? 'Updating CareOPD' : 'Update Available'}
               </h3>
               <p className="text-[12px] text-slate-500 mt-0.5 leading-snug">
                 {isUpdating
                   ? 'Downloading the latest version and refreshing your app...'
-                  : 'A newer app version is ready. Update now for the latest fixes and improvements.'}
+                  : isMandatoryUpdate
+                    ? 'This release is required for compatibility. Please update when your current work is saved.'
+                    : 'A newer app version is ready. You can keep working and update when you are ready.'}
               </p>
             </div>
+            {!isMandatoryUpdate && !isUpdating && (
+              <button
+                type="button"
+                onClick={() => setIsUpdateDismissed(true)}
+                className="-mr-1 -mt-1 p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+                aria-label="Dismiss update notification"
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
           <button
             onClick={handleUpdate}
