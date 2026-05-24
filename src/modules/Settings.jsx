@@ -657,7 +657,7 @@ const Settings = ({ data, setData, onLogout }) => {
     const isExpanded = isSearchMode ? true : expandedSection === id;
     const Icon = typeof icon === 'function' ? icon : null;
     return (
-      <div className={`flex flex-col border-b border-slate-100 ${isExpanded ? 'flex-1 min-h-0' : 'flex-none'}`}>
+      <div className={`flex flex-col border-b border-slate-100 ${isSearchMode ? 'flex-none' : isExpanded ? 'flex-1 min-h-0' : 'flex-none'}`}>
         <button 
           onClick={() => {
             if (!isSearchMode) {
@@ -683,7 +683,7 @@ const Settings = ({ data, setData, onLogout }) => {
         {isExpanded && (
           // MATCHING CONTENT STYLE:
           // p-2 space-y-1.5 (was p-3 space-y-2)
-          <div className="flex-1 overflow-y-auto bg-slate-50/50 p-2 space-y-1.5 scrollbar-hide animate-fadeIn">
+          <div className={`${isSearchMode ? '' : 'flex-1 overflow-y-auto scrollbar-hide'} bg-slate-50/50 p-2 space-y-1.5 animate-fadeIn`}>
             {isSearchMode
               ? visibleItems.map(item => (
                   <React.Fragment key={item.key}>
@@ -1198,7 +1198,7 @@ const Settings = ({ data, setData, onLogout }) => {
       
       {/* Container Padding: p-2 gap-2 to match other pages */}
       <div className="flex-1 flex flex-col min-h-0 p-2 gap-2 max-w-3xl mx-auto w-full">
-        <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className={`flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-slate-200 shadow-sm ${isSearchMode ? 'overflow-y-auto scrollbar-hide' : 'overflow-hidden'}`}>
           {isSearchMode && !hasVisibleSearchResults && (
             <div className="flex-1 flex items-center justify-center p-6 bg-slate-50/50 border-b border-slate-100">
               <div className="text-center">
