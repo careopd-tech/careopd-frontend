@@ -3,6 +3,9 @@ import React from 'react';
 const StatusBadge = ({ status }) => {
   const styles = {
     'Scheduled': 'text-amber-600', // Renamed from Pending
+    'Checked In': 'text-teal-600',
+    'In Consultation': 'text-blue-600',
+    'Delayed': 'text-orange-600',
     'Completed': 'text-green-600',
     'Cancelled': 'text-red-600',
     'On Leave': 'text-amber-600',
@@ -11,6 +14,9 @@ const StatusBadge = ({ status }) => {
   
   const dotStyles = {
     'Scheduled': 'bg-amber-500', // Renamed from Pending
+    'Checked In': 'bg-teal-500',
+    'In Consultation': 'bg-blue-500',
+    'Delayed': 'bg-orange-500',
     'Completed': 'bg-green-500',
     'Cancelled': 'bg-red-500',
     'On Leave': 'bg-amber-500',

@@ -47,6 +47,7 @@ const PatientHistoryList = ({
     historyData = [], 
     isLoading = false, 
     layout = 'horizontal', 
+    embeddedMarker = false,
     onVisitClick,        // Used for Horizontal layout (e.g. Pad Modal trigger)
     onFetchDetails,      // Used for Vertical layout Lazy Loading
     onRefillRx           // Optional callback to show "Repeat Medicine" button
@@ -137,7 +138,10 @@ const PatientHistoryList = ({
 
     // --- VERTICAL LAYOUT (For Patients Page / History Timeline) ---
     return (
-        <div className="relative before:absolute before:inset-0 before:left-[15px] md:before:left-1/2 md:before:-translate-x-1/2 before:w-0.5 before:bg-slate-200 space-y-4 py-0 pr-1">
+        <div className={embeddedMarker
+            ? 'space-y-3 py-0'
+            : 'relative before:absolute before:inset-0 before:left-[15px] md:before:left-1/2 md:before:-translate-x-1/2 before:w-0.5 before:bg-slate-200 space-y-4 py-0 pr-1'
+        }>
             {historyData.map((visit, idx) => {
                 const uiStatus = getUiStatus(visit);
                 const styling = getStatusStyling(uiStatus);
@@ -160,14 +164,15 @@ const PatientHistoryList = ({
                 const canExpand = hasPermission && hasValidStatus;
 
                 return (
-                    <div key={visit._id || idx} className="relative flex flex-col md:flex-row items-start justify-between md:justify-normal md:odd:flex-row-reverse group">
-                        {/* Timeline Dot */}
-                        <div className={`absolute top-3 left-[15px] md:left-1/2 -translate-x-1/2 flex items-center justify-center w-6 h-6 rounded-full border-2 border-white ring-4 shadow-sm ${styling.dot} z-10`}>
-                            <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-                        </div>
+                    <div key={visit._id || idx} className={embeddedMarker ? 'group' : 'relative flex flex-col md:flex-row items-start justify-between md:justify-normal md:odd:flex-row-reverse group'}>
+                        {!embeddedMarker && (
+                            <div className={`absolute top-3 left-[15px] md:left-1/2 -translate-x-1/2 flex items-center justify-center w-6 h-6 rounded-full border-2 border-white ring-4 shadow-sm ${styling.dot} z-10`}>
+                                <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
+                            </div>
+                        )}
                         
                         {/* History Card Accordion Wrapper */}
-                        <div className={`w-[calc(100%-2.5rem)] ml-auto md:ml-0 md:w-[calc(50%-1.5rem)] rounded-xl border transition-all shadow-sm overflow-hidden flex flex-col
+                        <div className={`${embeddedMarker ? 'w-full' : 'w-[calc(100%-2.5rem)] ml-auto md:ml-0 md:w-[calc(50%-1.5rem)]'} rounded-xl border transition-all shadow-sm overflow-hidden flex flex-col
                             ${canExpand 
                                 ? (isExpanded ? 'border-teal-300 ring-2 ring-teal-50 shadow-md bg-white' : 'border-slate-200 bg-white hover:border-slate-300') 
                                 : 'border-slate-100 bg-white/60' // Dimmer background for No-Shows
@@ -183,11 +188,16 @@ const PatientHistoryList = ({
                                 title={!hasPermission ? "HIPAA Restriction: You are not the attending doctor." : (!hasValidStatus ? "No clinical notes for missed or cancelled visits." : "Click to view clinical notes")}
                             >
                                 {/* ROW 1: Date/Time & Status Badge */}
-                                <div className={`flex items-center justify-between w-full ${hideDoctorName && canExpand ? 'mb-2' : (!hideDoctorName ? 'mb-1' : '')}`}>
+                                <div className={`flex items-center gap-2 w-full ${hideDoctorName && canExpand ? 'mb-2' : (!hideDoctorName ? 'mb-1' : '')}`}>
+                                    {embeddedMarker && (
+                                        <span className={`flex-shrink-0 flex items-center justify-center w-4 h-4 rounded-full ${styling.dot}`}>
+                                            <span className="w-1.5 h-1.5 bg-white rounded-full"></span>
+                                        </span>
+                                    )}
                                     <span className={`text-[13px] font-bold ${canExpand ? 'text-slate-800' : 'text-slate-500'}`}>
                                         {visit.date} • {visit.time}
                                     </span>
-                                    <span className={`text-[12px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border whitespace-nowrap flex-shrink-0 ${styling.badge}`}>
+                                    <span className={`ml-auto text-[12px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border whitespace-nowrap flex-shrink-0 ${styling.badge}`}>
                                         {uiStatus}
                                     </span>
                                 </div>

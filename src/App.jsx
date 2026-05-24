@@ -3,6 +3,7 @@ import { DateProvider } from './context/DateContext';
 import API_BASE_URL from './config'; 
 import Layout from './components/layout/Layout';
 import KeyboardFocusManager from './components/system/KeyboardFocusManager';
+import LoadingSpinner from './components/ui/LoadingSpinner';
 import UpdatePrompt from './components/ui/UpdatePrompt';
 import Onboarding from './modules/Onboarding';
 
@@ -17,6 +18,13 @@ import {
   cacheClinicalCatalog,
   getCachedClinicalCatalog
 } from './utils/clinicalCatalog';
+import {
+  clearSession,
+  logoutSession,
+  maintainActiveSession,
+  refreshSession,
+  SESSION_EXPIRED_EVENT
+} from './utils/auth';
 import { getAvailableTabs } from './utils/permissions';
 import { APP_VERSION } from './config/appVersion';
 
@@ -33,12 +41,13 @@ const App = () => {
   const [authState, setAuthState] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('activate') && params.get('email')) return 'activate';
-    return localStorage.getItem('clinicId') ? 'authenticated' : 'login';
+    return localStorage.getItem('clinicId') ? 'restoring-session' : 'login';
   });
   
   const [userRole, setUserRole] = useState(() => {
     return localStorage.getItem('userRole') || 'admin';
   });
+  const [authMessage, setAuthMessage] = useState('');
 
   // UNIFIED: Everyone defaults to the Appointments (Queue) module
   const [activeTab, setActiveTab] = useState(() => {
@@ -132,13 +141,64 @@ const App = () => {
     cacheClinicalCatalog(clinicId, data.clinicalCatalog);
   }, [data.clinicalCatalog]);
 
-  const handleLogout = () => {
-    localStorage.clear(); 
+  const returnToLogin = (message = '') => {
+    clearSession();
+    setAuthMessage(message);
     setAuthState('login');
     setActiveTab('appointments');
     setUserRole('admin'); 
     setData({ appointments: [], doctors: [], patients: [], clinic: {}, clinicalCatalog: getCachedClinicalCatalog(''), notifications: [] });
   };
+
+  const handleLogout = () => {
+    logoutSession().catch(() => {});
+    returnToLogin();
+  };
+
+  useEffect(() => {
+    if (authState !== 'restoring-session') return;
+
+    let isMounted = true;
+    refreshSession()
+      .then((result) => {
+        if (!isMounted) return;
+        setUserRole(result.user.role);
+        setAuthMessage('');
+        setAuthState('authenticated');
+      })
+      .catch(() => {
+        if (isMounted) returnToLogin('Your session has expired. Please sign in again.');
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [authState]);
+
+  useEffect(() => {
+    const handleSessionExpired = (event) => {
+      returnToLogin(event.detail?.message || 'Your session has expired. Please sign in again.');
+    };
+
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+  }, []);
+
+  useEffect(() => {
+    if (authState !== 'authenticated') return undefined;
+
+    const renewOnActivity = () => {
+      maintainActiveSession();
+    };
+
+    window.addEventListener('pointerdown', renewOnActivity, { passive: true });
+    window.addEventListener('keydown', renewOnActivity);
+
+    return () => {
+      window.removeEventListener('pointerdown', renewOnActivity);
+      window.removeEventListener('keydown', renewOnActivity);
+    };
+  }, [authState]);
 
   const renderWithUpdatePrompt = (content) => (
     <>
@@ -152,8 +212,12 @@ const App = () => {
     return renderWithUpdatePrompt(<Onboarding setAuthState={setAuthState} />);
   }
 
+  if (authState === 'restoring-session') {
+    return renderWithUpdatePrompt(<LoadingSpinner fullPage label="Restoring Session..." />);
+  }
+
   if (authState !== 'authenticated') {
-    return renderWithUpdatePrompt(<Auth authState={authState} setAuthState={setAuthState} setUserRole={setUserRole} />);
+    return renderWithUpdatePrompt(<Auth authState={authState} setAuthState={setAuthState} setUserRole={setUserRole} sessionMessage={authMessage} />);
   }
 
   // --- UNIFIED ROUTING ---

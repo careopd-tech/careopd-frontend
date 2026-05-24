@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Calendar, CalendarCheck, History, Plus, Clock, RefreshCw,
-  ChevronDown, CalendarDays, CheckCircle, AlertCircle, Loader2, X, Search, Activity
+  ChevronDown, CalendarDays, CheckCircle, AlertCircle, Loader2, X, Search, Activity,
+  MoreVertical, UserCheck, Bell, XCircle
 } from 'lucide-react';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
@@ -11,11 +13,13 @@ import ModuleHeader from '../components/ui/ModuleHeader';
 import TimeSlotPicker from '../components/business/TimeSlotPicker';
 import { useGlobalDate } from '../context/DateContext';
 import API_BASE_URL from '../config';
-import { getSessionUser } from '../utils/auth';
+import { authFetch, getSessionUser } from '../utils/auth';
 import { hasPermission } from '../utils/permissions';
+import { getClinicSchedule, timeToMinutes } from '../utils/schedule';
 
 // --- ADDED: IMPORT THE EMR PAD ---
 import ConsultationPad from '../components/doctor/ConsultationPad';
+import PatientHistoryList, { filterValidHistory } from '../components/ui/PatientHistoryList';
 
 const Appointments = ({ data, setData, onLogout }) => {
   // --- 1. CONTEXT & BASICS ---
@@ -88,10 +92,17 @@ const Appointments = ({ data, setData, onLogout }) => {
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
+  const [isVitalsModalOpen, setIsVitalsModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isViewVitalsModalOpen, setIsViewVitalsModalOpen] = useState(false);
   const [expandedSection, setExpandedSection] = useState('today');
   const [rebookingApptId, setRebookingApptId] = useState(null);
   const [notification, setNotification] = useState(null);
   const [actionAppt, setActionAppt] = useState(null);
+  const [previewAppt, setPreviewAppt] = useState(null);
+  const [openActionMenuId, setOpenActionMenuId] = useState('');
+  const [openActionMenuPosition, setOpenActionMenuPosition] = useState(null);
+  const [processingAppointmentId, setProcessingAppointmentId] = useState('');
 
   // --- ADDED: EMR FULL SCREEN MODAL STATE ---
   const [isConsultationPadOpen, setIsConsultationPadOpen] = useState(false);
@@ -115,6 +126,10 @@ const Appointments = ({ data, setData, onLogout }) => {
   const [newAppt, setNewAppt] = useState({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate });
   const [newPatientDetails, setNewPatientDetails] = useState(defaultNewPatientDetails);
   const [rescheduleData, setRescheduleData] = useState({ date: '', time: '' });
+  const [vitalsData, setVitalsData] = useState({ bp: '', temp: '', weight: '' });
+  const [historyData, setHistoryData] = useState([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
   const [modalError, setModalError] = useState('');
   const [invalidFields, setInvalidFields] = useState([]);
   const [patientSearchQuery, setPatientSearchQuery] = useState('');
@@ -149,6 +164,40 @@ const Appointments = ({ data, setData, onLogout }) => {
       hasSnappedToBottomRef.current = false;
     }
   }, [expandedSection]);
+
+  useEffect(() => {
+    if (!openActionMenuId) return undefined;
+
+    const dismissOnOutsidePress = (event) => {
+      if (!(event.target instanceof Element) || !event.target.closest('[data-appointment-actions-menu]')) {
+        setOpenActionMenuId('');
+        setOpenActionMenuPosition(null);
+      }
+    };
+
+    const dismissOnEscape = (event) => {
+      if (event.key === 'Escape') {
+        setOpenActionMenuId('');
+        setOpenActionMenuPosition(null);
+      }
+    };
+
+    const dismissOnViewportMove = () => {
+      setOpenActionMenuId('');
+      setOpenActionMenuPosition(null);
+    };
+
+    document.addEventListener('pointerdown', dismissOnOutsidePress);
+    document.addEventListener('keydown', dismissOnEscape);
+    document.addEventListener('scroll', dismissOnViewportMove, true);
+    window.addEventListener('resize', dismissOnViewportMove);
+    return () => {
+      document.removeEventListener('pointerdown', dismissOnOutsidePress);
+      document.removeEventListener('keydown', dismissOnEscape);
+      document.removeEventListener('scroll', dismissOnViewportMove, true);
+      window.removeEventListener('resize', dismissOnViewportMove);
+    };
+  }, [openActionMenuId]);
 
   // --- 3. LOGIC HELPERS ---
   const getUiStatus = (appt) => {
@@ -187,6 +236,41 @@ const Appointments = ({ data, setData, onLogout }) => {
     const doctorId = getEntityId(doctorRef);
     return (data.doctors || []).find(d => getEntityId(d) === doctorId);
   };
+
+  const getTodayAppointmentPhase = (appt) => {
+    if (appt.date !== safeCurrentDate || appt.checkedInAt) return '';
+
+    const appointmentMinutes = timeToMinutes(appt.time);
+    if (!Number.isFinite(appointmentMinutes)) return '';
+
+    const now = new Date();
+    const currentMinutes = (now.getHours() * 60) + now.getMinutes();
+    const windowMinutes = getClinicSchedule(data.clinic || {}).appointmentWindowMinutes;
+
+    if (currentMinutes < appointmentMinutes - windowMinutes) return 'before-arrival';
+    // Window covers early arrival plus the booked slot and one post-slot grace period.
+    if (currentMinutes <= appointmentMinutes + (windowMinutes * 2)) return 'arrival-window';
+    return 'delayed';
+  };
+
+  const getCardStatus = (appt) => {
+    const uiStatus = getUiStatus(appt);
+    if (uiStatus !== 'Scheduled' || appt.date !== safeCurrentDate) return uiStatus;
+    if (appt.consultationStartedAt) return 'In Consultation';
+    if (appt.checkedInAt) return 'Checked In';
+    return getTodayAppointmentPhase(appt) === 'delayed' ? 'Delayed' : 'Scheduled';
+  };
+
+  const isAssignedClinician = (appt) => (
+    Boolean(doctorId) &&
+    getEntityId(appt.doctorId) === String(doctorId) &&
+    hasPermission(sessionUser.permissions, 'appointments.consult_own')
+  );
+
+  const hasPreConsultVitalsWorkflow = (
+    data.clinic?.type === 'Clinic' &&
+    data.clinic?.preConsultVitalsEnabled === true
+  );
 
   const departments = useMemo(() => [...new Set((data.doctors || []).map(d => d.department))], [data.doctors]);
 
@@ -664,7 +748,15 @@ const Appointments = ({ data, setData, onLogout }) => {
     if (!actionAppt) return;
     setIsSubmitting(true);
     try {
-      await fetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clinicId, status: 'Cancelled' }) });
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}/cancel`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return showNotification(result.error || 'Failed to cancel appointment.', 'error');
+      }
       await fetchAllData(true);
       setIsCancelModalOpen(false);
       showNotification('Appointment Cancelled', 'error', `Appointment Cancelled for ${getPatientName(actionAppt.patientId)} scheduled on ${actionAppt.date} at ${actionAppt.time}`);
@@ -683,8 +775,8 @@ const Appointments = ({ data, setData, onLogout }) => {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}`, {
-        method: 'PUT',
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}/reschedule`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clinicId, date: rescheduleData.date, time: rescheduleData.time, status: 'Scheduled' })
       });
@@ -716,6 +808,163 @@ const Appointments = ({ data, setData, onLogout }) => {
     setIsAddModalOpen(true);
   };
 
+  const openConsultation = (appt) => {
+    const patientRef = appt.patientId && typeof appt.patientId === 'object'
+      ? appt.patientId
+      : (data.patients || []).find(p => getEntityId(p) === getEntityId(appt.patientId));
+    setActiveConsultationAppt({ ...appt, patientId: patientRef || { name: 'Unknown Patient' } });
+    setIsConsultationPadOpen(true);
+    setOpenActionMenuId('');
+  };
+
+  const handleStartConsultation = async (appt) => {
+    setProcessingAppointmentId(appt._id);
+    setOpenActionMenuId('');
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${appt._id}/start-consultation`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return showNotification(result.error || 'Failed to start consultation.', 'error');
+      }
+
+      openConsultation({
+        ...appt,
+        consultationStartedAt: result.appointment?.consultationStartedAt || appt.consultationStartedAt,
+        consultationStartedBy: result.appointment?.consultationStartedBy || appt.consultationStartedBy
+      });
+      await fetchAllData(true);
+    } catch (err) {
+      showNotification('Failed to start consultation.', 'error');
+    } finally {
+      setProcessingAppointmentId('');
+    }
+  };
+
+  const openReschedule = (appt) => {
+    setActionAppt(appt);
+    setRescheduleData({ date: appt.date, time: appt.time });
+    setIsRescheduleModalOpen(true);
+    setOpenActionMenuId('');
+  };
+
+  const openVitals = (appt) => {
+    setActionAppt(appt);
+    setVitalsData({
+      bp: appt.vitals?.bp || '',
+      temp: appt.vitals?.temp || '',
+      weight: appt.vitals?.weight || ''
+    });
+    setModalError('');
+    setIsVitalsModalOpen(true);
+    setOpenActionMenuId('');
+  };
+
+  const openViewVitals = (appt) => {
+    setPreviewAppt(appt);
+    setIsViewVitalsModalOpen(true);
+    setOpenActionMenuId('');
+  };
+
+  const openHistory = async (appt) => {
+    setPreviewAppt(appt);
+    setHistoryData([]);
+    setHistoryError('');
+    setIsHistoryLoading(true);
+    setIsHistoryModalOpen(true);
+    setOpenActionMenuId('');
+
+    try {
+      const patientId = getEntityId(appt.patientId);
+      const response = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=history&patientId=${patientId}${rbacQuery}`);
+      const result = await response.json().catch(() => ([]));
+      if (!response.ok) {
+        return setHistoryError('Failed to load patient history.');
+      }
+      setHistoryData(filterValidHistory(result));
+    } catch (err) {
+      setHistoryError('Failed to load patient history.');
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  };
+
+  const handleCheckIn = async (appt) => {
+    setProcessingAppointmentId(appt._id);
+    setOpenActionMenuId('');
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${appt._id}/check-in`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return showNotification(result.error || 'Failed to check in patient.', 'error');
+      }
+
+      await fetchAllData(true);
+      showNotification('Patient Checked In', 'success', `${getPatientName(appt.patientId)} is ready for consultation.`);
+    } catch (err) {
+      showNotification('Failed to check in patient.', 'error');
+    } finally {
+      setProcessingAppointmentId('');
+    }
+  };
+
+  const handleSendReminder = async (appt) => {
+    setProcessingAppointmentId(appt._id);
+    setOpenActionMenuId('');
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${appt._id}/reminder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return showNotification(result.error || 'Failed to send reminder.', 'error');
+      }
+
+      await fetchAllData(true);
+      showNotification('Reminder Sent', 'success', `WhatsApp reminder sent to ${getPatientName(appt.patientId)}.`);
+    } catch (err) {
+      showNotification('Failed to send reminder.', 'error');
+    } finally {
+      setProcessingAppointmentId('');
+    }
+  };
+
+  const handleSaveVitals = async () => {
+    if (!actionAppt) return;
+
+    setIsSubmitting(true);
+    setModalError('');
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}/vitals`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId, vitals: vitalsData })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return setModalError(result.error || 'Failed to save vitals.');
+      }
+
+      await fetchAllData(true);
+      setIsVitalsModalOpen(false);
+      setActionAppt(null);
+      showNotification('Vitals Saved', 'success', 'Pre-consult vitals recorded successfully.');
+    } catch (err) {
+      setModalError('Server connection error.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // --- ADDED: EMR SAVE HANDLER ---
   const handleCompleteConsultation = async (apptId, prescriptionData, finalStatus) => {
     setIsSubmitting(true);
@@ -729,7 +978,7 @@ const Appointments = ({ data, setData, onLogout }) => {
         prescriptionData: prescriptionData 
       };
 
-      const res = await fetch(`${API_BASE_URL}/api/prescriptions/complete-consultation`, {
+      const res = await authFetch(`${API_BASE_URL}/api/prescriptions/complete-consultation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -758,9 +1007,143 @@ const Appointments = ({ data, setData, onLogout }) => {
     const isCompleted = uiStatus === 'Completed';
     const isNoShow = uiStatus === 'No-Show';
     const showActions = !isCancelled && !isCompleted && !isNoShow;
+    const isToday = appt.date === safeCurrentDate;
+    const isCheckedIn = Boolean(appt.checkedInAt);
+    const isInConsultation = Boolean(appt.consultationStartedAt);
+    const isTreatingPhysician = isAssignedClinician(appt);
+    const canConsultWithoutCheckIn = data.clinic?.type === 'Solo' && isTreatingPhysician;
+    const todayPhase = getTodayAppointmentPhase(appt);
+    const cardStatus = getCardStatus(appt);
+    const isProcessing = processingAppointmentId === appt._id;
 
-    // --- ADDED: SECURITY CHECK FOR CONSULT BUTTON ---
-    const isTreatingPhysician = (userRole === 'doctor') || (userRole === 'admin' && doctorId && getEntityId(appt.doctorId) === String(doctorId));
+    const actions = {
+      cancel: {
+        label: 'Cancel',
+        icon: XCircle,
+        onClick: () => {
+          setActionAppt(appt);
+          setIsCancelModalOpen(true);
+          setOpenActionMenuId('');
+        }
+      },
+      checkIn: { label: 'Check In', icon: UserCheck, onClick: () => handleCheckIn(appt) },
+      consult: { label: 'Consult', icon: Activity, onClick: () => handleStartConsultation(appt) },
+      reminder: { label: 'Send Reminder', icon: Bell, onClick: () => handleSendReminder(appt) },
+      reschedule: { label: 'Reschedule', icon: CalendarDays, onClick: () => openReschedule(appt) },
+      vitals: { label: 'Add Vitals', icon: Activity, onClick: () => openVitals(appt) },
+      history: { label: 'View History', icon: History, onClick: () => openHistory(appt) },
+      viewVitals: { label: 'View Vitals', icon: Activity, onClick: () => openViewVitals(appt) }
+    };
+
+    let primaryAction = null;
+    let overflowActions = [];
+    const clinicianOverflowActions = [
+      actions.history,
+      ...(data.clinic?.type === 'Clinic' ? [actions.viewVitals] : []),
+      ...(hasPreConsultVitalsWorkflow ? [actions.vitals] : [])
+    ];
+
+    if (showActions && isToday) {
+      if (isInConsultation && isTreatingPhysician) {
+        primaryAction = actions.consult;
+        overflowActions = clinicianOverflowActions;
+      } else if (isCheckedIn) {
+        if (isTreatingPhysician) {
+          primaryAction = actions.consult;
+          overflowActions = clinicianOverflowActions;
+        } else if (canManageAppointments && hasPreConsultVitalsWorkflow) {
+          primaryAction = actions.vitals;
+        }
+      } else if (canManageAppointments) {
+        if (todayPhase === 'arrival-window') {
+          primaryAction = actions.checkIn;
+          overflowActions = [actions.reschedule, actions.cancel, actions.reminder];
+        } else if (todayPhase === 'delayed') {
+          primaryAction = actions.reminder;
+          overflowActions = [actions.checkIn];
+        } else {
+          primaryAction = actions.reschedule;
+          overflowActions = [actions.checkIn, actions.cancel, actions.reminder];
+        }
+        if (canConsultWithoutCheckIn) {
+          overflowActions = [...overflowActions, actions.consult];
+        }
+      }
+    }
+
+    if (showActions && isToday && !overflowActions.some((action) => action.label === actions.history.label)) {
+      overflowActions = [...overflowActions, actions.history];
+    }
+
+    const renderActionButton = (action, isPrimary = false) => {
+      if (!action) return null;
+      const Icon = action.icon;
+      return (
+        <button
+          type="button"
+          onClick={action.onClick}
+          disabled={isProcessing}
+          className={`type-label h-8 rounded-lg flex items-center gap-1.5 whitespace-nowrap transition-colors disabled:opacity-70 ${
+            isPrimary
+              ? 'justify-center px-3 text-white bg-teal-600 hover:bg-teal-700 shadow-sm'
+              : 'justify-start w-full px-3 text-slate-700 hover:bg-slate-50'
+          }`}
+        >
+          {isPrimary && isProcessing ? <Loader2 size={13} className="animate-spin" /> : Icon ? <Icon size={13} /> : null}
+          {action.label}
+        </button>
+      );
+    };
+
+    const renderOverflowMenu = (menuActions) => {
+      if (!menuActions.length) return null;
+      const menuWidth = 176;
+      const menuHeight = (menuActions.length * 32) + 8;
+      const gap = 8;
+
+      const toggleMenu = (event) => {
+        if (openActionMenuId === appt._id) {
+          setOpenActionMenuId('');
+          setOpenActionMenuPosition(null);
+          return;
+        }
+
+        const triggerRect = event.currentTarget.getBoundingClientRect();
+        const preferredTop = triggerRect.top - menuHeight - gap;
+        const top = preferredTop >= gap
+          ? preferredTop
+          : Math.min(triggerRect.bottom + gap, window.innerHeight - menuHeight - gap);
+        const left = Math.max(gap, Math.min(triggerRect.right - menuWidth, window.innerWidth - menuWidth - gap));
+
+        setOpenActionMenuPosition({ top: Math.max(gap, top), left });
+        setOpenActionMenuId(appt._id);
+      };
+
+      return (
+        <div className="relative" data-appointment-actions-menu>
+          <button
+            type="button"
+            onClick={toggleMenu}
+            className="h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 flex items-center justify-center"
+            aria-label="More appointment actions"
+          >
+            <MoreVertical size={15} />
+          </button>
+          {openActionMenuId === appt._id && openActionMenuPosition && createPortal(
+            <div
+              data-appointment-actions-menu
+              className="fixed z-[70] w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-xl"
+              style={{ top: openActionMenuPosition.top, left: openActionMenuPosition.left }}
+            >
+              {menuActions.map((action) => (
+                <React.Fragment key={action.label}>{renderActionButton(action)}</React.Fragment>
+              ))}
+            </div>,
+            document.body
+          )}
+        </div>
+      );
+    };
 
     return (
       <div key={appt._id} className={`p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col md:flex-row gap-2 ${isCancelled || isNoShow ? 'bg-slate-50 opacity-90' : 'bg-white'}`}>
@@ -771,44 +1154,47 @@ const Appointments = ({ data, setData, onLogout }) => {
               <span className="type-body text-slate-700">{appt.time}</span>
               <span className="type-label text-slate-400">| {appt.date}</span>
             </div>
-            {isNoShow ? <span className="type-utility bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase">No Show</span> : <StatusBadge status={appt.status} />}
+            {isNoShow ? <span className="type-utility bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase">No Show</span> : <StatusBadge status={cardStatus} />}
           </div>
           <h4 className="type-card-title text-slate-800 leading-tight">{getPatientName(appt.patientId)}</h4>
           <p className="type-label text-slate-500 leading-tight mt-0.5">{appt.type || 'Consultation'} with <span className="text-teal-600 font-medium">{getDoctorName(appt.doctorId)}</span></p>
         </div>
-        {showActions && (
+        {showActions && isToday && (primaryAction || overflowActions.length > 0) && (
+          <div className="flex items-center justify-end gap-1.5 border-t md:border-t-0 md:border-l border-slate-100 pt-2 md:pt-0 md:pl-3 flex-shrink-0">
+            {renderActionButton(primaryAction, true)}
+            {renderOverflowMenu(overflowActions)}
+          </div>
+        )}
+        {showActions && !isToday && (
           <div className="flex flex-row md:flex-col gap-1.5 border-t md:border-t-0 md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 justify-end flex-shrink-0 md:w-32">
-            {/* ADDED: ADMIN SECURITY LOCK */}
             {isAdmin && (
               <>
                 <button onClick={() => { setActionAppt(appt); setIsCancelModalOpen(true); }} className="type-label flex-1 md:flex-none w-full h-7 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg whitespace-nowrap">Cancel</button>
-                <button onClick={() => { setActionAppt(appt); setRescheduleData({ date: appt.date, time: appt.time }); setIsRescheduleModalOpen(true); }} className="type-label flex-1 md:flex-none w-full h-7 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap"><CalendarDays size={12} /> Reschedule</button>
+                <button onClick={() => openReschedule(appt)} className="type-label flex-1 md:flex-none w-full h-7 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap"><CalendarDays size={12} /> Reschedule</button>
               </>
             )}
-
-            {/* ADDED: DOCTOR SECURITY LOCK */}
             {isTreatingPhysician && (
-              <button 
-                onClick={() => {
-                  const patientRef = appt.patientId && typeof appt.patientId === 'object'
-                    ? appt.patientId
-                    : (data.patients || []).find(p => getEntityId(p) === getEntityId(appt.patientId));
-                  setActiveConsultationAppt({ ...appt, patientId: patientRef || { name: 'Unknown Patient' } });
-                  setIsConsultationPadOpen(true);
-                }} 
+              <button
+                onClick={() => openConsultation(appt)}
                 className="type-label flex-1 md:flex-none w-full h-7 text-white bg-teal-600 hover:bg-teal-700 rounded-lg flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors shadow-sm"
               >
                 <Activity size={14} /> Consult
               </button>
             )}
+            {renderOverflowMenu([actions.history])}
           </div>
         )}
         {(isCancelled || isNoShow) && (
           <div className="flex flex-row md:flex-col gap-1.5 border-t md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 justify-end flex-shrink-0 md:w-32">
-            {/* ADDED: ADMIN SECURITY LOCK */}
             {isAdmin && (
               <button onClick={() => handleRebook(appt)} className="type-label flex-1 md:flex-none w-full h-7 text-white bg-blue-600 hover:bg-blue-700 shadow-sm rounded-lg flex items-center justify-center gap-1 whitespace-nowrap"><RefreshCw size={12} /> ReBook</button>
             )}
+            {renderOverflowMenu([actions.history])}
+          </div>
+        )}
+        {isCompleted && (
+          <div className="flex items-center justify-end border-t md:border-t-0 md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 flex-shrink-0">
+            {renderOverflowMenu([actions.history])}
           </div>
         )}
       </div>
@@ -1240,6 +1626,78 @@ const Appointments = ({ data, setData, onLogout }) => {
           <AlertMessage message={modalError} />
           <div><label className="type-label block text-slate-500 mb-1 uppercase">New Date</label><input type="date" min={new Date().toISOString().split('T')[0]} max={maxDateStr} className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50" value={rescheduleData.date} onChange={(e) => setRescheduleData({ ...rescheduleData, date: e.target.value, time: '' })} /></div><div><label className="type-label block text-slate-500 mb-1 uppercase">Available Slots</label><TimeSlotPicker selectedTime={rescheduleData.time} onSelect={(t) => setRescheduleData({ ...rescheduleData, time: t })} doctor={getDoctorById(actionAppt?.doctorId)} date={rescheduleData.date} appointments={data.calendar30 || []} clinic={data.clinic} /></div>
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={isVitalsModalOpen}
+        onClose={() => { setIsVitalsModalOpen(false); setActionAppt(null); setModalError(''); }}
+        title="Add Vitals"
+        footer={
+          <button
+            onClick={handleSaveVitals}
+            disabled={isSubmitting}
+            className="type-section-title w-full bg-teal-600 text-white py-1.5 rounded-lg flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Saving...</> : 'Save Vitals'}
+          </button>
+        }
+      >
+        <div className="space-y-3">
+          <AlertMessage message={modalError} />
+          {actionAppt && (
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+              <p className="type-card-title text-slate-800">{getPatientName(actionAppt.patientId)}</p>
+              <p className="type-secondary text-slate-500">{actionAppt.time} | {getDoctorName(actionAppt.doctorId)}</p>
+            </div>
+          )}
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="type-label block text-slate-500 mb-1 uppercase">BP</label>
+              <input type="text" placeholder="120/80" value={vitalsData.bp} onChange={e => setVitalsData({ ...vitalsData, bp: e.target.value })} className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none focus:ring-1 focus:ring-teal-500" />
+            </div>
+            <div>
+              <label className="type-label block text-slate-500 mb-1 uppercase">Temp</label>
+              <input type="text" placeholder="98.6" value={vitalsData.temp} onChange={e => setVitalsData({ ...vitalsData, temp: e.target.value })} className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none focus:ring-1 focus:ring-teal-500" />
+            </div>
+            <div>
+              <label className="type-label block text-slate-500 mb-1 uppercase">Weight</label>
+              <input type="text" placeholder="70" value={vitalsData.weight} onChange={e => setVitalsData({ ...vitalsData, weight: e.target.value })} className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none focus:ring-1 focus:ring-teal-500" />
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isHistoryModalOpen}
+        onClose={() => { setIsHistoryModalOpen(false); setPreviewAppt(null); setHistoryData([]); setHistoryError(''); }}
+        title={`Patient History - ${getPatientName(previewAppt?.patientId)}`}
+        panelClassName="careopd-modal-panel bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[calc(var(--app-height)-1.5rem)] animate-scaleIn"
+        bodyClassName="p-2 overflow-y-auto flex-1 overscroll-contain"
+      >
+        <AlertMessage message={historyError} />
+        <PatientHistoryList historyData={historyData} isLoading={isHistoryLoading} layout="vertical" embeddedMarker />
+      </Modal>
+
+      <Modal
+        isOpen={isViewVitalsModalOpen}
+        onClose={() => { setIsViewVitalsModalOpen(false); setPreviewAppt(null); }}
+        title="View Vitals"
+      >
+        {previewAppt?.vitalsRecordedAt ? (
+          <div className="space-y-3">
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+              <p className="type-card-title text-slate-800">{getPatientName(previewAppt.patientId)}</p>
+              <p className="type-secondary text-slate-500">Recorded before consultation</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-lg border border-slate-100 bg-slate-50 p-2"><p className="type-label uppercase text-slate-400">BP</p><p className="type-body text-slate-800">{previewAppt.vitals?.bp || '-'}</p></div>
+              <div className="rounded-lg border border-slate-100 bg-slate-50 p-2"><p className="type-label uppercase text-slate-400">Temp</p><p className="type-body text-slate-800">{previewAppt.vitals?.temp || '-'}</p></div>
+              <div className="rounded-lg border border-slate-100 bg-slate-50 p-2"><p className="type-label uppercase text-slate-400">Weight</p><p className="type-body text-slate-800">{previewAppt.vitals?.weight || '-'}</p></div>
+            </div>
+          </div>
+        ) : (
+          <div className="type-body text-slate-500 text-center py-6">No vitals recorded for this appointment yet.</div>
+        )}
       </Modal>
 
       <Modal isOpen={isCancelModalOpen} onClose={() => { setIsCancelModalOpen(false); setActionAppt(null); }} title="Cancel Appointment" footer={

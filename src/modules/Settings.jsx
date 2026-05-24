@@ -101,6 +101,7 @@ const Settings = ({ data, setData, onLogout }) => {
   const canManageCatalog = hasPermission(savedUser.permissions, 'settings.catalog');
   const canManageCommunication = hasPermission(savedUser.permissions, 'settings.communication');
   const canManagePolicies = hasPermission(savedUser.permissions, 'settings.policies');
+  const canConfigureVitalsWorkflow = savedUser.accountRole === 'super_admin' && data.clinic?.type === 'Clinic';
 
   useEffect(() => {
     localStorage.setItem('settings_notifications', JSON.stringify(notificationStack.slice(0, 30)));
@@ -301,6 +302,10 @@ const Settings = ({ data, setData, onLogout }) => {
         workingHoursEnd: formData.workingHoursEnd,
         appointmentWindowMinutes: normalizeAppointmentWindow(formData.appointmentWindowMinutes)
       };
+    } else if (editModal.type === 'consultation_workflow') {
+      updatePayload = {
+        preConsultVitalsEnabled: formData.preConsultVitalsEnabled === true
+      };
     } else if (editModal.stateKey === 'hours') {
       updatePayload = { hours: formData.value };
     }
@@ -308,7 +313,12 @@ const Settings = ({ data, setData, onLogout }) => {
     if (Object.keys(updatePayload).length > 0) {
       try {
         setLoading(true);
-        const response = await fetch(`${API_BASE_URL}/api/clinics/${clinicId}`, {
+        const isWorkflowPreference = editModal.type === 'consultation_workflow';
+        const request = isWorkflowPreference ? authFetch : fetch;
+        const endpoint = isWorkflowPreference
+          ? `${API_BASE_URL}/api/clinics/${clinicId}/workflow-preferences`
+          : `${API_BASE_URL}/api/clinics/${clinicId}`;
+        const response = await request(endpoint, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updatePayload)
@@ -696,7 +706,7 @@ const Settings = ({ data, setData, onLogout }) => {
   const roleLabels = {
     super_admin: 'Super Admin',
     clinic_admin: 'Clinic Admin',
-    doctor: 'Doctor'
+    doctor: 'Clinic Doctor'
   };
   const permissionGroups = [
     {
@@ -892,6 +902,28 @@ const Settings = ({ data, setData, onLogout }) => {
           )
         }
       );
+
+      if (canConfigureVitalsWorkflow) {
+        clinicItems.push({
+          key: 'consultation-workflow',
+          searchText: 'consultation workflow vitals required before consultation triage',
+          render: () => (
+            <SettingItem
+              title="Consultation Workflow"
+              subtitle={data.clinic?.preConsultVitalsEnabled
+                ? 'Vitals capture enabled before consultation.'
+                : 'Vitals can be captured during consultation.'}
+              onEdit={() => openEdit({
+                title: 'Consultation Workflow',
+                type: 'consultation_workflow',
+                initialData: {
+                  preConsultVitalsEnabled: data.clinic?.preConsultVitalsEnabled === true
+                }
+              })}
+            />
+          )
+        });
+      }
 
       if (canUpgradeSolo) {
         clinicItems.push({
@@ -1204,6 +1236,21 @@ const Settings = ({ data, setData, onLogout }) => {
                   }
                 })}
               />
+              {canConfigureVitalsWorkflow && (
+                <SettingItem
+                  title="Consultation Workflow"
+                  subtitle={data.clinic?.preConsultVitalsEnabled
+                    ? 'Vitals capture enabled before consultation.'
+                    : 'Vitals can be captured during consultation.'}
+                  onEdit={() => openEdit({
+                    title: 'Consultation Workflow',
+                    type: 'consultation_workflow',
+                    initialData: {
+                      preConsultVitalsEnabled: data.clinic?.preConsultVitalsEnabled === true
+                    }
+                  })}
+                />
+              )}
               {canUpgradeSolo && (
                 <SettingItem
                   title="Upgrade to Clinic"
@@ -1439,6 +1486,21 @@ const Settings = ({ data, setData, onLogout }) => {
                  </select>
                </div>
              </>
+           )}
+
+           {editModal?.type === 'consultation_workflow' && (
+             <label className="flex items-start gap-3 p-3 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
+               <input
+                 type="checkbox"
+                 checked={formData.preConsultVitalsEnabled === true}
+                 onChange={e => setFormData({ ...formData, preConsultVitalsEnabled: e.target.checked })}
+                 className="mt-0.5 h-4 w-4 accent-teal-600"
+               />
+               <div>
+                 <p className="type-section-title text-slate-800">Vitals Required before Consultation</p>
+                 <p className="type-secondary text-slate-500 mt-1">Adds pre-consult vitals capture to the appointment workflow. Consultation is not blocked.</p>
+               </div>
+             </label>
            )}
 
            {(editModal?.type === 'template' || editModal?.type === 'policy') && (

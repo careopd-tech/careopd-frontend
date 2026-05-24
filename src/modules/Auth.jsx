@@ -6,7 +6,7 @@ import { updateSessionFromAuth } from '../utils/auth';
 import { APP_VERSION } from '../config/appVersion';
 
 // FIXED: Added setUserRole to props matching App.jsx
-const Auth = ({ authState, setAuthState, setUserRole }) => {
+const Auth = ({ authState, setAuthState, setUserRole, sessionMessage = '' }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [clinicCode, setClinicCode] = useState('');
   const [email, setEmail] = useState('');
@@ -53,6 +53,12 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
       if (!window.closed) closeAuthFlow();
     }, 250);
   };
+
+  useEffect(() => {
+    if (sessionMessage && authState === 'login') {
+      setError(sessionMessage);
+    }
+  }, [authState, sessionMessage]);
 
   useEffect(() => {
     const blurLaunchFocus = () => {
@@ -165,7 +171,11 @@ const Auth = ({ authState, setAuthState, setUserRole }) => {
         setActivationCompleted(false);
         const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CareOPD-Session-Refresh': '1'
+          },
           body: JSON.stringify({ clinicCode: normalizeClinicCode(clinicCode), email, password })
         });
         
