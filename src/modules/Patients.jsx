@@ -508,29 +508,16 @@ const renderPatientCard = (p) => {
       <Modal 
         isOpen={isHistoryModalOpen} 
         onClose={() => { setIsHistoryModalOpen(false); setPatientHistory([]); setSelectedHistoryPatient(null); }} 
-        title={`Visit History: ${selectedHistoryPatient?.name || ''}`} 
-        footer={<button onClick={() => setIsHistoryModalOpen(false)} className="type-section-title w-full bg-slate-200 text-slate-700 hover:bg-slate-300 transition-colors py-1.5 rounded-lg">Close</button>}
+        title={`Patient History - ${selectedHistoryPatient?.name || ''}`}
+        panelClassName="careopd-modal-panel bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[calc(var(--app-height)-1.5rem)] animate-scaleIn"
+        bodyClassName="p-2 overflow-y-auto flex-1 overscroll-contain"
       >
-        <div className="-mx-2 px-2">
-             <PatientHistoryList 
-                historyData={patientHistory} 
-                isLoading={isHistoryLoading} 
-                layout="vertical" 
-                // The Lazy Loader: Fires if the doctor clicks a card that lacks deep-dive details
-                onFetchDetails={async (visitId) => {
-                    try {
-                        const res = await fetch(`${API_BASE_URL}/api/appointments/details/${visitId}`); // Assuming you have an endpoint for this
-                        if (res.ok) {
-                            const detailedData = await res.json();
-                            // Update the specific visit in state with the newly fetched details
-                            setPatientHistory(prev => prev.map(v => v._id === visitId ? { ...v, ...detailedData } : v));
-                        }
-                    } catch (e) {
-                        console.error("Failed to lazy load visit details", e);
-                    }
-                }} 
-             />
-        </div>
+        <PatientHistoryList
+          historyData={patientHistory}
+          isLoading={isHistoryLoading}
+          layout="vertical"
+          embeddedMarker
+        />
       </Modal>
     </div>
   );

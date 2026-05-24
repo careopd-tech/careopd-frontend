@@ -1075,6 +1075,15 @@ const Appointments = ({ data, setData, onLogout }) => {
       overflowActions = [...overflowActions, actions.history];
     }
 
+    const hasTodayInlineAction = showActions && isToday && Boolean(primaryAction);
+    const hasNonTodayInlineAction = showActions && !isToday && (isAdmin || isTreatingPhysician);
+    const hasArchivedInlineAction = (isCancelled || isNoShow) && isAdmin;
+    const statusOverflowActions = isCompleted ||
+      ((isCancelled || isNoShow) && !hasArchivedInlineAction) ||
+      (showActions && !isToday && !hasNonTodayInlineAction)
+      ? [actions.history]
+      : (showActions && isToday && !hasTodayInlineAction ? overflowActions : []);
+
     const renderActionButton = (action, isPrimary = false) => {
       if (!action) return null;
       const Icon = action.icon;
@@ -1154,18 +1163,21 @@ const Appointments = ({ data, setData, onLogout }) => {
               <span className="type-body text-slate-700">{appt.time}</span>
               <span className="type-label text-slate-400">| {appt.date}</span>
             </div>
-            {isNoShow ? <span className="type-utility bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase">No Show</span> : <StatusBadge status={cardStatus} />}
+            <div className="flex items-center gap-1">
+              {isNoShow ? <span className="type-utility bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase">No Show</span> : <StatusBadge status={cardStatus} />}
+              {renderOverflowMenu(statusOverflowActions)}
+            </div>
           </div>
           <h4 className="type-card-title text-slate-800 leading-tight">{getPatientName(appt.patientId)}</h4>
           <p className="type-label text-slate-500 leading-tight mt-0.5">{appt.type || 'Consultation'} with <span className="text-teal-600 font-medium">{getDoctorName(appt.doctorId)}</span></p>
         </div>
-        {showActions && isToday && (primaryAction || overflowActions.length > 0) && (
+        {hasTodayInlineAction && (
           <div className="flex items-center justify-end gap-1.5 border-t md:border-t-0 md:border-l border-slate-100 pt-2 md:pt-0 md:pl-3 flex-shrink-0">
             {renderActionButton(primaryAction, true)}
             {renderOverflowMenu(overflowActions)}
           </div>
         )}
-        {showActions && !isToday && (
+        {hasNonTodayInlineAction && (
           <div className="flex flex-row md:flex-col gap-1.5 border-t md:border-t-0 md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 justify-end flex-shrink-0 md:w-32">
             {isAdmin && (
               <>
@@ -1184,16 +1196,11 @@ const Appointments = ({ data, setData, onLogout }) => {
             {renderOverflowMenu([actions.history])}
           </div>
         )}
-        {(isCancelled || isNoShow) && (
+        {hasArchivedInlineAction && (
           <div className="flex flex-row md:flex-col gap-1.5 border-t md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 justify-end flex-shrink-0 md:w-32">
             {isAdmin && (
               <button onClick={() => handleRebook(appt)} className="type-label flex-1 md:flex-none w-full h-7 text-white bg-blue-600 hover:bg-blue-700 shadow-sm rounded-lg flex items-center justify-center gap-1 whitespace-nowrap"><RefreshCw size={12} /> ReBook</button>
             )}
-            {renderOverflowMenu([actions.history])}
-          </div>
-        )}
-        {isCompleted && (
-          <div className="flex items-center justify-end border-t md:border-t-0 md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 flex-shrink-0">
             {renderOverflowMenu([actions.history])}
           </div>
         )}
