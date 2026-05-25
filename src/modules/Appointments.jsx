@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   Calendar, CalendarCheck, History, Plus, Clock, RefreshCw,
   ChevronDown, CalendarDays, CheckCircle, AlertCircle, Loader2, X, Search, Activity,
-  MoreVertical, UserCheck, Bell, XCircle
+  MoreVertical, UserCheck, Bell, XCircle, Phone
 } from 'lucide-react';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
@@ -92,6 +92,7 @@ const Appointments = ({ data, setData, onLogout }) => {
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [isVitalsModalOpen, setIsVitalsModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isViewVitalsModalOpen, setIsViewVitalsModalOpen] = useState(false);
@@ -99,6 +100,7 @@ const Appointments = ({ data, setData, onLogout }) => {
   const [rebookingApptId, setRebookingApptId] = useState(null);
   const [notification, setNotification] = useState(null);
   const [actionAppt, setActionAppt] = useState(null);
+  const [contactAppt, setContactAppt] = useState(null);
   const [previewAppt, setPreviewAppt] = useState(null);
   const [openActionMenuId, setOpenActionMenuId] = useState('');
   const [openActionMenuPosition, setOpenActionMenuPosition] = useState(null);
@@ -223,6 +225,15 @@ const Appointments = ({ data, setData, onLogout }) => {
     return patient?.name || 'Unknown Patient';
   };
 
+  const getPatientPhone = (patientRef) => {
+    if (patientRef && typeof patientRef === 'object') {
+      return patientRef.phone || '';
+    }
+    const patientId = getEntityId(patientRef);
+    const patient = (data.patients || []).find(p => getEntityId(p) === patientId);
+    return patient?.phone || '';
+  };
+
   const getDoctorName = (doctorRef) => {
     if (doctorRef && typeof doctorRef === 'object') {
       return doctorRef.name || 'Unknown Doctor';
@@ -319,7 +330,7 @@ const Appointments = ({ data, setData, onLogout }) => {
   });
 
   // --- 6. DATA FETCHING ---
-  const fetchAllData = async (forceSync = false, overrideQuery = undefined) => {
+  const fetchAllData = async (forceSync = false, overrideQuery = undefined, resetLazySections = false) => {
     if (!clinicId) return;
     setLoadError('');
     const isNewSearch = overrideQuery !== undefined;
@@ -332,7 +343,7 @@ const Appointments = ({ data, setData, onLogout }) => {
         { key: 'appointments snapshot', url: `${API_BASE_URL}/api/appointments/${clinicId}?mode=snapshot&date=${safeCurrentDate}${rbacQuery}` },
         { key: 'doctors', url: `${API_BASE_URL}/api/doctors/${clinicId}` },
         { key: 'patients', url: `${API_BASE_URL}/api/patients/${clinicId}` },
-        { key: 'appointments calendar', url: `${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments${rbacQuery}` }
+        { key: 'appointments calendar', url: `${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments&date=${safeCurrentDate}${rbacQuery}` }
       ];
 
       const dashboardPromise = Promise.all(dashboardRequests.map(req => fetch(req.url))).then(async ([snapshotRes, docsRes, patsRes, calRes]) => {
@@ -367,12 +378,15 @@ const Appointments = ({ data, setData, onLogout }) => {
           const activeSection = expandedSectionRef.current;
 
           const syncGroup = async (group, serverCount) => {
+            if (resetLazySections) return [];
             if (activeSection !== group) return sectionsRef.current[group];
 
             const currentList = sectionsRef.current[group];
-            const needsSync = serverCount !== currentList.length || (forceSync && activeSection === group);
+            const needsSync = serverCount !== currentList.length || forceSync;
 
             if (needsSync) {
+              if (serverCount === 0) return [];
+
               const currentPages = Math.ceil((currentList.length || 1) / 20);
               const limit = Math.max(currentPages * 20, 20);
 
@@ -434,7 +448,10 @@ const Appointments = ({ data, setData, onLogout }) => {
   };
 
   useEffect(() => {
-    fetchAllData(true);
+    // Refresh today's cards and section counts, but leave historical/future
+    // card data lazy-loaded only when the user opens those accordions.
+    setExpandedSection('today');
+    fetchAllData(true, undefined, true);
     const intervalId = setInterval(() => fetchAllData(true), 60000);
     return () => clearInterval(intervalId);
   }, [safeCurrentDate]);
@@ -851,6 +868,12 @@ const Appointments = ({ data, setData, onLogout }) => {
     setOpenActionMenuId('');
   };
 
+  const openContact = (appt) => {
+    setContactAppt(appt);
+    setIsContactModalOpen(true);
+    setOpenActionMenuId('');
+  };
+
   const openVitals = (appt) => {
     setActionAppt(appt);
     setVitalsData({
@@ -1008,6 +1031,7 @@ const Appointments = ({ data, setData, onLogout }) => {
     const isNoShow = uiStatus === 'No-Show';
     const showActions = !isCancelled && !isCompleted && !isNoShow;
     const isToday = appt.date === safeCurrentDate;
+    const isFuture = appt.date > safeCurrentDate;
     const isCheckedIn = Boolean(appt.checkedInAt);
     const isInConsultation = Boolean(appt.consultationStartedAt);
     const isTreatingPhysician = isAssignedClinician(appt);
@@ -1029,6 +1053,7 @@ const Appointments = ({ data, setData, onLogout }) => {
       checkIn: { label: 'Check In', icon: UserCheck, onClick: () => handleCheckIn(appt) },
       consult: { label: 'Consult', icon: Activity, onClick: () => handleStartConsultation(appt) },
       reminder: { label: 'Send Reminder', icon: Bell, onClick: () => handleSendReminder(appt) },
+      contact: { label: 'Contact Patient', icon: Phone, onClick: () => openContact(appt) },
       reschedule: { label: 'Reschedule', icon: CalendarDays, onClick: () => openReschedule(appt) },
       vitals: { label: 'Add Vitals', icon: Activity, onClick: () => openVitals(appt) },
       history: { label: 'View History', icon: History, onClick: () => openHistory(appt) },
@@ -1059,8 +1084,8 @@ const Appointments = ({ data, setData, onLogout }) => {
           primaryAction = actions.checkIn;
           overflowActions = [actions.reschedule, actions.cancel, actions.reminder];
         } else if (todayPhase === 'delayed') {
-          primaryAction = actions.reminder;
-          overflowActions = [actions.checkIn];
+          primaryAction = actions.contact;
+          overflowActions = [actions.checkIn, actions.reschedule, actions.cancel];
         } else {
           primaryAction = actions.reschedule;
           overflowActions = [actions.checkIn, actions.cancel, actions.reminder];
@@ -1075,10 +1100,16 @@ const Appointments = ({ data, setData, onLogout }) => {
       overflowActions = [...overflowActions, actions.history];
     }
 
-    const hasTodayInlineAction = showActions && isToday && Boolean(primaryAction);
-    const hasNonTodayInlineAction = showActions && !isToday && (isAdmin || isTreatingPhysician);
+    if (showActions && isFuture && canManageAppointments) {
+      primaryAction = actions.reschedule;
+      overflowActions = [actions.reminder, actions.cancel, actions.history];
+    }
+
+    const hasPrimaryInlineAction = showActions && Boolean(primaryAction);
     const hasArchivedInlineAction = (isCancelled || isNoShow) && isAdmin;
-    const cardOverflowActions = showActions && isToday ? overflowActions : [actions.history];
+    const cardOverflowActions = showActions && (isToday || (isFuture && canManageAppointments))
+      ? overflowActions
+      : [actions.history];
 
     const renderActionButton = (action, isPrimary = false) => {
       if (!action) return null;
@@ -1161,33 +1192,17 @@ const Appointments = ({ data, setData, onLogout }) => {
             </div>
             {isNoShow ? <span className="type-utility bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase">No Show</span> : <StatusBadge status={cardStatus} />}
           </div>
-          <h4 className="type-card-title text-slate-800 leading-tight">{getPatientName(appt.patientId)}</h4>
-          <div className="flex items-end justify-between gap-2 mt-0.5">
-            <p className="type-label text-slate-500 leading-tight min-w-0">{appt.type || 'Consultation'} with <span className="text-teal-600 font-medium">{getDoctorName(appt.doctorId)}</span></p>
-            {renderOverflowMenu(cardOverflowActions)}
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] gap-x-2">
+            <h4 className="type-card-title text-slate-800 leading-tight min-w-0">{getPatientName(appt.patientId)}</h4>
+            <div className="col-start-2 row-start-1 row-span-2 self-end">
+              {renderOverflowMenu(cardOverflowActions)}
+            </div>
+            <p className="col-start-1 row-start-2 type-label text-slate-500 leading-tight min-w-0 mt-0.5">{appt.type || 'Consultation'} with <span className="text-teal-600 font-medium">{getDoctorName(appt.doctorId)}</span></p>
           </div>
         </div>
-        {hasTodayInlineAction && (
+        {hasPrimaryInlineAction && (
           <div className="flex items-center justify-end gap-1.5 border-t md:border-t-0 md:border-l border-slate-100 pt-2 md:pt-0 md:pl-3 flex-shrink-0">
             {renderActionButton(primaryAction, true)}
-          </div>
-        )}
-        {hasNonTodayInlineAction && (
-          <div className="flex flex-row md:flex-col gap-1.5 border-t md:border-t-0 md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 justify-end flex-shrink-0 md:w-32">
-            {isAdmin && (
-              <>
-                <button onClick={() => { setActionAppt(appt); setIsCancelModalOpen(true); }} className="type-label flex-1 md:flex-none w-full h-7 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg whitespace-nowrap">Cancel</button>
-                <button onClick={() => openReschedule(appt)} className="type-label flex-1 md:flex-none w-full h-7 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap"><CalendarDays size={12} /> Reschedule</button>
-              </>
-            )}
-            {isTreatingPhysician && (
-              <button
-                onClick={() => openConsultation(appt)}
-                className="type-label flex-1 md:flex-none w-full h-7 text-white bg-teal-600 hover:bg-teal-700 rounded-lg flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors shadow-sm"
-              >
-                <Activity size={14} /> Consult
-              </button>
-            )}
           </div>
         )}
         {hasArchivedInlineAction && (
@@ -1262,6 +1277,8 @@ const Appointments = ({ data, setData, onLogout }) => {
 
   const allFilteredResults = applyFilters(searchResults);
   const visibleSearchResults = allFilteredResults;
+  const contactPhone = getPatientPhone(contactAppt?.patientId);
+  const dialableContactPhone = String(contactPhone || '').replace(/[^\d+]/g, '');
 
   return (
     <div className="h-full flex flex-col relative">
@@ -1625,6 +1642,62 @@ const Appointments = ({ data, setData, onLogout }) => {
           {actionAppt && (<div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex items-center justify-between mb-2"><span className="type-utility text-slate-500 uppercase">Currently Scheduled:</span><span className="type-body text-slate-700">{actionAppt.date} at {actionAppt.time}</span></div>)}
           <AlertMessage message={modalError} />
           <div><label className="type-label block text-slate-500 mb-1 uppercase">New Date</label><input type="date" min={new Date().toISOString().split('T')[0]} max={maxDateStr} className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50" value={rescheduleData.date} onChange={(e) => setRescheduleData({ ...rescheduleData, date: e.target.value, time: '' })} /></div><div><label className="type-label block text-slate-500 mb-1 uppercase">Available Slots</label><TimeSlotPicker selectedTime={rescheduleData.time} onSelect={(t) => setRescheduleData({ ...rescheduleData, time: t })} doctor={getDoctorById(actionAppt?.doctorId)} date={rescheduleData.date} appointments={data.calendar30 || []} clinic={data.clinic} /></div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isContactModalOpen}
+        onClose={() => { setIsContactModalOpen(false); setContactAppt(null); }}
+        title="Contact Patient"
+        footer={
+          <div className="flex gap-2">
+            {dialableContactPhone ? (
+              <a
+                href={`tel:${dialableContactPhone}`}
+                className="type-section-title flex-1 h-8 bg-teal-600 text-white rounded-lg flex justify-center items-center gap-1.5 whitespace-nowrap"
+              >
+                <Phone size={14} /> Call
+              </a>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="type-section-title flex-1 h-8 bg-slate-200 text-slate-400 rounded-lg flex justify-center items-center gap-1.5 whitespace-nowrap cursor-not-allowed"
+              >
+                <Phone size={14} /> Call
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                const appt = contactAppt;
+                setIsContactModalOpen(false);
+                setContactAppt(null);
+                if (appt) handleSendReminder(appt);
+              }}
+              disabled={!dialableContactPhone || processingAppointmentId === contactAppt?._id}
+              className="type-section-title flex-1 h-8 bg-teal-600 text-white rounded-lg flex justify-center items-center gap-1.5 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {processingAppointmentId === contactAppt?._id ? <Loader2 size={14} className="animate-spin" /> : <Bell size={14} />}
+              Send Reminder
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+            <p className="type-card-title text-slate-800">{getPatientName(contactAppt?.patientId)}</p>
+            <p className="type-body text-slate-600 mt-1">{contactPhone || 'No mobile number available'}</p>
+          </div>
+          {dialableContactPhone ? (
+            <p className="type-secondary text-slate-500">
+              If calling is unavailable, use reminder option
+            </p>
+          ) : (
+            <p className="type-secondary text-slate-500">
+              Add a mobile number in the patient profile before calling or sending a reminder.
+            </p>
+          )}
         </div>
       </Modal>
 
