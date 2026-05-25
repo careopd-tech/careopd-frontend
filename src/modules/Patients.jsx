@@ -383,7 +383,7 @@ const renderPatientCard = (p) => {
               { label: 'All', val: stats?.total || 0, color: 'bg-blue-50 text-blue-700', filterKey: '', isToggle: false },
               { label: 'New', val: stats?.new || 0, color: 'bg-green-50 text-green-700', filterKey: 'New', isToggle: true },
               { label: 'Returning', val: stats?.returning || 0, color: 'bg-amber-50 text-amber-700', filterKey: 'Returning', isToggle: true },
-              { label: 'No Visit', val: stats?.noVisit || 0, color: 'bg-red-50 text-red-700', filterKey: 'No Visit', isToggle: true }
+              { label: 'Reminder Due', val: '-', color: 'bg-red-50 text-red-700', filterKey: '', isToggle: false }
             ].map((s, i) => {
               const isActive = typeFilter === s.filterKey && s.isToggle;
               return (
