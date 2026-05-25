@@ -8,6 +8,8 @@ import Modal from '../components/ui/Modal';
 import FAB from '../components/ui/FAB';
 import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
+import { useGlobalDate } from '../context/DateContext';
+import { getLocalDateString } from '../utils/dateUtils';
 import API_BASE_URL from '../config';
 import { getSessionUser } from '../utils/auth';
 import { hasPermission } from '../utils/permissions';
@@ -20,6 +22,8 @@ import { hasPermission } from '../utils/permissions';
 
 // Note: I included data & setData in the props so App.jsx stays perfectly happy
 const Patients = ({ data, setData, onLogout }) => {
+  const dateContext = useGlobalDate();
+  const safeCurrentDate = dateContext?.currentDate || getLocalDateString();
   const clinicId = localStorage.getItem('clinicId');
   const userRole = localStorage.getItem('userRole') || 'admin';
   const doctorId = localStorage.getItem('doctorId') || '';
@@ -139,7 +143,7 @@ const PatientSkeleton = () => (
       
       // 1. Fetch Stats (Snapshot) - WITH FAILSAFES
       promises.push(
-        fetch(`${API_BASE_URL}/api/patients/${clinicId}?mode=snapshot${rbacQuery}`)
+        fetch(`${API_BASE_URL}/api/patients/${clinicId}?mode=snapshot&date=${safeCurrentDate}${rbacQuery}`)
           .then(res => res.json())
           .then(resData => {
              if (resData && resData.stats) {
@@ -153,7 +157,7 @@ const PatientSkeleton = () => (
       );
 
       // 2. Fetch List
-      let url = `${API_BASE_URL}/api/patients/${clinicId}?mode=list&page=${targetPage}&limit=20${rbacQuery}`;
+      let url = `${API_BASE_URL}/api/patients/${clinicId}?mode=list&page=${targetPage}&limit=20&date=${safeCurrentDate}${rbacQuery}`;
       if (queryRef.current) url += `&query=${queryRef.current}`;
       if (typeRef.current) url += `&type=${typeRef.current}`;
       if (dateRange.from) url += `&dateFrom=${dateRange.from}`;
@@ -212,7 +216,7 @@ const PatientSkeleton = () => (
     fetchPatientData(1, isInitialBackgroundSync);
     const interval = setInterval(() => fetchPatientData(pageRef.current, true), 60000);
     return () => clearInterval(interval);
-  }, [typeFilter, dateRange.from, dateRange.to]); 
+  }, [typeFilter, dateRange.from, dateRange.to, safeCurrentDate]); 
 
   // --- ACTIONS ---
   const handleSearchInput = (val) => {
@@ -331,6 +335,7 @@ const PatientSkeleton = () => (
 
 const renderPatientCard = (p) => {
     if (!p) return null; // Failsafe
+    const patientType = p.todayType || p.type || 'New';
     return (
       <div key={p._id} className="p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col md:flex-row gap-2 bg-white hover:border-teal-50 transition-colors">
         <div className="flex-1 min-w-0">
@@ -338,9 +343,9 @@ const renderPatientCard = (p) => {
             <div className="flex items-center gap-1.5 mt-0.5">
               <h3 className="type-card-title text-slate-800 leading-tight">{p.name || 'Unknown Name'}</h3>
             </div>
-            <div className={`type-utility px-2 py-0.5 rounded flex items-center gap-1.5 uppercase ${p.type === 'New' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
-               <div className={`w-1.5 h-1.5 rounded-full ${p.type === 'New' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
-               {p.type || 'New'}
+            <div className={`type-utility px-2 py-0.5 rounded flex items-center gap-1.5 uppercase ${patientType === 'New' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
+               <div className={`w-1.5 h-1.5 rounded-full ${patientType === 'New' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
+               {patientType}
             </div>
           </div>
           <p className="text-[12px] text-slate-500 leading-tight mt-0.5">{p.gender || '?'}, {p.age || '?'} Yrs • {p.phone || 'No Phone'}</p>
