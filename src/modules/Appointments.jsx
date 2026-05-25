@@ -1159,13 +1159,13 @@ const Appointments = ({ data, setData, onLogout }) => {
               <span className="type-body text-slate-700">{appt.time}</span>
               <span className="type-label text-slate-400">| {appt.date}</span>
             </div>
-            <div className="flex flex-col items-end gap-1">
-              {isNoShow ? <span className="type-utility bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase">No Show</span> : <StatusBadge status={cardStatus} />}
-              {renderOverflowMenu(cardOverflowActions)}
-            </div>
+            {isNoShow ? <span className="type-utility bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase">No Show</span> : <StatusBadge status={cardStatus} />}
           </div>
           <h4 className="type-card-title text-slate-800 leading-tight">{getPatientName(appt.patientId)}</h4>
-          <p className="type-label text-slate-500 leading-tight mt-0.5">{appt.type || 'Consultation'} with <span className="text-teal-600 font-medium">{getDoctorName(appt.doctorId)}</span></p>
+          <div className="flex items-end justify-between gap-2 mt-0.5">
+            <p className="type-label text-slate-500 leading-tight min-w-0">{appt.type || 'Consultation'} with <span className="text-teal-600 font-medium">{getDoctorName(appt.doctorId)}</span></p>
+            {renderOverflowMenu(cardOverflowActions)}
+          </div>
         </div>
         {hasTodayInlineAction && (
           <div className="flex items-center justify-end gap-1.5 border-t md:border-t-0 md:border-l border-slate-100 pt-2 md:pt-0 md:pl-3 flex-shrink-0">
