@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { History, Loader2, ChevronDown, Activity, FileText, Pill, FlaskConical, RotateCw } from 'lucide-react';
+import { getLocalDateString } from '../../utils/dateUtils';
 
 // --- SHARED LOGIC & HELPERS ---
 export const getUiStatus = (appt) => {
   if (appt.status === 'Cancelled') return 'Cancelled';
   if (appt.status === 'Completed' || appt.status === 'Done') return 'Completed';
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
   const isPast = appt.date < todayStr;
   if (isPast && (appt.status === 'Scheduled' || appt.status === 'Pending')) return 'No Show';
   return appt.status || 'Scheduled';
@@ -15,16 +16,17 @@ export const getStatusStyling = (status) => {
   const s = (status || '').toUpperCase();
   if (s === 'COMPLETED' || s === 'DONE') return { badge: 'text-green-700 bg-green-50 border-green-200', dot: 'bg-green-500 ring-green-100' };
   if (s === 'CANCELLED') return { badge: 'text-red-700 bg-red-50 border-red-200', dot: 'bg-red-500 ring-red-100' };
+  if (s === 'LEFT EARLY') return { badge: 'text-slate-700 bg-slate-100 border-slate-200', dot: 'bg-slate-500 ring-slate-100' };
   if (s === 'NO SHOW' || s === 'NO-SHOW') return { badge: 'text-slate-600 bg-slate-100 border-slate-200', dot: 'bg-slate-400 ring-slate-100' };
   return { badge: 'text-blue-700 bg-blue-50 border-blue-200', dot: 'bg-blue-500 ring-blue-100' }; // Scheduled
 };
 
 export const filterValidHistory = (historyData = [], currentApptId = null) => {
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
   return historyData.filter(visit => {
     if (currentApptId && String(visit._id) === String(currentApptId)) return false;
     if (visit.date < todayStr) return true;
-    if (visit.date === todayStr && (visit.status === 'Completed' || visit.status === 'Done')) return true;
+    if (visit.date === todayStr && (visit.status === 'Completed' || visit.status === 'Done' || visit.status === 'Left Early')) return true;
     return false;
   });
 };

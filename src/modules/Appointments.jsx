@@ -93,11 +93,13 @@ const Appointments = ({ data, setData, onLogout }) => {
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [isRescheduleModalOpen, setIsRescheduleModalOpen] = useState(false);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+  const [isLeftEarlyModalOpen, setIsLeftEarlyModalOpen] = useState(false);
   const [isVitalsModalOpen, setIsVitalsModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isViewVitalsModalOpen, setIsViewVitalsModalOpen] = useState(false);
   const [expandedSection, setExpandedSection] = useState('today');
   const [rebookingApptId, setRebookingApptId] = useState(null);
+  const [isFollowUpBooking, setIsFollowUpBooking] = useState(false);
   const [notification, setNotification] = useState(null);
   const [actionAppt, setActionAppt] = useState(null);
   const [contactAppt, setContactAppt] = useState(null);
@@ -128,6 +130,7 @@ const Appointments = ({ data, setData, onLogout }) => {
   const [newAppt, setNewAppt] = useState({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate });
   const [newPatientDetails, setNewPatientDetails] = useState(defaultNewPatientDetails);
   const [rescheduleData, setRescheduleData] = useState({ date: '', time: '' });
+  const [leftEarlyReason, setLeftEarlyReason] = useState('');
   const [vitalsData, setVitalsData] = useState({ bp: '', temp: '', weight: '' });
   const [historyData, setHistoryData] = useState([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
@@ -205,6 +208,7 @@ const Appointments = ({ data, setData, onLogout }) => {
   const getUiStatus = (appt) => {
     if (appt.status === 'Cancelled') return 'Cancelled';
     if (appt.status === 'Completed' || appt.status === 'Done') return 'Completed';
+    if (appt.status === 'Left Early') return 'Left Early';
     const isPast = appt.date < safeCurrentDate;
     if (isPast && (appt.status === 'Scheduled' || appt.status === 'Pending')) return 'No-Show';
     return 'Scheduled';
@@ -687,7 +691,7 @@ const Appointments = ({ data, setData, onLogout }) => {
       getEntityId(appt.patientId) === getEntityId(patientId) &&
       appt.date === date &&
       appt.time === time &&
-      appt.status !== 'Cancelled' &&
+      !['Cancelled', 'Left Early'].includes(appt.status) &&
       appt._id !== excludeAppointmentId
     );
   };
@@ -730,6 +734,7 @@ const Appointments = ({ data, setData, onLogout }) => {
       } : null
     };
 
+    const isRebookFlow = Boolean(rebookingApptId || isFollowUpBooking);
     try {
       const url = rebookingApptId ? `${API_BASE_URL}/api/appointments/${rebookingApptId}` : `${API_BASE_URL}/api/appointments`;
       const method = rebookingApptId ? 'PUT' : 'POST';
@@ -738,15 +743,15 @@ const Appointments = ({ data, setData, onLogout }) => {
 
       if (res.ok) {
         await fetchAllData(true);
-        setIsAddModalOpen(false); setRebookingApptId(null);
+        setIsAddModalOpen(false); setRebookingApptId(null); setIsFollowUpBooking(false);
         setNewAppt({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate });
         setNewPatientDetails(defaultNewPatientDetails);
 
         const pName = newAppt.patientId === 'add_new' ? fullName : getPatientName(newAppt.patientId);
         showNotification(
-          rebookingApptId ? 'Appointment Rebooked' : 'Appointment Booked',
+          isRebookFlow ? 'Appointment Rebooked' : 'Appointment Booked',
           'success',
-          `Appointment ${rebookingApptId ? 'Rebooked' : 'Booked'} for ${pName} on ${newAppt.date}  at ${newAppt.time}`
+          `Appointment ${isRebookFlow ? 'Rebooked' : 'Booked'} for ${pName} on ${newAppt.date}  at ${newAppt.time}`
         );
       } else {
         if (result.errorCode === 'ERR_APPOINTMENT_CONFLICT') {
@@ -778,6 +783,33 @@ const Appointments = ({ data, setData, onLogout }) => {
       setIsCancelModalOpen(false);
       showNotification('Appointment Cancelled', 'error', `Appointment Cancelled for ${getPatientName(actionAppt.patientId)} scheduled on ${actionAppt.date} at ${actionAppt.time}`);
       setActionAppt(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const confirmLeftEarly = async () => {
+    if (!actionAppt) return;
+    setIsSubmitting(true);
+    setModalError('');
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${actionAppt._id}/left-early`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId, reason: leftEarlyReason })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return setModalError(result.error || 'Failed to mark patient as left early.');
+      }
+
+      await fetchAllData(true);
+      setIsLeftEarlyModalOpen(false);
+      setLeftEarlyReason('');
+      showNotification('Patient Left Early', 'success', `${getPatientName(actionAppt.patientId)} left before consultation.`);
+      setActionAppt(null);
+    } catch (err) {
+      setModalError('Failed to mark patient as left early.');
     } finally {
       setIsSubmitting(false);
     }
@@ -821,7 +853,9 @@ const Appointments = ({ data, setData, onLogout }) => {
       date: safeCurrentDate,
       time: ''
     });
-    setRebookingApptId(appt.date < safeCurrentDate ? null : appt._id);
+    const preserveVisitRecord = appt.status === 'Left Early';
+    setRebookingApptId(preserveVisitRecord || appt.date < safeCurrentDate ? null : appt._id);
+    setIsFollowUpBooking(preserveVisitRecord);
     setIsAddModalOpen(true);
   };
 
@@ -871,6 +905,14 @@ const Appointments = ({ data, setData, onLogout }) => {
   const openContact = (appt) => {
     setContactAppt(appt);
     setIsContactModalOpen(true);
+    setOpenActionMenuId('');
+  };
+
+  const openLeftEarly = (appt) => {
+    setActionAppt(appt);
+    setLeftEarlyReason('');
+    setModalError('');
+    setIsLeftEarlyModalOpen(true);
     setOpenActionMenuId('');
   };
 
@@ -1029,7 +1071,8 @@ const Appointments = ({ data, setData, onLogout }) => {
     const isCancelled = uiStatus === 'Cancelled';
     const isCompleted = uiStatus === 'Completed';
     const isNoShow = uiStatus === 'No-Show';
-    const showActions = !isCancelled && !isCompleted && !isNoShow;
+    const isLeftEarly = uiStatus === 'Left Early';
+    const showActions = !isCancelled && !isCompleted && !isNoShow && !isLeftEarly;
     const isToday = appt.date === safeCurrentDate;
     const isFuture = appt.date > safeCurrentDate;
     const isCheckedIn = Boolean(appt.checkedInAt);
@@ -1054,6 +1097,7 @@ const Appointments = ({ data, setData, onLogout }) => {
       consult: { label: 'Consult', icon: Activity, onClick: () => handleStartConsultation(appt) },
       reminder: { label: 'Send Reminder', icon: Bell, onClick: () => handleSendReminder(appt) },
       contact: { label: 'Contact Patient', icon: Phone, onClick: () => openContact(appt) },
+      leftEarly: { label: 'Patient Left', icon: XCircle, onClick: () => openLeftEarly(appt) },
       reschedule: { label: 'Reschedule', icon: CalendarDays, onClick: () => openReschedule(appt) },
       vitals: { label: 'Add Vitals', icon: Activity, onClick: () => openVitals(appt) },
       history: { label: 'View History', icon: History, onClick: () => openHistory(appt) },
@@ -1065,7 +1109,7 @@ const Appointments = ({ data, setData, onLogout }) => {
     const clinicianOverflowActions = [
       actions.history,
       ...(data.clinic?.type === 'Clinic' ? [actions.viewVitals] : []),
-      ...(hasPreConsultVitalsWorkflow ? [actions.vitals] : [])
+      actions.vitals
     ];
 
     if (showActions && isToday) {
@@ -1075,9 +1119,12 @@ const Appointments = ({ data, setData, onLogout }) => {
       } else if (isCheckedIn) {
         if (isTreatingPhysician) {
           primaryAction = actions.consult;
-          overflowActions = clinicianOverflowActions;
+          overflowActions = [...clinicianOverflowActions, actions.leftEarly];
         } else if (canManageAppointments && hasPreConsultVitalsWorkflow) {
           primaryAction = actions.vitals;
+          overflowActions = [actions.leftEarly];
+        } else if (canManageAppointments) {
+          overflowActions = [actions.leftEarly];
         }
       } else if (canManageAppointments) {
         if (todayPhase === 'arrival-window') {
@@ -1106,7 +1153,7 @@ const Appointments = ({ data, setData, onLogout }) => {
     }
 
     const hasPrimaryInlineAction = showActions && Boolean(primaryAction);
-    const hasArchivedInlineAction = (isCancelled || isNoShow) && isAdmin;
+    const hasArchivedInlineAction = (isCancelled || isNoShow || isLeftEarly) && isAdmin;
     const cardOverflowActions = showActions && (isToday || (isFuture && canManageAppointments))
       ? overflowActions
       : [actions.history];
@@ -1182,8 +1229,8 @@ const Appointments = ({ data, setData, onLogout }) => {
     };
 
     return (
-      <div key={appt._id} className={`p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col md:flex-row gap-2 ${isCancelled || isNoShow ? 'bg-slate-50 opacity-90' : 'bg-white'}`}>
-        <div className={`flex-1 min-w-0 ${(isCancelled || isNoShow) ? 'grayscale opacity-75' : ''}`}>
+      <div key={appt._id} className={`p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col md:flex-row gap-2 ${isCancelled || isNoShow || isLeftEarly ? 'bg-slate-50 opacity-90' : 'bg-white'}`}>
+        <div className={`flex-1 min-w-0 ${(isCancelled || isNoShow || isLeftEarly) ? 'grayscale opacity-75' : ''}`}>
           <div className="flex justify-between items-start mb-1.5">
             <div className="flex items-center gap-1.5 mt-0.5">
               <Clock size={12} className="text-slate-400" />
@@ -1372,7 +1419,7 @@ const Appointments = ({ data, setData, onLogout }) => {
 
       {/* ADDED: ADMIN SECURITY LOCK FOR CREATING APPOINTMENTS */}
       {isAdmin && (
-        <FAB icon={Plus} onClick={() => { setRebookingApptId(null); setIsAddModalOpen(true); }} />
+        <FAB icon={Plus} onClick={() => { setRebookingApptId(null); setIsFollowUpBooking(false); setIsAddModalOpen(true); }} />
       )}
 
       {/* --- ADDED: EMR FULL-SCREEN OVERLAY --- */}
@@ -1431,7 +1478,7 @@ const Appointments = ({ data, setData, onLogout }) => {
         </div>
       </Modal>
 
-      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setRebookingApptId(null); setModalError(''); setInvalidFields([]); setPatientSearchQuery(''); setNewAppt({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate }); setNewPatientDetails(defaultNewPatientDetails); }} title={rebookingApptId ? "ReBook Appointment" : "New Appointment"}
+      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setRebookingApptId(null); setIsFollowUpBooking(false); setModalError(''); setInvalidFields([]); setPatientSearchQuery(''); setNewAppt({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate }); setNewPatientDetails(defaultNewPatientDetails); }} title={rebookingApptId || isFollowUpBooking ? "ReBook Appointment" : "New Appointment"}
         footer={
           <button
             onClick={handleAddAppointment}
@@ -1771,6 +1818,54 @@ const Appointments = ({ data, setData, onLogout }) => {
         ) : (
           <div className="type-body text-slate-500 text-center py-6">No vitals recorded for this appointment yet.</div>
         )}
+      </Modal>
+
+      <Modal
+        isOpen={isLeftEarlyModalOpen}
+        onClose={() => { setIsLeftEarlyModalOpen(false); setActionAppt(null); setLeftEarlyReason(''); setModalError(''); }}
+        title="Mark Left Early"
+        footer={
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => { setIsLeftEarlyModalOpen(false); setActionAppt(null); setLeftEarlyReason(''); setModalError(''); }}
+              disabled={isSubmitting}
+              className="type-section-title flex-1 h-8 text-slate-600 border border-slate-200 rounded-lg bg-white disabled:opacity-50"
+            >
+              Keep Waiting
+            </button>
+            <button
+              type="button"
+              onClick={confirmLeftEarly}
+              disabled={isSubmitting}
+              className="type-section-title flex-1 h-8 bg-red-600 text-white rounded-lg flex justify-center items-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : null}
+              Mark Left Early
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          <AlertMessage message={modalError} />
+          <p className="type-body text-slate-600">
+            Patient checked in but left before consultation.
+          </p>
+          <div>
+            <label className="type-label block text-slate-500 mb-1 uppercase">Reason (Optional)</label>
+            <select
+              value={leftEarlyReason}
+              onChange={(event) => setLeftEarlyReason(event.target.value)}
+              className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none focus:ring-1 focus:ring-teal-500"
+            >
+              <option value="">Select reason</option>
+              <option value="Long wait time">Long wait time</option>
+              <option value="Patient emergency">Patient emergency</option>
+              <option value="Will reschedule">Will reschedule</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
       </Modal>
 
       <Modal isOpen={isCancelModalOpen} onClose={() => { setIsCancelModalOpen(false); setActionAppt(null); }} title="Cancel Appointment" footer={

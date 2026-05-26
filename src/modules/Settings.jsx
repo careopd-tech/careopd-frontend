@@ -77,6 +77,11 @@ const Settings = ({ data, setData, onLogout }) => {
     clinic_admin: {},
     doctor: {}
   });
+  const [savedPermissionProfiles, setSavedPermissionProfiles] = useState({
+    clinic_admin: {},
+    doctor: {}
+  });
+  const [activePermissionRole, setActivePermissionRole] = useState('clinic_admin');
   const [permissionsLoading, setPermissionsLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [notificationStack, setNotificationStack] = useState(() => {
@@ -191,7 +196,9 @@ const Settings = ({ data, setData, onLogout }) => {
 
         if (permissionsRes.ok) {
           const permissionsPayload = await permissionsRes.json();
-          setPermissionProfiles(permissionsPayload.permissionProfiles || { clinic_admin: {}, doctor: {} });
+          const nextPermissionProfiles = permissionsPayload.permissionProfiles || { clinic_admin: {}, doctor: {} };
+          setPermissionProfiles(nextPermissionProfiles);
+          setSavedPermissionProfiles(nextPermissionProfiles);
         }
       } catch (err) {
         console.error('Failed to load access settings', err);
@@ -545,28 +552,37 @@ const Settings = ({ data, setData, onLogout }) => {
     }));
   };
 
-  const handleSavePermissionProfiles = async () => {
+  const handleSavePermissionProfile = async (roleKey) => {
     const clinicId = localStorage.getItem('clinicId');
     if (!clinicId) return showNotification('Action Failed', 'error', 'Clinic ID missing.');
+    const nextPermissionProfiles = {
+      ...savedPermissionProfiles,
+      [roleKey]: permissionProfiles?.[roleKey] || {}
+    };
 
     try {
       setPermissionsLoading(true);
       const response = await authFetch(`${API_BASE_URL}/api/clinics/${clinicId}/permissions`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ permissionProfiles })
+        body: JSON.stringify({ permissionProfiles: nextPermissionProfiles })
       });
 
       const result = await response.json().catch(() => ({}));
 
       if (response.ok) {
-        setPermissionProfiles(result.permissionProfiles || permissionProfiles);
+        const persistedProfiles = result.permissionProfiles || nextPermissionProfiles;
+        setSavedPermissionProfiles(persistedProfiles);
+        setPermissionProfiles(prev => ({
+          ...prev,
+          [roleKey]: persistedProfiles[roleKey] || prev[roleKey]
+        }));
         const nextSessionUser = {
           ...savedUser,
-          permissionProfiles: result.permissionProfiles || permissionProfiles
+          permissionProfiles: persistedProfiles
         };
         localStorage.setItem('user', JSON.stringify(nextSessionUser));
-        showNotification('Permissions Updated', 'success', 'Role permissions saved successfully.');
+        showNotification('Permissions Updated', 'success', `${roleLabels[roleKey]} permissions saved successfully.`);
       } else {
         showNotification('Action Failed', 'error', result.error || 'Failed to update role permissions.');
       }
@@ -808,32 +824,9 @@ const Settings = ({ data, setData, onLogout }) => {
   };
 
   const renderRolePermissionCard = (roleKey) => {
-    const roleSearchText = `${roleLabels[roleKey]} permissions role access clinic admin doctor`;
-    const showAllForRole = isSearchMode && matchesSearch(roleSearchText);
-    const filteredGroups = permissionGroups
-      .map(group => {
-        const groupMatches = showAllForRole || (isSearchMode && matchesSearch(group.title));
-        const visibleItems = group.items.filter(item =>
-          showAllForRole ||
-          groupMatches ||
-          !isSearchMode ||
-          matchesSearch(item.label, item.key, roleLabels[roleKey], group.title)
-        );
-        return visibleItems.length > 0 ? { ...group, items: visibleItems } : null;
-      })
-      .filter(Boolean);
-
-    if (isSearchMode && filteredGroups.length === 0) {
-      return null;
-    }
-
     return (
-      <div key={roleKey} className="p-3 bg-white border border-slate-200 rounded-lg shadow-sm space-y-3">
-        <div>
-          <h4 className="type-card-title text-slate-800">{roleLabels[roleKey]}</h4>
-          <p className="type-label text-slate-500 mt-0.5">Permission profile for all users in this role.</p>
-        </div>
-        {filteredGroups.map(group => (
+      <div className="px-3 pb-3 pt-2 bg-white border border-t-0 border-slate-200 rounded-b-xl shadow-sm space-y-3">
+        {permissionGroups.map(group => (
           <div key={`${roleKey}-${group.title}`} className="space-y-2">
             <p className="type-utility uppercase text-slate-400">{group.title}</p>
             {group.items.map(item => (
@@ -849,6 +842,49 @@ const Settings = ({ data, setData, onLogout }) => {
             ))}
           </div>
         ))}
+        <button
+          type="button"
+          onClick={() => handleSavePermissionProfile(roleKey)}
+          disabled={permissionsLoading}
+          className="type-secondary w-full py-2 text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors disabled:opacity-70"
+        >
+          {permissionsLoading ? 'Saving...' : `Save ${roleLabels[roleKey]} Permissions`}
+        </button>
+      </div>
+    );
+  };
+
+  const renderRolePermissionTabs = () => {
+    const roleKeys = ['clinic_admin', 'doctor'];
+    const searchedRole = isSearchMode
+      ? roleKeys.find(roleKey => matchesSearch(roleLabels[roleKey]))
+      : null;
+    const visibleRole = searchedRole || activePermissionRole;
+
+    return (
+      <div>
+        <div className="grid grid-cols-2 gap-1 border-b border-slate-200 bg-white px-1 pt-1 rounded-t-xl border-x border-t" role="tablist" aria-label="Role permission profiles">
+          {roleKeys.map(roleKey => {
+            const isActive = visibleRole === roleKey;
+            return (
+              <button
+                key={roleKey}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setActivePermissionRole(roleKey)}
+                className={`type-secondary relative px-2 py-2.5 rounded-t-lg transition-colors ${
+                  isActive
+                    ? 'bg-amber-50 text-amber-800 font-semibold after:absolute after:left-3 after:right-3 after:-bottom-px after:h-0.5 after:bg-amber-600'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                }`}
+              >
+                {roleLabels[roleKey]}
+              </button>
+            );
+          })}
+        </div>
+        {renderRolePermissionCard(visibleRole)}
       </div>
     );
   };
@@ -997,28 +1033,14 @@ const Settings = ({ data, setData, onLogout }) => {
             searchText: 'delegate daily operations ownership permissions role controls clinic admins doctors manage workspace',
             render: () => (
               <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
-                <p className="type-secondary text-amber-800">Delegate daily operations without sharing ownership.</p>
-                <p className="type-label text-amber-700 mt-1">These controls decide which parts of the workspace clinic admins and doctors can manage.</p>
+                <p className="type-secondary text-amber-800">Delegate tasks! Use these settings to control exactly what admins and doctors can view and edit.</p>
               </div>
             )
           },
-          ...['clinic_admin', 'doctor'].map(roleKey => ({
-            key: `permissions-${roleKey}`,
-            searchText: `${roleLabels[roleKey]} permissions role access ${permissionGroups.map(group => `${group.title} ${group.items.map(item => item.label).join(' ')}`).join(' ')}`,
-            render: () => renderRolePermissionCard(roleKey)
-          })),
           {
-            key: 'permissions-save',
-            searchText: 'save role permissions clinic admin doctor access',
-            render: () => (
-              <button
-                onClick={handleSavePermissionProfiles}
-                disabled={permissionsLoading}
-                className="type-secondary w-full py-2 text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors disabled:opacity-70"
-              >
-                {permissionsLoading ? 'Saving...' : 'Save Role Permissions'}
-              </button>
-            )
+            key: 'permissions-editor',
+            searchText: `save role permissions clinic admin doctor access ${permissionGroups.map(group => `${group.title} ${group.items.map(item => item.label).join(' ')}`).join(' ')}`,
+            render: renderRolePermissionTabs
           }
         ]
       : [];
@@ -1360,40 +1382,9 @@ const Settings = ({ data, setData, onLogout }) => {
           {canManageRolePermissions && renderAccordion('permissions', 'Role Permissions', ShieldCheck, 'text-amber-600',
             <div className="space-y-3">
               <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
-                <p className="type-secondary text-amber-800">Delegate daily operations without sharing ownership.</p>
-                <p className="type-label text-amber-700 mt-1">These controls decide which parts of the workspace clinic admins and doctors can manage.</p>
+                <p className="type-secondary text-amber-800">Delegate tasks! Use these settings to control exactly what admins and doctors can view and edit.</p>
               </div>
-              {['clinic_admin', 'doctor'].map(roleKey => (
-                <div key={roleKey} className="p-3 bg-white border border-slate-200 rounded-lg shadow-sm space-y-3">
-                  <div>
-                    <h4 className="type-card-title text-slate-800">{roleLabels[roleKey]}</h4>
-                    <p className="type-label text-slate-500 mt-0.5">Permission profile for all users in this role.</p>
-                  </div>
-                  {permissionGroups.map(group => (
-                    <div key={`${roleKey}-${group.title}`} className="space-y-2">
-                      <p className="type-utility uppercase text-slate-400">{group.title}</p>
-                      {group.items.map(item => (
-                        <label key={`${roleKey}-${item.key}`} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-slate-50 border border-slate-100">
-                          <span className="type-secondary text-slate-700">{item.label}</span>
-                          <input
-                            type="checkbox"
-                            checked={Boolean(permissionProfiles?.[roleKey]?.[item.key])}
-                            onChange={() => toggleRolePermission(roleKey, item.key)}
-                            className="accent-teal-600"
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              ))}
-              <button
-                onClick={handleSavePermissionProfiles}
-                disabled={permissionsLoading}
-                className="type-secondary w-full py-2 text-white bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors disabled:opacity-70"
-              >
-                {permissionsLoading ? 'Saving...' : 'Save Role Permissions'}
-              </button>
+              {renderRolePermissionTabs()}
             </div>
           )}
           
