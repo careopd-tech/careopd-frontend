@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Calendar, CalendarCheck, History, Plus, Clock, RefreshCw,
@@ -111,6 +111,8 @@ const Appointments = ({ data, setData, onLogout }) => {
   // --- ADDED: EMR FULL SCREEN MODAL STATE ---
   const [isConsultationPadOpen, setIsConsultationPadOpen] = useState(false);
   const [activeConsultationAppt, setActiveConsultationAppt] = useState(null);
+  const [isExitConsultationModalOpen, setIsExitConsultationModalOpen] = useState(false);
+  const [consultationDraft, setConsultationDraft] = useState(null);
 
   // --- NOTIFICATION STATE (PERSISTENT) ---
   const [notificationStack, setNotificationStack] = useState(() => {
@@ -149,12 +151,18 @@ const Appointments = ({ data, setData, onLogout }) => {
   const searchQueryRef = useRef(searchQuery);
   const searchPageRef = useRef(searchPage);
   const hasSnappedToBottomRef = useRef(false);
+  const consultationDraftSaveTimeoutRef = useRef(null);
 
   useEffect(() => { sectionsRef.current = sections; }, [sections]);
   useEffect(() => { metaCountsRef.current = metaCounts; }, [metaCounts]);
   useEffect(() => { expandedSectionRef.current = expandedSection; }, [expandedSection]);
   useEffect(() => { searchQueryRef.current = searchQuery; }, [searchQuery]);
   useEffect(() => { searchPageRef.current = searchPage; }, [searchPage]);
+  useEffect(() => () => {
+    if (consultationDraftSaveTimeoutRef.current) {
+      window.clearTimeout(consultationDraftSaveTimeoutRef.current);
+    }
+  }, []);
 
   // Force Expand Today on landing
   useEffect(() => {
@@ -220,22 +228,21 @@ const Appointments = ({ data, setData, onLogout }) => {
     return String(value);
   };
 
-  const getPatientName = (patientRef) => {
-    if (patientRef && typeof patientRef === 'object') {
-      return patientRef.name || 'Unknown Patient';
-    }
+  const getPatientDetails = (patientRef) => {
     const patientId = getEntityId(patientRef);
-    const patient = (data.patients || []).find(p => getEntityId(p) === patientId);
-    return patient?.name || 'Unknown Patient';
+    const cachedPatient = (data.patients || []).find(p => getEntityId(p) === patientId);
+    if (patientRef && typeof patientRef === 'object') {
+      return { ...(cachedPatient || {}), ...patientRef };
+    }
+    return cachedPatient || null;
+  };
+
+  const getPatientName = (patientRef) => {
+    return getPatientDetails(patientRef)?.name || 'Unknown Patient';
   };
 
   const getPatientPhone = (patientRef) => {
-    if (patientRef && typeof patientRef === 'object') {
-      return patientRef.phone || '';
-    }
-    const patientId = getEntityId(patientRef);
-    const patient = (data.patients || []).find(p => getEntityId(p) === patientId);
-    return patient?.phone || '';
+    return getPatientDetails(patientRef)?.phone || '';
   };
 
   const getDoctorName = (doctorRef) => {
@@ -860,13 +867,44 @@ const Appointments = ({ data, setData, onLogout }) => {
   };
 
   const openConsultation = (appt) => {
+    if (consultationDraftSaveTimeoutRef.current) {
+      window.clearTimeout(consultationDraftSaveTimeoutRef.current);
+    }
     const patientRef = appt.patientId && typeof appt.patientId === 'object'
       ? appt.patientId
       : (data.patients || []).find(p => getEntityId(p) === getEntityId(appt.patientId));
     setActiveConsultationAppt({ ...appt, patientId: patientRef || { name: 'Unknown Patient' } });
+    setConsultationDraft(appt.consultationDraft || null);
     setIsConsultationPadOpen(true);
     setOpenActionMenuId('');
   };
+
+  const persistConsultationDraft = useCallback(async (appointmentId, draft) => {
+    const response = await authFetch(`${API_BASE_URL}/api/appointments/${appointmentId}/consultation-draft`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clinicId, draft })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to save consultation draft.');
+    }
+    return result.appointment;
+  }, [clinicId]);
+
+  const handleConsultationDraftChange = useCallback((draft) => {
+    setConsultationDraft(draft);
+    if (!isConsultationPadOpen || !activeConsultationAppt?._id) return;
+
+    if (consultationDraftSaveTimeoutRef.current) {
+      window.clearTimeout(consultationDraftSaveTimeoutRef.current);
+    }
+    consultationDraftSaveTimeoutRef.current = window.setTimeout(() => {
+      persistConsultationDraft(activeConsultationAppt._id, draft).catch(() => {
+        // Explicit save on exit surfaces an error; background autosave should not interrupt care entry.
+      });
+    }, 400);
+  }, [activeConsultationAppt?._id, isConsultationPadOpen, persistConsultationDraft]);
 
   const handleStartConsultation = async (appt) => {
     setProcessingAppointmentId(appt._id);
@@ -892,6 +930,69 @@ const Appointments = ({ data, setData, onLogout }) => {
       showNotification('Failed to start consultation.', 'error');
     } finally {
       setProcessingAppointmentId('');
+    }
+  };
+
+  const openExitConsultationConfirmation = () => {
+    setModalError('');
+    setIsExitConsultationModalOpen(true);
+  };
+
+  const handleSaveDraftAndExit = async () => {
+    if (!activeConsultationAppt) return;
+
+    if (consultationDraftSaveTimeoutRef.current) {
+      window.clearTimeout(consultationDraftSaveTimeoutRef.current);
+    }
+    setIsSubmitting(true);
+    setModalError('');
+    try {
+      await persistConsultationDraft(
+        activeConsultationAppt._id,
+        consultationDraft || activeConsultationAppt.consultationDraft || {}
+      );
+      await fetchAllData(true);
+      setIsExitConsultationModalOpen(false);
+      setIsConsultationPadOpen(false);
+      setActiveConsultationAppt(null);
+      setConsultationDraft(null);
+      showNotification('Draft Saved', 'success', 'Consultation can be resumed from the appointment card.');
+    } catch (err) {
+      setModalError(err.message || 'Failed to save consultation draft.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDiscardConsultation = async () => {
+    if (!activeConsultationAppt) return;
+
+    if (consultationDraftSaveTimeoutRef.current) {
+      window.clearTimeout(consultationDraftSaveTimeoutRef.current);
+    }
+    setIsSubmitting(true);
+    setModalError('');
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${activeConsultationAppt._id}/exit-consultation`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return setModalError(result.error || 'Failed to leave consultation.');
+      }
+
+      await fetchAllData(true);
+      setIsExitConsultationModalOpen(false);
+      setIsConsultationPadOpen(false);
+      setActiveConsultationAppt(null);
+      setConsultationDraft(null);
+      showNotification('Draft Discarded', 'success', 'Patient returned to the consultation queue.');
+    } catch (err) {
+      setModalError('Failed to leave consultation.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1050,8 +1151,13 @@ const Appointments = ({ data, setData, onLogout }) => {
       });
 
       if (res.ok) {
+        if (consultationDraftSaveTimeoutRef.current) {
+          window.clearTimeout(consultationDraftSaveTimeoutRef.current);
+        }
+        setIsExitConsultationModalOpen(false);
         setIsConsultationPadOpen(false);
         setActiveConsultationAppt(null);
+        setConsultationDraft(null);
         fetchAllData(true); // Refresh queue
         showNotification('Consultation Completed', 'success', `Status updated to ${finalStatus}.`);
       } else {
@@ -1094,7 +1200,7 @@ const Appointments = ({ data, setData, onLogout }) => {
         }
       },
       checkIn: { label: 'Check In', icon: UserCheck, onClick: () => handleCheckIn(appt) },
-      consult: { label: 'Consult', icon: Activity, onClick: () => handleStartConsultation(appt) },
+      consult: { label: isInConsultation ? 'Resume Consult' : 'Consult', icon: Activity, onClick: () => handleStartConsultation(appt) },
       reminder: { label: 'Send Reminder', icon: Bell, onClick: () => handleSendReminder(appt) },
       contact: { label: 'Contact Patient', icon: Phone, onClick: () => openContact(appt) },
       leftEarly: { label: 'Patient Left', icon: XCircle, onClick: () => openLeftEarly(appt) },
@@ -1326,6 +1432,8 @@ const Appointments = ({ data, setData, onLogout }) => {
   const visibleSearchResults = allFilteredResults;
   const contactPhone = getPatientPhone(contactAppt?.patientId);
   const dialableContactPhone = String(contactPhone || '').replace(/[^\d+]/g, '');
+  const vitalsPatient = getPatientDetails(actionAppt?.patientId);
+  const vitalsPatientGender = { M: 'Male', F: 'Female', O: 'Other' }[vitalsPatient?.gender] || vitalsPatient?.gender || 'Gender Unknown';
 
   return (
     <div className="h-full flex flex-col relative">
@@ -1446,11 +1554,10 @@ const Appointments = ({ data, setData, onLogout }) => {
                  </div>
                  
                  <button 
-                    onClick={() => {
-                        setIsConsultationPadOpen(false);
-                        setActiveConsultationAppt(null);
-                    }} 
-                    className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors flex items-center gap-2"
+                    type="button"
+                    onClick={openExitConsultationConfirmation}
+                    disabled={isSubmitting}
+                    className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                  >
                     <span className="type-label hidden md:inline">Close</span>
                     <X size={18} />
@@ -1461,11 +1568,46 @@ const Appointments = ({ data, setData, onLogout }) => {
              <div className="flex-1 overflow-hidden relative">
                  <ConsultationPad 
                     activeAppt={activeConsultationAppt} 
-                    onComplete={handleCompleteConsultation} 
+                    onComplete={handleCompleteConsultation}
+                    onDraftChange={handleConsultationDraftChange}
                     isSubmitting={isSubmitting} 
                     clinicalCatalog={data.clinicalCatalog}
                  />
              </div>
+          </div>
+        </div>
+      )}
+
+      {isExitConsultationModalOpen && activeConsultationAppt && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-3 bg-slate-950/55 backdrop-blur-sm animate-fadeIn" role="dialog" aria-modal="true" aria-labelledby="exit-consultation-title">
+          <div className="careopd-modal-panel bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col animate-scaleIn">
+            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
+              <h3 id="exit-consultation-title" className="font-bold text-slate-800 text-[15px]">Leave Consultation?</h3>
+            </div>
+            <div className="p-4 space-y-3">
+              <AlertMessage message={modalError} />
+              <p className="type-body text-slate-700">Choose how to exit this ongoing consultation.</p>
+              <p className="type-secondary text-slate-500">A saved draft remains available through Resume Consult. Discarding removes unsaved work and returns the patient to the waiting queue.</p>
+            </div>
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex gap-2">
+              <button
+                type="button"
+                onClick={handleDiscardConsultation}
+                disabled={isSubmitting}
+                className="type-section-title flex-1 h-8 text-red-600 border border-red-200 rounded-lg bg-white disabled:opacity-50"
+              >
+                Discard & Exit
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDraftAndExit}
+                disabled={isSubmitting}
+                className="type-section-title flex-1 h-8 bg-teal-600 text-white rounded-lg flex justify-center items-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : null}
+                Save Draft & Exit
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1766,8 +1908,10 @@ const Appointments = ({ data, setData, onLogout }) => {
           <AlertMessage message={modalError} />
           {actionAppt && (
             <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-              <p className="type-card-title text-slate-800">{getPatientName(actionAppt.patientId)}</p>
-              <p className="type-secondary text-slate-500">{actionAppt.time} | {getDoctorName(actionAppt.doctorId)}</p>
+              <p className="type-card-title text-slate-800">{vitalsPatient?.name || 'Unknown Patient'}</p>
+              <p className="type-secondary text-slate-500">
+                {vitalsPatient?.age ? `${vitalsPatient.age} Yrs` : 'Age Unknown'} | {vitalsPatientGender}
+              </p>
             </div>
           )}
           <div className="grid grid-cols-3 gap-2">

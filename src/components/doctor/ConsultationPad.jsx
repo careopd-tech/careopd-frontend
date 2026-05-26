@@ -19,9 +19,10 @@ const DEFAULT_MEDICATION_DRAFT = {
   instructions: ''
 };
 
-const ConsultationPad = ({ activeAppt, onComplete, isSubmitting, clinicalCatalog }) => {
+const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, clinicalCatalog }) => {
   const loggedInDoctorId = localStorage.getItem('doctorId');
   const loggedInRole = localStorage.getItem('userRole') || 'admin';
+  const savedDraft = activeAppt?.consultationDraft || {};
 
   // --- STATE ---
   const [patientHistory, setPatientHistory] = useState([]);
@@ -29,21 +30,21 @@ const ConsultationPad = ({ activeAppt, onComplete, isSubmitting, clinicalCatalog
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
   const [selectedPastVisit, setSelectedPastVisit] = useState(null);
 
-  const [vitals, setVitals] = useState({ bp: activeAppt?.vitals?.bp || '', temp: activeAppt?.vitals?.temp || '', weight: activeAppt?.vitals?.weight || '' });
-  const [complaintsList, setComplaintsList] = useState([]);
-  const [complaintInputText, setComplaintInputText] = useState('');
-  const [clinicalNotes, setClinicalNotes] = useState({ diagnosis: '', advice: '' });
+  const [vitals, setVitals] = useState(savedDraft.vitals || { bp: activeAppt?.vitals?.bp || '', temp: activeAppt?.vitals?.temp || '', weight: activeAppt?.vitals?.weight || '' });
+  const [complaintsList, setComplaintsList] = useState(savedDraft.complaintsList || []);
+  const [complaintInputText, setComplaintInputText] = useState(savedDraft.complaintInputText || '');
+  const [clinicalNotes, setClinicalNotes] = useState(savedDraft.clinicalNotes || { diagnosis: '', advice: '' });
 
   // --- UPGRADED RX STATE ---
-  const [medicines, setMedicines] = useState([]);
-  const [currentMed, setCurrentMed] = useState(DEFAULT_MEDICATION_DRAFT);
-  const [isCustomRegimen, setIsCustomRegimen] = useState(false);
+  const [medicines, setMedicines] = useState(savedDraft.medicines || []);
+  const [currentMed, setCurrentMed] = useState({ ...DEFAULT_MEDICATION_DRAFT, ...(savedDraft.currentMed || {}) });
+  const [isCustomRegimen, setIsCustomRegimen] = useState(savedDraft.isCustomRegimen === true);
 
-  const [labTests, setLabTests] = useState([]);
-  const [labInputText, setLabInputText] = useState('');
+  const [labTests, setLabTests] = useState(savedDraft.labTests || []);
+  const [labInputText, setLabInputText] = useState(savedDraft.labInputText || '');
 
   const [showRxSuggestions, setShowRxSuggestions] = useState(false);
-  const [isMedSelected, setIsMedSelected] = useState(false);
+  const [isMedSelected, setIsMedSelected] = useState(savedDraft.isMedSelected === true);
 
   const [activeSheet, setActiveSheet] = useState(null);
   const [sheetSearch, setSheetSearch] = useState('');
@@ -114,6 +115,22 @@ const ConsultationPad = ({ activeAppt, onComplete, isSubmitting, clinicalCatalog
         .finally(() => setIsHistoryLoading(false));
     }
   }, [activeAppt]);
+
+  useEffect(() => {
+    if (!onDraftChange) return;
+    onDraftChange({
+      vitals,
+      complaintsList,
+      complaintInputText,
+      clinicalNotes,
+      medicines,
+      currentMed,
+      isCustomRegimen,
+      isMedSelected,
+      labTests,
+      labInputText
+    });
+  }, [vitals, complaintsList, complaintInputText, clinicalNotes, medicines, currentMed, isCustomRegimen, isMedSelected, labTests, labInputText, onDraftChange]);
 
   // --- HANDLERS ---
   const handleRefillRx = (pastMeds) => {
