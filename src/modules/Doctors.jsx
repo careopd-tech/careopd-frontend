@@ -41,6 +41,7 @@ const DoctorSkeleton = () => (
 const Doctors = ({ data, setData, onLogout }) => {
   const sessionUser = getSessionUser();
   const canManageDoctors = hasPermission(sessionUser.permissions, 'doctors.manage');
+  const isSoloWorkspace = data.clinic?.type === 'Solo';
   const [activeModal, setActiveModal] = useState(null);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isAddDoctorModalOpen, setIsAddDoctorModalOpen] = useState(false);
@@ -85,16 +86,28 @@ const Doctors = ({ data, setData, onLogout }) => {
   });
 
   const clinicSchedule = useMemo(() => getClinicSchedule(data.clinic || {}), [data.clinic]);
+  const getWorkspaceDoctorHours = (doctorState = {}) => (
+    isSoloWorkspace
+      ? {
+          morningStart: clinicSchedule.workingHoursStart,
+          morningEnd: clinicSchedule.workingHoursEnd,
+          eveningStart: '',
+          eveningEnd: ''
+        }
+      : {
+          morningStart: doctorState.morningStart || clinicSchedule.workingHoursStart,
+          morningEnd: doctorState.morningEnd || clinicSchedule.workingHoursEnd,
+          eveningStart: doctorState.eveningStart || '',
+          eveningEnd: doctorState.eveningEnd || ''
+        }
+  );
 
   const getDefaultDoctorState = () => ({
     _id: null,
     firstName: '', middleName: '', lastName: '',
     name: '', phone: '', email: '', gender: 'M', address: '',
     department: '', qualification: '', experience: '', regNo: '',
-    morningStart: clinicSchedule.workingHoursStart,
-    morningEnd: clinicSchedule.workingHoursEnd,
-    eveningStart: '',
-    eveningEnd: '',
+    ...getWorkspaceDoctorHours(),
     photoUrl: '', photo: ''
   });
 
@@ -271,6 +284,7 @@ const Doctors = ({ data, setData, onLogout }) => {
     setNewDoctor({
       ...getDefaultDoctorState(),
       ...doc,
+      ...getWorkspaceDoctorHours(doc),
       firstName: fName,
       middleName: mName,
       lastName: lName,
@@ -358,9 +372,9 @@ const Doctors = ({ data, setData, onLogout }) => {
     if (newDoctor.experience === '' || newDoctor.experience === null) errors.push('experience');
     if (!newDoctor.regNo) errors.push('regNo');
 
-    if (!newDoctor.morningStart) errors.push('morningStart');
-    if (!newDoctor.morningEnd) errors.push('morningEnd');
-    if ((newDoctor.eveningStart && !newDoctor.eveningEnd) || (!newDoctor.eveningStart && newDoctor.eveningEnd)) {
+    if (!isSoloWorkspace && !newDoctor.morningStart) errors.push('morningStart');
+    if (!isSoloWorkspace && !newDoctor.morningEnd) errors.push('morningEnd');
+    if (!isSoloWorkspace && ((newDoctor.eveningStart && !newDoctor.eveningEnd) || (!newDoctor.eveningStart && newDoctor.eveningEnd))) {
       errors.push('eveningStart', 'eveningEnd');
     }
 
@@ -369,18 +383,16 @@ const Doctors = ({ data, setData, onLogout }) => {
       if (errors.includes('photo')) setAddDoctorTab('personal');
       else if (['firstName', 'lastName', 'phone', 'email', 'address'].some(f => errors.includes(f))) setAddDoctorTab('personal');
       else if (['department', 'qualification', 'experience', 'regNo'].some(f => errors.includes(f))) setAddDoctorTab('professional');
-      else setAddDoctorTab('working_hours');
+      else setAddDoctorTab(isSoloWorkspace ? 'professional' : 'working_hours');
       
       const msg = errors.includes('photo') ? 'Profile photo is required *' : 'Please fill required fields correctly *';
       return setModalError(msg);
     }
 
+    const resolvedDoctorHours = getWorkspaceDoctorHours(newDoctor);
     const doctorHoursError = validateDoctorWorkingHours({
-      morningStart: newDoctor.morningStart,
-      morningEnd: newDoctor.morningEnd,
-      eveningStart: newDoctor.eveningStart,
-      eveningEnd: newDoctor.eveningEnd,
-      clinic: clinicSchedule
+      ...resolvedDoctorHours,
+      clinic: data.clinic || {}
     });
 
     if (doctorHoursError) {
@@ -404,10 +416,7 @@ const Doctors = ({ data, setData, onLogout }) => {
       qualification: newDoctor.qualification,
       experience: newDoctor.experience,
       regNo: newDoctor.regNo,
-      morningStart: newDoctor.morningStart,
-      morningEnd: newDoctor.morningEnd,
-      eveningStart: newDoctor.eveningStart || '',
-      eveningEnd: newDoctor.eveningEnd || '',
+      ...resolvedDoctorHours,
       status: newDoctor.status || 'Available',
       photo: newDoctor.photo || newDoctor.name.charAt(0) 
     };
@@ -467,7 +476,7 @@ const Doctors = ({ data, setData, onLogout }) => {
              a.status !== 'Cancelled';
     });
 
-    const doctorShifts = getDoctorShiftWindows(doc, clinicSchedule);
+    const doctorShifts = getDoctorShiftWindows(doc, data.clinic || {});
     const slotTimes = [...new Set([
       ...generateTimeSlots(clinicSchedule.appointmentWindowMinutes),
       ...docAppts.map((appt) => appt.time)
@@ -703,7 +712,7 @@ const Doctors = ({ data, setData, onLogout }) => {
               </button>
             )}
             
-            {addDoctorTab === 'working_hours' ? (
+            {(addDoctorTab === 'working_hours' || (isSoloWorkspace && addDoctorTab === 'professional')) ? (
               <button 
                 onClick={handleSaveDoctor}
                 disabled={isSavingDoctor}
@@ -729,7 +738,9 @@ const Doctors = ({ data, setData, onLogout }) => {
           <div className="flex border-b border-slate-200">
             <button onClick={() => setAddDoctorTab('personal')} className={`type-utility flex-1 py-1.5 uppercase border-b-2 transition-colors ${addDoctorTab === 'personal' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Personal</button>
             <button onClick={() => setAddDoctorTab('professional')} className={`type-utility flex-1 py-1.5 uppercase border-b-2 transition-colors ${addDoctorTab === 'professional' ? 'border-teal-700 text-teal-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Professional</button>
-            <button onClick={() => setAddDoctorTab('working_hours')} className={`type-utility flex-1 py-1.5 uppercase border-b-2 transition-colors ${addDoctorTab === 'working_hours' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Hours</button>
+            {!isSoloWorkspace && (
+              <button onClick={() => setAddDoctorTab('working_hours')} className={`type-utility flex-1 py-1.5 uppercase border-b-2 transition-colors ${addDoctorTab === 'working_hours' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Hours</button>
+            )}
           </div>
 
           <div className="min-h-[160px]">
@@ -858,7 +869,7 @@ const Doctors = ({ data, setData, onLogout }) => {
               </div>
             )}
 
-            {addDoctorTab === 'working_hours' && (
+            {addDoctorTab === 'working_hours' && !isSoloWorkspace && (
               <div className="space-y-4 animate-fadeIn">
                 <div className="rounded-lg border border-teal-100 bg-teal-50 px-3 py-2">
                   <div className="flex items-center justify-between gap-2">

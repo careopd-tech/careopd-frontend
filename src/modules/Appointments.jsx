@@ -113,6 +113,7 @@ const Appointments = ({ data, setData, onLogout }) => {
   const [activeConsultationAppt, setActiveConsultationAppt] = useState(null);
   const [isExitConsultationModalOpen, setIsExitConsultationModalOpen] = useState(false);
   const [consultationDraft, setConsultationDraft] = useState(null);
+  const [exitConsultationAction, setExitConsultationAction] = useState('');
 
   // --- NOTIFICATION STATE (PERSISTENT) ---
   const [notificationStack, setNotificationStack] = useState(() => {
@@ -152,6 +153,8 @@ const Appointments = ({ data, setData, onLogout }) => {
   const searchPageRef = useRef(searchPage);
   const hasSnappedToBottomRef = useRef(false);
   const consultationDraftSaveTimeoutRef = useRef(null);
+  const initialConsultationDraftSnapshotRef = useRef('');
+  const initialConsultationHadDraftRef = useRef(false);
 
   useEffect(() => { sectionsRef.current = sections; }, [sections]);
   useEffect(() => { metaCountsRef.current = metaCounts; }, [metaCounts]);
@@ -213,13 +216,27 @@ const Appointments = ({ data, setData, onLogout }) => {
   }, [openActionMenuId]);
 
   // --- 3. LOGIC HELPERS ---
+  const hasActiveConsultation = (appt) => (
+    Boolean(appt.consultationStartedAt) &&
+    !appt.consultationCompletedAt &&
+    !['Completed', 'Cancelled', 'Left Early'].includes(appt.status)
+  );
+
+  const hasVisitProgress = (appt) => (
+    hasActiveConsultation(appt) ||
+    Boolean(appt.checkedInAt) ||
+    Boolean(appt.consultationExitedAt)
+  );
+
   const getUiStatus = (appt) => {
     if (appt.status === 'Cancelled') return 'Cancelled';
     if (appt.status === 'Completed' || appt.status === 'Done') return 'Completed';
     if (appt.status === 'Left Early') return 'Left Early';
+    if (hasActiveConsultation(appt)) return 'In Consultation';
+    if (appt.checkedInAt) return 'Checked In';
     const isPast = appt.date < safeCurrentDate;
-    if (isPast && (appt.status === 'Scheduled' || appt.status === 'Pending')) return 'No-Show';
-    return 'Scheduled';
+    if (isPast && (appt.status === 'Scheduled' || appt.status === 'Pending') && !hasVisitProgress(appt)) return 'No-Show';
+    return appt.status || 'Scheduled';
   };
 
   const getEntityId = (value) => {
@@ -259,6 +276,74 @@ const Appointments = ({ data, setData, onLogout }) => {
     return (data.doctors || []).find(d => getEntityId(d) === doctorId);
   };
 
+  const buildConsultationDraftPayload = useCallback((appointment = {}, draftOverride = null) => {
+    const sourceDraft = draftOverride && typeof draftOverride === 'object'
+      ? draftOverride
+      : (appointment?.consultationDraft || {});
+    const sanitizeText = (value) => String(value || '').trim();
+    const normalizeMedicine = (medicine = {}) => ({
+      name: sanitizeText(medicine.name),
+      route: sanitizeText(medicine.route),
+      quantity: sanitizeText(medicine.quantity),
+      frequency: sanitizeText(medicine.frequency),
+      timing: sanitizeText(medicine.timing),
+      duration: sanitizeText(medicine.duration),
+      instructions: sanitizeText(medicine.instructions)
+    });
+
+    return {
+      vitals: {
+        bp: sanitizeText(sourceDraft.vitals?.bp ?? appointment?.vitals?.bp),
+        temp: sanitizeText(sourceDraft.vitals?.temp ?? appointment?.vitals?.temp),
+        weight: sanitizeText(sourceDraft.vitals?.weight ?? appointment?.vitals?.weight)
+      },
+      complaintsList: Array.isArray(sourceDraft.complaintsList)
+        ? sourceDraft.complaintsList.map(sanitizeText).filter(Boolean)
+        : [],
+      complaintInputText: sanitizeText(sourceDraft.complaintInputText),
+      clinicalNotes: {
+        diagnosis: sanitizeText(sourceDraft.clinicalNotes?.diagnosis),
+        advice: sanitizeText(sourceDraft.clinicalNotes?.advice)
+      },
+      medicines: Array.isArray(sourceDraft.medicines)
+        ? sourceDraft.medicines.map(normalizeMedicine).filter((medicine) => Object.values(medicine).some(Boolean))
+        : [],
+      currentMed: normalizeMedicine(sourceDraft.currentMed || {}),
+      isCustomRegimen: sourceDraft.isCustomRegimen === true,
+      isMedSelected: sourceDraft.isMedSelected === true,
+      labTests: Array.isArray(sourceDraft.labTests)
+        ? sourceDraft.labTests
+          .map((test) => ({ name: sanitizeText(typeof test === 'string' ? test : test?.name) }))
+          .filter((test) => test.name)
+        : [],
+      labInputText: sanitizeText(sourceDraft.labInputText)
+    };
+  }, []);
+
+  const serializeConsultationDraft = useCallback((appointment = {}, draftOverride = null) => (
+    JSON.stringify(buildConsultationDraftPayload(appointment, draftOverride))
+  ), [buildConsultationDraftPayload]);
+
+  const buildConsultationAppointment = useCallback((appt, overrides = {}) => {
+    const appointmentId = getEntityId(appt?._id || overrides?._id);
+    const latestKnownAppointments = [
+      ...(sectionsRef.current.today || []),
+      ...(sectionsRef.current.upcoming || []),
+      ...(sectionsRef.current.previous || []),
+      ...searchResults
+    ];
+    const latestAppt = latestKnownAppointments.find(item => getEntityId(item) === appointmentId);
+    const mergedAppt = { ...(appt || {}), ...(latestAppt || {}), ...(overrides || {}) };
+    const patientRef = mergedAppt.patientId && typeof mergedAppt.patientId === 'object'
+      ? mergedAppt.patientId
+      : (data.patients || []).find(p => getEntityId(p) === getEntityId(mergedAppt.patientId));
+
+    return {
+      ...mergedAppt,
+      patientId: patientRef || mergedAppt.patientId || { name: 'Unknown Patient' }
+    };
+  }, [data.patients, searchResults]);
+
   const getTodayAppointmentPhase = (appt) => {
     if (appt.date !== safeCurrentDate || appt.checkedInAt) return '';
 
@@ -278,8 +363,6 @@ const Appointments = ({ data, setData, onLogout }) => {
   const getCardStatus = (appt) => {
     const uiStatus = getUiStatus(appt);
     if (uiStatus !== 'Scheduled' || appt.date !== safeCurrentDate) return uiStatus;
-    if (appt.consultationStartedAt) return 'In Consultation';
-    if (appt.checkedInAt) return 'Checked In';
     return getTodayAppointmentPhase(appt) === 'delayed' ? 'Delayed' : 'Scheduled';
   };
 
@@ -870,11 +953,11 @@ const Appointments = ({ data, setData, onLogout }) => {
     if (consultationDraftSaveTimeoutRef.current) {
       window.clearTimeout(consultationDraftSaveTimeoutRef.current);
     }
-    const patientRef = appt.patientId && typeof appt.patientId === 'object'
-      ? appt.patientId
-      : (data.patients || []).find(p => getEntityId(p) === getEntityId(appt.patientId));
-    setActiveConsultationAppt({ ...appt, patientId: patientRef || { name: 'Unknown Patient' } });
-    setConsultationDraft(appt.consultationDraft || null);
+    const resolvedAppointment = buildConsultationAppointment(appt);
+    initialConsultationDraftSnapshotRef.current = serializeConsultationDraft(resolvedAppointment, resolvedAppointment.consultationDraft);
+    initialConsultationHadDraftRef.current = Boolean(resolvedAppointment.consultationDraft);
+    setActiveConsultationAppt(resolvedAppointment);
+    setConsultationDraft(resolvedAppointment.consultationDraft || null);
     setIsConsultationPadOpen(true);
     setOpenActionMenuId('');
   };
@@ -920,11 +1003,7 @@ const Appointments = ({ data, setData, onLogout }) => {
         return showNotification(result.error || 'Failed to start consultation.', 'error');
       }
 
-      openConsultation({
-        ...appt,
-        consultationStartedAt: result.appointment?.consultationStartedAt || appt.consultationStartedAt,
-        consultationStartedBy: result.appointment?.consultationStartedBy || appt.consultationStartedBy
-      });
+      openConsultation(buildConsultationAppointment(appt, result.appointment));
       await fetchAllData(true);
     } catch (err) {
       showNotification('Failed to start consultation.', 'error');
@@ -933,9 +1012,45 @@ const Appointments = ({ data, setData, onLogout }) => {
     }
   };
 
-  const openExitConsultationConfirmation = () => {
+  const closeConsultationPadLocally = (message = '') => {
+    setIsExitConsultationModalOpen(false);
+    setIsConsultationPadOpen(false);
+    setActiveConsultationAppt(null);
+    setConsultationDraft(null);
     setModalError('');
+    setExitConsultationAction('');
+    if (message) {
+      showNotification(message, 'success');
+    }
+  };
+
+  const openExitConsultationConfirmation = async () => {
+    if (!activeConsultationAppt) return;
+    const currentDraftSnapshot = serializeConsultationDraft(
+      activeConsultationAppt,
+      consultationDraft || buildConsultationDraftPayload(activeConsultationAppt)
+    );
+    const hasConsultationChanges = currentDraftSnapshot !== initialConsultationDraftSnapshotRef.current;
+
+    if (!hasConsultationChanges) {
+      if (initialConsultationHadDraftRef.current) {
+        closeConsultationPadLocally('No new changes made. Existing draft remains available.');
+        return;
+      }
+      await handleDiscardConsultation();
+      return;
+    }
+
+    setModalError('');
+    setExitConsultationAction('');
     setIsExitConsultationModalOpen(true);
+  };
+
+  const closeExitConsultationModal = () => {
+    if (isSubmitting) return;
+    setModalError('');
+    setExitConsultationAction('');
+    setIsExitConsultationModalOpen(false);
   };
 
   const handleSaveDraftAndExit = async () => {
@@ -944,6 +1059,7 @@ const Appointments = ({ data, setData, onLogout }) => {
     if (consultationDraftSaveTimeoutRef.current) {
       window.clearTimeout(consultationDraftSaveTimeoutRef.current);
     }
+    setExitConsultationAction('save');
     setIsSubmitting(true);
     setModalError('');
     try {
@@ -952,14 +1068,12 @@ const Appointments = ({ data, setData, onLogout }) => {
         consultationDraft || activeConsultationAppt.consultationDraft || {}
       );
       await fetchAllData(true);
-      setIsExitConsultationModalOpen(false);
-      setIsConsultationPadOpen(false);
-      setActiveConsultationAppt(null);
-      setConsultationDraft(null);
+      closeConsultationPadLocally();
       showNotification('Draft Saved', 'success', 'Consultation can be resumed from the appointment card.');
     } catch (err) {
       setModalError(err.message || 'Failed to save consultation draft.');
     } finally {
+      setExitConsultationAction('');
       setIsSubmitting(false);
     }
   };
@@ -970,6 +1084,7 @@ const Appointments = ({ data, setData, onLogout }) => {
     if (consultationDraftSaveTimeoutRef.current) {
       window.clearTimeout(consultationDraftSaveTimeoutRef.current);
     }
+    setExitConsultationAction('discard');
     setIsSubmitting(true);
     setModalError('');
     try {
@@ -984,14 +1099,12 @@ const Appointments = ({ data, setData, onLogout }) => {
       }
 
       await fetchAllData(true);
-      setIsExitConsultationModalOpen(false);
-      setIsConsultationPadOpen(false);
-      setActiveConsultationAppt(null);
-      setConsultationDraft(null);
+      closeConsultationPadLocally();
       showNotification('Draft Discarded', 'success', 'Patient returned to the consultation queue.');
     } catch (err) {
       setModalError('Failed to leave consultation.');
     } finally {
+      setExitConsultationAction('');
       setIsSubmitting(false);
     }
   };
@@ -1181,8 +1294,10 @@ const Appointments = ({ data, setData, onLogout }) => {
     const showActions = !isCancelled && !isCompleted && !isNoShow && !isLeftEarly;
     const isToday = appt.date === safeCurrentDate;
     const isFuture = appt.date > safeCurrentDate;
+    const isPast = appt.date < safeCurrentDate;
     const isCheckedIn = Boolean(appt.checkedInAt);
-    const isInConsultation = Boolean(appt.consultationStartedAt);
+    const isInConsultation = hasActiveConsultation(appt);
+    const isCarryoverVisit = isPast && showActions && hasVisitProgress(appt);
     const isTreatingPhysician = isAssignedClinician(appt);
     const canConsultWithoutCheckIn = data.clinic?.type === 'Solo' && isTreatingPhysician;
     const todayPhase = getTodayAppointmentPhase(appt);
@@ -1218,21 +1333,21 @@ const Appointments = ({ data, setData, onLogout }) => {
       actions.vitals
     ];
 
-    if (showActions && isToday) {
+    if (showActions && (isToday || isCarryoverVisit)) {
       if (isInConsultation && isTreatingPhysician) {
         primaryAction = actions.consult;
         overflowActions = clinicianOverflowActions;
-      } else if (isCheckedIn) {
+      } else if (isCheckedIn || isCarryoverVisit) {
         if (isTreatingPhysician) {
           primaryAction = actions.consult;
-          overflowActions = [...clinicianOverflowActions, actions.leftEarly];
-        } else if (canManageAppointments && hasPreConsultVitalsWorkflow) {
+          overflowActions = isCheckedIn ? [...clinicianOverflowActions, actions.leftEarly] : clinicianOverflowActions;
+        } else if (canManageAppointments && hasPreConsultVitalsWorkflow && isCheckedIn) {
           primaryAction = actions.vitals;
           overflowActions = [actions.leftEarly];
-        } else if (canManageAppointments) {
+        } else if (canManageAppointments && isCheckedIn) {
           overflowActions = [actions.leftEarly];
         }
-      } else if (canManageAppointments) {
+      } else if (isToday && canManageAppointments) {
         if (todayPhase === 'arrival-window') {
           primaryAction = actions.checkIn;
           overflowActions = [actions.reschedule, actions.cancel, actions.reminder];
@@ -1249,7 +1364,7 @@ const Appointments = ({ data, setData, onLogout }) => {
       }
     }
 
-    if (showActions && isToday && !overflowActions.some((action) => action.label === actions.history.label)) {
+    if (showActions && (isToday || isCarryoverVisit) && !overflowActions.some((action) => action.label === actions.history.label)) {
       overflowActions = [...overflowActions, actions.history];
     }
 
@@ -1260,7 +1375,7 @@ const Appointments = ({ data, setData, onLogout }) => {
 
     const hasPrimaryInlineAction = showActions && Boolean(primaryAction);
     const hasArchivedInlineAction = (isCancelled || isNoShow || isLeftEarly) && isAdmin;
-    const cardOverflowActions = showActions && (isToday || (isFuture && canManageAppointments))
+    const cardOverflowActions = showActions && (isToday || isCarryoverVisit || (isFuture && canManageAppointments))
       ? overflowActions
       : [actions.history];
 
@@ -1581,8 +1696,17 @@ const Appointments = ({ data, setData, onLogout }) => {
       {isExitConsultationModalOpen && activeConsultationAppt && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-3 bg-slate-950/55 backdrop-blur-sm animate-fadeIn" role="dialog" aria-modal="true" aria-labelledby="exit-consultation-title">
           <div className="careopd-modal-panel bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col animate-scaleIn">
-            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
+            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
               <h3 id="exit-consultation-title" className="font-bold text-slate-800 text-[15px]">Leave Consultation?</h3>
+              <button
+                type="button"
+                onClick={closeExitConsultationModal}
+                disabled={isSubmitting}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white border border-transparent disabled:opacity-50"
+                aria-label="Stay on consultation pad"
+              >
+                <X size={16} />
+              </button>
             </div>
             <div className="p-4 space-y-3">
               <AlertMessage message={modalError} />
@@ -1594,8 +1718,9 @@ const Appointments = ({ data, setData, onLogout }) => {
                 type="button"
                 onClick={handleDiscardConsultation}
                 disabled={isSubmitting}
-                className="type-section-title flex-1 h-8 text-red-600 border border-red-200 rounded-lg bg-white disabled:opacity-50"
+                className="type-section-title flex-1 h-8 text-red-600 border border-red-200 rounded-lg bg-white disabled:opacity-50 flex justify-center items-center gap-1.5"
               >
+                {exitConsultationAction === 'discard' ? <Loader2 size={14} className="animate-spin" /> : null}
                 Discard & Exit
               </button>
               <button
@@ -1604,7 +1729,7 @@ const Appointments = ({ data, setData, onLogout }) => {
                 disabled={isSubmitting}
                 className="type-section-title flex-1 h-8 bg-teal-600 text-white rounded-lg flex justify-center items-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : null}
+                {exitConsultationAction === 'save' ? <Loader2 size={14} className="animate-spin" /> : null}
                 Save Draft & Exit
               </button>
             </div>

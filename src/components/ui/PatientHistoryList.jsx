@@ -6,9 +6,14 @@ import { getLocalDateString } from '../../utils/dateUtils';
 export const getUiStatus = (appt) => {
   if (appt.status === 'Cancelled') return 'Cancelled';
   if (appt.status === 'Completed' || appt.status === 'Done') return 'Completed';
+  if (appt.status === 'Left Early') return 'Left Early';
+  const hasActiveConsultation = Boolean(appt.consultationStartedAt) && !appt.consultationCompletedAt && !['Completed', 'Cancelled', 'Left Early'].includes(appt.status);
+  if (hasActiveConsultation) return 'In Consultation';
+  if (appt.checkedInAt) return 'Checked In';
   const todayStr = getLocalDateString();
   const isPast = appt.date < todayStr;
-  if (isPast && (appt.status === 'Scheduled' || appt.status === 'Pending')) return 'No Show';
+  const hasVisitProgress = hasActiveConsultation || Boolean(appt.checkedInAt) || Boolean(appt.consultationExitedAt);
+  if (isPast && (appt.status === 'Scheduled' || appt.status === 'Pending') && !hasVisitProgress) return 'No Show';
   return appt.status || 'Scheduled';
 };
 
@@ -19,6 +24,11 @@ export const getStatusStyling = (status) => {
   if (s === 'LEFT EARLY') return { badge: 'text-slate-700 bg-slate-100 border-slate-200', dot: 'bg-slate-500 ring-slate-100' };
   if (s === 'NO SHOW' || s === 'NO-SHOW') return { badge: 'text-slate-600 bg-slate-100 border-slate-200', dot: 'bg-slate-400 ring-slate-100' };
   return { badge: 'text-blue-700 bg-blue-50 border-blue-200', dot: 'bg-blue-500 ring-blue-100' }; // Scheduled
+};
+
+export const hasClinicalRecord = (status) => {
+  const normalizedStatus = (status || '').toUpperCase();
+  return normalizedStatus !== 'CANCELLED' && normalizedStatus !== 'NO SHOW' && normalizedStatus !== 'NO-SHOW';
 };
 
 export const filterValidHistory = (historyData = [], currentApptId = null) => {
@@ -85,6 +95,7 @@ const PatientHistoryList = ({
                     const isLatest = idx === 0;
                     const uiStatus = getUiStatus(visit);
                     const styling = getStatusStyling(uiStatus);
+                    const canOpenVisit = hasClinicalRecord(uiStatus);
                     
                     const visitDocId = String(visit.doctorId?._id || visit.doctorId);
                     let hasPermission = false;
@@ -98,12 +109,15 @@ const PatientHistoryList = ({
                         <button 
                             key={visit._id || idx} 
                             type="button"
-                            onClick={() => hasPermission && onVisitClick && onVisitClick(visit)}
+                            onClick={() => hasPermission && canOpenVisit && onVisitClick && onVisitClick(visit)}
+                            disabled={!hasPermission || !canOpenVisit}
                             className={`flex-none w-28 p-2 rounded-xl shadow-sm transition-all flex flex-col items-start justify-center gap-1 border
                               ${isLatest ? 'border-teal-500 bg-teal-50/20' : 'border-slate-200 bg-white'} 
-                              ${hasPermission ? 'hover:shadow-md hover:border-teal-400 cursor-pointer' : 'cursor-not-allowed opacity-75'}
+                              ${hasPermission && canOpenVisit ? 'hover:shadow-md hover:border-teal-400 cursor-pointer' : 'cursor-not-allowed opacity-75'}
                             `}
-                            title={!hasPermission ? "HIPAA Restriction: You are not the attending doctor for this visit." : "View details"}
+                            title={!hasPermission
+                              ? "HIPAA Restriction: You are not the attending doctor for this visit."
+                              : (!canOpenVisit ? "No clinical record exists for missed or cancelled visits." : "View details")}
                         >
                             <span className={`text-[12px] font-bold ${isLatest ? 'text-teal-800' : 'text-slate-700'}`}>{visit.date}</span>
                             {!hideDoctorName && (
@@ -160,7 +174,7 @@ const PatientHistoryList = ({
                 else if (loggedInDoctorId) hasPermission = isOwnConsultation;
 
                 // 2. Check if Visit actually happened (No Show / Cancelled shouldn't expand)
-                const hasValidStatus = uiStatus !== 'No Show' && uiStatus !== 'Cancelled';
+                const hasValidStatus = hasClinicalRecord(uiStatus);
                 
                 // 3. Final Actionable State
                 const canExpand = hasPermission && hasValidStatus;

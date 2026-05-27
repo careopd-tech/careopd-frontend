@@ -131,7 +131,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
           
           <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 flex-shrink-0">
             <h2 className="text-[12px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-              <Users size={14} className="text-teal-600"/> Today's Queue
+              <Users size={14} className="text-teal-600"/> Live Queue
             </h2>
             <span className={`text-[12px] font-bold px-2 py-0.5 rounded-full ${waitingCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
               {waitingCount} Waiting
@@ -157,7 +157,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
               <div className="flex flex-col items-center justify-center h-48 text-slate-400 text-center px-4">
                 <CheckCircle size={32} className="mb-2 opacity-20 text-green-500" />
                 <p className="text-[12px] font-medium text-slate-600">Queue is clear</p>
-                <p className="text-[12px] mt-1">No appointments scheduled for today.</p>
+                <p className="text-[12px] mt-1">No active or carryover appointments right now.</p>
               </div>
             )}
           </div>

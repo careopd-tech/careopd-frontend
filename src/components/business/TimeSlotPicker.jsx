@@ -39,7 +39,7 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, cl
     if (!date) return [];
 
     const currentDocId = doctor._id || doctor.id;
-    const doctorShifts = getDoctorShiftWindows(doctor, clinicSchedule);
+    const doctorShifts = getDoctorShiftWindows(doctor, clinic || {});
     const baseSlots = generateTimeSlots(clinicSchedule.appointmentWindowMinutes);
 
     const bookedTimes = appointments

@@ -59,6 +59,8 @@ export const formatClinicScheduleSummary = (clinic = {}) => {
   return `${schedule.hours} • ${schedule.appointmentWindowMinutes} min slots`;
 };
 
+export const isSoloClinic = (clinic = {}) => clinic?.type === 'Solo';
+
 export const generateTimeSlots = (slotMinutes = DEFAULT_APPOINTMENT_WINDOW_MINUTES) => {
   const step = normalizeAppointmentWindow(slotMinutes);
   const slots = [];
@@ -100,6 +102,7 @@ export const validateDoctorWorkingHours = ({
   eveningEnd,
   clinic
 }) => {
+  if (isSoloClinic(clinic)) return '';
   const schedule = getClinicSchedule(clinic);
 
   if (!morningStart || !morningEnd) {
@@ -148,6 +151,12 @@ export const validateDoctorWorkingHours = ({
 
 export const getDoctorShiftWindows = (doctor = {}, clinic = {}) => {
   const schedule = getClinicSchedule(clinic);
+  if (isSoloClinic(clinic)) {
+    return [{
+      start: schedule.workingHoursStart,
+      end: schedule.workingHoursEnd
+    }];
+  }
   const morningStart = normalizeTimeValue(doctor.morningStart, '');
   const morningEnd = normalizeTimeValue(doctor.morningEnd, '');
   const eveningStart = normalizeTimeValue(doctor.eveningStart, '');

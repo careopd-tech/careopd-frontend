@@ -19,10 +19,31 @@ const DEFAULT_MEDICATION_DRAFT = {
   instructions: ''
 };
 
+const getInitialConsultationState = (appointment = {}) => {
+  const savedDraft = appointment?.consultationDraft || {};
+  return {
+    savedDraft,
+    vitals: savedDraft.vitals || {
+      bp: appointment?.vitals?.bp || '',
+      temp: appointment?.vitals?.temp || '',
+      weight: appointment?.vitals?.weight || ''
+    },
+    complaintsList: savedDraft.complaintsList || [],
+    complaintInputText: savedDraft.complaintInputText || '',
+    clinicalNotes: savedDraft.clinicalNotes || { diagnosis: '', advice: '' },
+    medicines: savedDraft.medicines || [],
+    currentMed: { ...DEFAULT_MEDICATION_DRAFT, ...(savedDraft.currentMed || {}) },
+    isCustomRegimen: savedDraft.isCustomRegimen === true,
+    labTests: savedDraft.labTests || [],
+    labInputText: savedDraft.labInputText || '',
+    isMedSelected: savedDraft.isMedSelected === true
+  };
+};
+
 const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, clinicalCatalog }) => {
   const loggedInDoctorId = localStorage.getItem('doctorId');
   const loggedInRole = localStorage.getItem('userRole') || 'admin';
-  const savedDraft = activeAppt?.consultationDraft || {};
+  const initialState = getInitialConsultationState(activeAppt);
 
   // --- STATE ---
   const [patientHistory, setPatientHistory] = useState([]);
@@ -30,21 +51,21 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
   const [selectedPastVisit, setSelectedPastVisit] = useState(null);
 
-  const [vitals, setVitals] = useState(savedDraft.vitals || { bp: activeAppt?.vitals?.bp || '', temp: activeAppt?.vitals?.temp || '', weight: activeAppt?.vitals?.weight || '' });
-  const [complaintsList, setComplaintsList] = useState(savedDraft.complaintsList || []);
-  const [complaintInputText, setComplaintInputText] = useState(savedDraft.complaintInputText || '');
-  const [clinicalNotes, setClinicalNotes] = useState(savedDraft.clinicalNotes || { diagnosis: '', advice: '' });
+  const [vitals, setVitals] = useState(initialState.vitals);
+  const [complaintsList, setComplaintsList] = useState(initialState.complaintsList);
+  const [complaintInputText, setComplaintInputText] = useState(initialState.complaintInputText);
+  const [clinicalNotes, setClinicalNotes] = useState(initialState.clinicalNotes);
 
   // --- UPGRADED RX STATE ---
-  const [medicines, setMedicines] = useState(savedDraft.medicines || []);
-  const [currentMed, setCurrentMed] = useState({ ...DEFAULT_MEDICATION_DRAFT, ...(savedDraft.currentMed || {}) });
-  const [isCustomRegimen, setIsCustomRegimen] = useState(savedDraft.isCustomRegimen === true);
+  const [medicines, setMedicines] = useState(initialState.medicines);
+  const [currentMed, setCurrentMed] = useState(initialState.currentMed);
+  const [isCustomRegimen, setIsCustomRegimen] = useState(initialState.isCustomRegimen);
 
-  const [labTests, setLabTests] = useState(savedDraft.labTests || []);
-  const [labInputText, setLabInputText] = useState(savedDraft.labInputText || '');
+  const [labTests, setLabTests] = useState(initialState.labTests);
+  const [labInputText, setLabInputText] = useState(initialState.labInputText);
 
   const [showRxSuggestions, setShowRxSuggestions] = useState(false);
-  const [isMedSelected, setIsMedSelected] = useState(savedDraft.isMedSelected === true);
+  const [isMedSelected, setIsMedSelected] = useState(initialState.isMedSelected);
 
   const [activeSheet, setActiveSheet] = useState(null);
   const [sheetSearch, setSheetSearch] = useState('');
@@ -86,6 +107,26 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
 
   // --- EFFECTS ---
   useEffect(() => {
+    const nextState = getInitialConsultationState(activeAppt);
+    setVitals(nextState.vitals);
+    setComplaintsList(nextState.complaintsList);
+    setComplaintInputText(nextState.complaintInputText);
+    setClinicalNotes(nextState.clinicalNotes);
+    setMedicines(nextState.medicines);
+    setCurrentMed(nextState.currentMed);
+    setIsCustomRegimen(nextState.isCustomRegimen);
+    setLabTests(nextState.labTests);
+    setLabInputText(nextState.labInputText);
+    setIsMedSelected(nextState.isMedSelected);
+    setShowRxSuggestions(false);
+    setActiveSheet(null);
+    setSheetSearch('');
+    setTempComplaintSelection([]);
+    setTempLabSelection([]);
+    setSelectedPastVisit(null);
+  }, [activeAppt?._id]);
+
+  useEffect(() => {
     if (activeAppt?.patientId?._id || activeAppt?.patientId) {
       setIsHistoryExpanded(false);
       setIsHistoryLoading(true);
@@ -94,22 +135,9 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
       fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=history&patientId=${pId}`)
         .then(res => res.json())
         .then(data => {
-          const todayStr = new Date().toISOString().split('T')[0];
-
           const validHistory = filterValidHistory(data, activeAppt._id);
 
-          const enhancedData = validHistory.map(visit => ({
-            ...visit,
-            vitals: visit.vitals || { bp: '120/80', temp: '98.6', weight: '70' },
-            complaints: visit.complaints || 'Fever, Headache',
-            diagnosis: visit.diagnosis || 'Viral Pyrexia',
-            advice: visit.advice || 'Rest for 3 days, drink warm fluids.',
-            labTests: visit.labTests || [{ name: 'CBC' }, { name: 'Lipid Profile' }],
-            medicines: visit.medicines || [
-              { id: Math.random(), name: 'Tab Paracetamol 500mg', route: 'Oral', quantity: '1', frequency: 'Three times a day', timing: 'After Meal', duration: '3 Days', instructions: '' }
-            ]
-          }));
-          setPatientHistory(enhancedData);
+          setPatientHistory(validHistory);
         })
         .catch(err => console.error(err))
         .finally(() => setIsHistoryLoading(false));
