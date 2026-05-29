@@ -37,6 +37,50 @@ body,
   overflow: hidden;
 }
 
+.launch-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  z-index: 60;
+}
+
+.launch-screen__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.launch-screen__icon {
+  width: 5.5rem;
+  height: 5.5rem;
+  object-fit: contain;
+}
+
+.launch-screen__message {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+#boot-splash {
+  transition: opacity 180ms ease;
+}
+
+#boot-splash.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .app-viewport {
   height: var(--app-height);
   max-height: var(--app-height);

@@ -15,16 +15,57 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="icon" href="/favicon.ico" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      body {
+        margin: 0;
+        background-color: #f8fafc;
+        overscroll-behavior-y: none;
+      }
+
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f8fafc;
+        transition: opacity 180ms ease;
+        z-index: 60;
+      }
+
+      #boot-splash.is-hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .launch-screen__content {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+      }
+
+      .launch-screen__icon {
+        width: 5.5rem;
+        height: 5.5rem;
+        object-fit: contain;
+      }
+    </style>
     
     <title>CareOPD</title>
   </head>
-  <body style="margin: 0; background-color: #f8fafc;">
+  <body>
+    <div id="boot-splash" class="launch-screen" aria-hidden="true">
+      <div class="launch-screen__content">
+        <img src="/icon_x192.png" alt="" class="launch-screen__icon" width="96" height="96" />
+      </div>
+    </div>
     <div id="root">
       <style>
         body {
-    overscroll-behavior-y: none; /* Stops the PWA from bouncing on pull-to-refresh */
-    margin: 0;
-  }
+          overscroll-behavior-y: none;
+          margin: 0;
+        }
       </style>
     </div>
     <script type="module" src="/src/main.jsx"></script>

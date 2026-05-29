@@ -77,8 +77,22 @@ if (import.meta.env.DEV && 'serviceWorker' in navigator) {
     .catch((error) => console.warn('Failed to unregister dev service worker', error));
 }
 
+const dismissBootSplash = () => {
+  const bootSplash = document.getElementById('boot-splash');
+  if (!bootSplash) return;
+
+  requestAnimationFrame(() => {
+    bootSplash.classList.add('is-hidden');
+    window.setTimeout(() => {
+      bootSplash.remove();
+    }, 180);
+  });
+};
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,
 )
+
+dismissBootSplash();

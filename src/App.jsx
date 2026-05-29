@@ -3,7 +3,7 @@ import { DateProvider } from './context/DateContext';
 import API_BASE_URL from './config'; 
 import Layout from './components/layout/Layout';
 import KeyboardFocusManager from './components/system/KeyboardFocusManager';
-import LoadingSpinner from './components/ui/LoadingSpinner';
+import LaunchScreen from './components/ui/LaunchScreen';
 import UpdatePrompt from './components/ui/UpdatePrompt';
 import Onboarding from './modules/Onboarding';
 
@@ -213,7 +213,7 @@ const App = () => {
   }
 
   if (authState === 'restoring-session') {
-    return renderWithUpdatePrompt(<LoadingSpinner fullPage label="Restoring Session..." />);
+    return renderWithUpdatePrompt(<LaunchScreen />);
   }
 
   if (authState !== 'authenticated') {
