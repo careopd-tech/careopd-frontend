@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Filter, Search, SlidersHorizontal, Bell, X, CheckCircle, AlertCircle, Clock, 
-  User, LogOut, ChevronDown, Trash2, KeyRound 
+  User, LogOut, ChevronDown, Trash2, KeyRound, Mail, Phone
 } from 'lucide-react';
-import MyAccountModal from '../profile/MyAccountModal';
+import MyProfileModal from '../profile/MyProfileModal';
 import ChangePasswordModal from '../profile/ChangePasswordModal'; 
+import ContactChangeInfoModal from '../profile/ContactChangeInfoModal';
 
 const ModuleHeader = ({ 
   title, 
@@ -21,8 +22,9 @@ const ModuleHeader = ({
 }) => {
   const [showNotif, setShowNotif] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false); 
+  const [contactModalType, setContactModalType] = useState('');
   const savedUser = (() => {
     try {
       return JSON.parse(localStorage.getItem('user') || '{}');
@@ -32,8 +34,15 @@ const ModuleHeader = ({
   })();
   const safeNotifications = Array.isArray(notifications) ? notifications : [];
   const displayName = savedUser.name || localStorage.getItem('userName') || 'User';
-  const displayEmail = savedUser.email || localStorage.getItem('userEmail') || '';
-  const initials = displayName
+  const salutationMatch = displayName.match(/^(Dr|Mr|Ms)\.\s*/i);
+  const normalizedDisplayName = displayName
+    .replace(/^(Dr|Mr|Ms)\.\s*/i, '')
+    .trim();
+  const displayFirstName = normalizedDisplayName
+    .split(' ')
+    .filter(Boolean)[0] || 'User';
+  const displayMenuName = salutationMatch ? `${salutationMatch[1]}. ${displayFirstName}` : displayFirstName;
+  const initials = normalizedDisplayName
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
@@ -65,14 +74,20 @@ const ModuleHeader = ({
 
   return (
     <>
-      <MyAccountModal 
-        isOpen={isAccountModalOpen} 
-        onClose={() => setIsAccountModalOpen(false)} 
+      <MyProfileModal 
+        isOpen={isProfileModalOpen} 
+        onClose={() => setIsProfileModalOpen(false)} 
       />
       
       <ChangePasswordModal 
         isOpen={isPasswordModalOpen} 
         onClose={() => setIsPasswordModalOpen(false)} 
+      />
+
+      <ContactChangeInfoModal
+        type={contactModalType}
+        isOpen={Boolean(contactModalType)}
+        onClose={() => setContactModalType('')}
       />
 
       <header className="flex-none h-14 bg-white/80 backdrop-blur-md border-b border-slate-200 z-30 flex items-center justify-between px-4 gap-2 sticky top-0">
@@ -203,16 +218,15 @@ const ModuleHeader = ({
               {isProfileOpen && (
                 <div className={`${POPUP_CLASSES} w-50`}> {/* <-- explicitly w-50 here for tight fit */}
                     <div className="px-4 py-3 border-b border-slate-50 bg-slate-50/30">
-                      <p className="type-body text-slate-800">{displayName}</p>
-                      {displayEmail && <p className="type-label text-slate-400 truncate">{displayEmail}</p>}
+                      <p className="type-body text-slate-800">{displayMenuName}</p>
                     </div>
                     
                     <div className="p-1">
                       <button 
-                        onClick={() => { setIsAccountModalOpen(true); setIsProfileOpen(false); }}
+                        onClick={() => { setIsProfileModalOpen(true); setIsProfileOpen(false); }}
                         className="type-body w-full text-left px-3 py-2.5 text-slate-600 hover:bg-slate-50 hover:text-teal-700 rounded-lg flex items-center gap-3 transition-colors"
                       >
-                        <User size={15} /> My Account
+                        <User size={15} /> My Profile
                       </button>
 
                       <button 
@@ -220,6 +234,20 @@ const ModuleHeader = ({
                         className="type-body w-full text-left px-3 py-2.5 text-slate-600 hover:bg-slate-50 hover:text-teal-700 rounded-lg flex items-center gap-3 transition-colors mt-1"
                       >
                         <KeyRound size={15} /> Change Password
+                      </button>
+
+                      <button 
+                        onClick={() => { setContactModalType('mobile'); setIsProfileOpen(false); }}
+                        className="type-body w-full text-left px-3 py-2.5 text-slate-600 hover:bg-slate-50 hover:text-teal-700 rounded-lg flex items-center gap-3 transition-colors mt-1"
+                      >
+                        <Phone size={15} /> Update Mobile
+                      </button>
+
+                      <button 
+                        onClick={() => { setContactModalType('email'); setIsProfileOpen(false); }}
+                        className="type-body w-full text-left px-3 py-2.5 text-slate-600 hover:bg-slate-50 hover:text-teal-700 rounded-lg flex items-center gap-3 transition-colors mt-1"
+                      >
+                        <Mail size={15} /> Update Email
                       </button>
                       
                       <button 
