@@ -4,6 +4,9 @@ import { useGlobalDate } from '../../context/DateContext';
 import QueueCard from '../../components/doctor/QueueCard';
 import API_BASE_URL from '../../config';
 import ConsultationPad from '../../components/doctor/ConsultationPad';
+import PostConsultActionsModal from '../../components/doctor/PostConsultActionsModal';
+import { authFetch } from '../../utils/auth';
+import { getAppointmentUiStatus } from '../../utils/appointmentStatus';
 
 const DoctorDashboard = ({ data, onLogout }) => {
   const dateContext = useGlobalDate();
@@ -17,13 +20,15 @@ const DoctorDashboard = ({ data, onLogout }) => {
   const [queue, setQueue] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeAppt, setActiveAppt] = useState(null);
+  const [postConsultResult, setPostConsultResult] = useState(null);
+  const [isPostConsultModalOpen, setIsPostConsultModalOpen] = useState(false);
 
   
 // --- DATA FETCHING ---
   const fetchQueue = async () => {
     if (!clinicId || !doctorId) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=doctor_queue&doctorId=${doctorId}&date=${safeCurrentDate}`);
+      const res = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=doctor_queue&doctorId=${doctorId}&date=${safeCurrentDate}`);
       if (res.ok) {
         const fetchedQueue = await res.json();
         
@@ -54,8 +59,10 @@ const DoctorDashboard = ({ data, onLogout }) => {
   };
 
 const [isSubmitting, setIsSubmitting] = useState(false);
+const [consultationSubmitAction, setConsultationSubmitAction] = useState('');
 
   const handleCompleteConsultation = async (apptId, prescriptionData, finalStatus) => {
+    setConsultationSubmitAction(finalStatus);
     setIsSubmitting(true);
     try {
       const payload = {
@@ -67,13 +74,22 @@ const [isSubmitting, setIsSubmitting] = useState(false);
         prescriptionData: prescriptionData   // The data from ConsultationPad
       };
       
-      const res = await fetch(`${API_BASE_URL}/api/prescriptions/complete-consultation`, {
+      const res = await authFetch(`${API_BASE_URL}/api/prescriptions/complete-consultation`, {
         method: 'POST', // Changed to POST to our new route
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
       if (res.ok) {
+        const result = await res.json();
+        const mergedAppointment = { ...activeAppt, ...(result.appointment || {}) };
+        setPostConsultResult({
+          appointment: mergedAppointment,
+          prescription: result.prescription,
+          patient: mergedAppointment.patientId,
+          doctor: mergedAppointment.doctorId
+        });
+        setIsPostConsultModalOpen(true);
         setActiveAppt(null); // Close the EMR pane
         fetchQueue();        // Refresh the queue (patient will disappear from Waiting)
       } else {
@@ -83,7 +99,32 @@ const [isSubmitting, setIsSubmitting] = useState(false);
     } catch (err) {
       console.error("Error saving consultation", err);
     } finally {
+      setConsultationSubmitAction('');
       setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenConsultation = async (appt) => {
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${appt._id}/start-consultation`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return;
+      }
+
+      const mergedAppointment = {
+        ...appt,
+        ...(result.appointment || {}),
+        patientId: appt.patientId
+      };
+      setActiveAppt(mergedAppointment);
+      fetchQueue();
+    } catch (err) {
+      console.error("Failed to open consultation", err);
     }
   };
 
@@ -94,7 +135,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
     return () => clearInterval(interval);
   }, [safeCurrentDate]);
 
-  const waitingCount = queue.filter(a => a.status === 'Scheduled' || a.status === 'Waiting').length;
+  const waitingCount = queue.filter(a => ['Scheduled', 'Checked In', 'Awaiting Reports', 'In Consultation'].includes(getAppointmentUiStatus(a))).length;
 
   return (
     <div className="app-viewport flex flex-col bg-slate-100 overflow-hidden">
@@ -150,7 +191,7 @@ const [isSubmitting, setIsSubmitting] = useState(false);
                   key={appt._id} 
                   appt={appt} 
                   isActive={activeAppt?._id === appt._id} 
-                  onClick={(selectedAppt) => setActiveAppt(selectedAppt)} 
+                  onClick={(selectedAppt) => handleOpenConsultation(selectedAppt)} 
                 />
               ))
             ) : (
@@ -202,7 +243,8 @@ const [isSubmitting, setIsSubmitting] = useState(false);
     <ConsultationPad 
        activeAppt={activeAppt} 
        onComplete={handleCompleteConsultation} 
-       isSubmitting={isSubmitting} 
+       isSubmitting={isSubmitting}
+       submittingAction={consultationSubmitAction}
        clinicalCatalog={data?.clinicalCatalog}
     />
 </div>
@@ -217,7 +259,18 @@ const [isSubmitting, setIsSubmitting] = useState(false);
            )}
         </div>
 
-      </div>
+    </div>
+
+      <PostConsultActionsModal
+        isOpen={isPostConsultModalOpen}
+        onClose={() => {
+          setIsPostConsultModalOpen(false);
+          setPostConsultResult(null);
+        }}
+        clinic={data?.clinic}
+        doctor={postConsultResult?.doctor || { name: `Dr. ${doctorName}` }}
+        consultationResult={postConsultResult}
+      />
     </div>
   );
 };

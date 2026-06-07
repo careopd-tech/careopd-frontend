@@ -4,10 +4,13 @@ const StatusBadge = ({ status }) => {
   const styles = {
     'Scheduled': 'text-amber-600', // Renamed from Pending
     'Checked In': 'text-teal-600',
+    'Draft': 'text-violet-700',
     'In Consultation': 'text-blue-600',
+    'Awaiting Reports': 'text-cyan-700',
     'Delayed': 'text-orange-600',
-    'Left Early': 'text-slate-600',
+    'Walked Out': 'text-slate-600',
     'Completed': 'text-green-600',
+    'Test Recommended': 'text-emerald-700',
     'Cancelled': 'text-red-600',
     'On Leave': 'text-amber-600',
     'Inactive': 'text-slate-500',
@@ -16,10 +19,13 @@ const StatusBadge = ({ status }) => {
   const dotStyles = {
     'Scheduled': 'bg-amber-500', // Renamed from Pending
     'Checked In': 'bg-teal-500',
+    'Draft': 'bg-violet-500',
     'In Consultation': 'bg-blue-500',
+    'Awaiting Reports': 'bg-cyan-500',
     'Delayed': 'bg-orange-500',
-    'Left Early': 'bg-slate-500',
+    'Walked Out': 'bg-slate-500',
     'Completed': 'bg-green-500',
+    'Test Recommended': 'bg-emerald-500',
     'Cancelled': 'bg-red-500',
     'On Leave': 'bg-amber-500',
     'Inactive': 'bg-slate-400',

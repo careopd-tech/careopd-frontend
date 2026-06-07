@@ -19,8 +19,17 @@ const DEFAULT_MEDICATION_DRAFT = {
   instructions: ''
 };
 
+const withDraftItemIds = (items = [], prefix = 'item') => (
+  Array.isArray(items)
+    ? items.map((item, index) => ({
+      ...item,
+      id: item?.id || `${prefix}-${item?.name || 'entry'}-${index}`
+    }))
+    : []
+);
+
 const getInitialConsultationState = (appointment = {}) => {
-  const savedDraft = appointment?.consultationDraft || {};
+  const savedDraft = appointment?.consultationDraft || appointment?.followUpPrefill || {};
   return {
     savedDraft,
     vitals: savedDraft.vitals || {
@@ -31,16 +40,16 @@ const getInitialConsultationState = (appointment = {}) => {
     complaintsList: savedDraft.complaintsList || [],
     complaintInputText: savedDraft.complaintInputText || '',
     clinicalNotes: savedDraft.clinicalNotes || { diagnosis: '', advice: '' },
-    medicines: savedDraft.medicines || [],
+    medicines: withDraftItemIds(savedDraft.medicines, 'medicine'),
     currentMed: { ...DEFAULT_MEDICATION_DRAFT, ...(savedDraft.currentMed || {}) },
     isCustomRegimen: savedDraft.isCustomRegimen === true,
-    labTests: savedDraft.labTests || [],
+    labTests: withDraftItemIds(savedDraft.labTests, 'lab'),
     labInputText: savedDraft.labInputText || '',
     isMedSelected: savedDraft.isMedSelected === true
   };
 };
 
-const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, clinicalCatalog }) => {
+const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, submittingAction = '', clinicalCatalog }) => {
   const loggedInDoctorId = localStorage.getItem('doctorId');
   const loggedInRole = localStorage.getItem('userRole') || 'admin';
   const initialState = getInitialConsultationState(activeAppt);
@@ -85,6 +94,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
     category: group.category,
     items: group.items.map((item) => item.label)
   }));
+  const previousConsultation = activeAppt?.previousConsultation || null;
 
 
 
@@ -336,8 +346,46 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
           )}
         </section>
 
+        {previousConsultation && (
+          <section className="bg-white border border-amber-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="p-3 bg-amber-50/70 border-b border-amber-100">
+              <div className="text-[12px] font-bold uppercase tracking-wider text-amber-800">
+                {activeAppt?.consultationMode === 'Addendum' || activeAppt?.activeConsultationMode === 'Addendum'
+                  ? 'Previous Clinical Record'
+                  : (activeAppt?.type === 'Follow-Up' ? 'Previous Closed Consultation' : 'Previous Consultation')}
+              </div>
+              <div className="text-[12px] text-amber-700 mt-1">
+                {previousConsultation.date || '--'} {previousConsultation.time ? `| ${previousConsultation.time}` : ''}
+                {previousConsultation.type ? ` | ${previousConsultation.type}` : ''}
+                {previousConsultation.doctor?.name ? ` | Dr. ${previousConsultation.doctor.name.replace(/^Dr\.\s*/i, '')}` : ''}
+              </div>
+            </div>
+            <div className="px-3 py-2.5 bg-amber-50/20">
+              <div className="text-[12px] text-amber-800">
+                {activeAppt?.consultationMode === 'Addendum' || activeAppt?.activeConsultationMode === 'Addendum'
+                  ? 'This follow-up note is linked to the same appointment. The earlier clinical record remains unchanged, and the latest closed prescription has been carried into the form below as the starting point.'
+                  : 'This follow-up is linked to the earlier closed visit. Previous prescription details are preserved and have been carried into the form below for this new record.'}
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* --- EMR WRAPPER --- */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden p-2 space-y-3">
+          {(activeAppt?.type === 'Follow-Up' || activeAppt?.consultationMode === 'Addendum' || activeAppt?.activeConsultationMode === 'Addendum') && (
+            <div className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2">
+              <div className="text-[12px] font-bold uppercase tracking-wider text-teal-800">
+                {activeAppt?.consultationMode === 'Addendum' || activeAppt?.activeConsultationMode === 'Addendum'
+                  ? 'Current Follow-Up Note'
+                  : 'Current Follow-Up'}
+              </div>
+              <div className="text-[12px] text-teal-700 mt-1">
+                {activeAppt?.consultationMode === 'Addendum' || activeAppt?.activeConsultationMode === 'Addendum'
+                  ? 'Add the updated notes, medicines, and test plan as a new clinical addendum. The earlier record will remain unchanged.'
+                  : 'Add the updated notes, medicines, and test plan for this new follow-up record. The previous consultation remains unchanged.'}
+              </div>
+            </div>
+          )}
 
           {/* VITALS SECTION */}
           <section>
@@ -774,25 +822,34 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
 
       {/* FIXED BOTTOM ACTION BAR (Consolidated Smart CTA) */}
       <div className="absolute bottom-0 left-0 right-0 p-3 bg-white border-t border-slate-200 z-40" style={{ boxShadow: '0 -10px 15px -3px rgba(0, 0, 0, 0.05)' }}>
-          <button 
-              type="button" 
-              onClick={() => handleSave('Completed')} 
-              disabled={isSubmitting || !isFormValid} 
-              className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-[13px] font-bold flex justify-center items-center gap-2 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
-          >
-            {isSubmitting ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <>
-                {labTests.length > 0 ? (
-                  <FlaskConical size={18} />
-                ) : (
-                  <CheckCircle size={18} />
-                )}
-                Mark as Complete
-              </>
+          <div className={`grid gap-2 ${labTests.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {labTests.length > 0 && (
+              <button
+                type="button"
+                onClick={() => handleSave('Awaiting Reports')}
+                disabled={isSubmitting || !isFormValid}
+                className="h-11 border border-teal-200 bg-teal-50 hover:bg-teal-100 text-teal-800 rounded-xl text-[13px] font-bold flex justify-center items-center gap-2 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+              >
+                {isSubmitting && submittingAction === 'Awaiting Reports' ? <Loader2 size={18} className="animate-spin" /> : <FlaskConical size={18} />}
+                Lab Tests Required
+              </button>
             )}
-          </button>
+            <button
+              type="button"
+              onClick={() => handleSave(labTests.length > 0 ? 'Tests Recommended' : 'Completed')}
+              disabled={isSubmitting || !isFormValid}
+              className="h-11 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-[13px] font-bold flex justify-center items-center gap-2 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+            >
+              {isSubmitting && (submittingAction === 'Completed' || submittingAction === 'Tests Recommended') ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                <>
+                  <CheckCircle size={18} />
+                  Mark as Complete
+                </>
+              )}
+            </button>
+          </div>
       </div>
     </div>
   );

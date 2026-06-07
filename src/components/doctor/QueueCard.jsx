@@ -1,12 +1,15 @@
 import React from 'react';
 import { Clock, CheckCircle, ArrowRight } from 'lucide-react';
+import { getAppointmentUiStatus } from '../../utils/appointmentStatus';
 
 const QueueCard = ({ appt, isActive, onClick }) => {
   const patient = appt.patientId || {};
-  const isCompleted = appt.status === 'Completed' || appt.status === 'Done';
-  const isCancelled = appt.status === 'Cancelled' || appt.status === 'No-Show';
+  const uiStatus = getAppointmentUiStatus(appt);
+  const isCompleted = uiStatus === 'Completed' || uiStatus === 'Test Recommended';
+  const isCancelled = uiStatus === 'Cancelled' || uiStatus === 'No-Show';
   const isInConsultation = Boolean(appt.consultationStartedAt) && !appt.consultationCompletedAt;
   const isCheckedIn = Boolean(appt.checkedInAt);
+  const isAwaitingReports = uiStatus === 'Awaiting Reports';
 
   // Doctors don't need clutter. Hide cancelled/no-shows from their active view.
   if (isCancelled) return null; 
@@ -40,11 +43,13 @@ const QueueCard = ({ appt, isActive, onClick }) => {
            <span className={`text-[12px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
              isInConsultation || isActive
                ? 'bg-teal-100 text-teal-700'
-               : isCheckedIn
-                 ? 'bg-blue-100 text-blue-700'
-                 : 'bg-amber-100 text-amber-700'
+               : isAwaitingReports
+                 ? 'bg-cyan-100 text-cyan-700'
+                : isCheckedIn
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-amber-100 text-amber-700'
            }`}>
-             {isInConsultation || isActive ? 'In Consult' : (isCheckedIn ? 'Checked In' : 'Waiting')}
+             {isInConsultation || isActive ? 'In Consult' : (isAwaitingReports ? 'Awaiting Reports' : (isCheckedIn ? 'Checked In' : 'Waiting'))}
            </span>
         )}
       </div>
@@ -54,6 +59,13 @@ const QueueCard = ({ appt, isActive, onClick }) => {
         <p className="text-[12px] text-slate-500 mt-0.5">
           {patient.gender || 'U'}, {patient.age ? `${patient.age} Yrs` : 'Age Unknown'}
         </p>
+        {appt.type === 'Follow-Up' ? (
+          <div className="mt-1">
+            <span className="inline-flex text-[12px] font-bold uppercase px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+              Follow-Up
+            </span>
+          </div>
+        ) : null}
       </div>
 
       {!isActive && !isCompleted && (

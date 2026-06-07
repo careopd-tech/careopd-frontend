@@ -2,24 +2,28 @@ import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallba
 import { createPortal } from 'react-dom';
 import {
   Calendar, CalendarCheck, History, Plus, Clock, RefreshCw,
-  ChevronDown, CalendarDays, CheckCircle, AlertCircle, Loader2, X, Search, Activity,
-  MoreVertical, UserCheck, Bell, XCircle, Phone
+  ChevronDown, CalendarDays, CheckCircle, AlertCircle, Loader2, X, Search, Activity, FlaskConical,
+  MoreVertical, UserCheck, Bell, XCircle, Phone, Printer, ReceiptText, Wallet
 } from 'lucide-react';
 import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import FAB from '../components/ui/FAB';
 import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
+import StatFilterStrip from '../components/ui/StatFilterStrip';
 import TimeSlotPicker from '../components/business/TimeSlotPicker';
 import { useGlobalDate } from '../context/DateContext';
 import API_BASE_URL from '../config';
 import { authFetch, getSessionUser } from '../utils/auth';
 import { hasPermission } from '../utils/permissions';
 import { getClinicSchedule, timeToMinutes } from '../utils/schedule';
+import { getAppointmentUiStatus, hasActiveConsultation as hasAppointmentActiveConsultation, hasVisitProgress as hasAppointmentVisitProgress } from '../utils/appointmentStatus';
+import { printLabOrderDocument, printPrescriptionDocument, printReceiptDocument } from '../utils/postConsultPrint';
 
 // --- ADDED: IMPORT THE EMR PAD ---
 import ConsultationPad from '../components/doctor/ConsultationPad';
 import PatientHistoryList, { filterValidHistory } from '../components/ui/PatientHistoryList';
+import BillingPaymentModal from '../components/billing/BillingPaymentModal';
 
 const Appointments = ({ data, setData, onLogout }) => {
   // --- 1. CONTEXT & BASICS ---
@@ -78,6 +82,7 @@ const Appointments = ({ data, setData, onLogout }) => {
   // UI States
   const [batchLoading, setBatchLoading] = useState({ upcoming: false, previous: false });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [consultationSubmitAction, setConsultationSubmitAction] = useState('');
   const [loading, setLoading] = useState(() => {
     if (data.cachedSections) return false;
     return !data.appointments || data.appointments.length === 0;
@@ -100,6 +105,7 @@ const Appointments = ({ data, setData, onLogout }) => {
   const [expandedSection, setExpandedSection] = useState('today');
   const [rebookingApptId, setRebookingApptId] = useState(null);
   const [isFollowUpBooking, setIsFollowUpBooking] = useState(false);
+  const [followUpSourceApptId, setFollowUpSourceApptId] = useState('');
   const [notification, setNotification] = useState(null);
   const [actionAppt, setActionAppt] = useState(null);
   const [contactAppt, setContactAppt] = useState(null);
@@ -114,6 +120,8 @@ const Appointments = ({ data, setData, onLogout }) => {
   const [isExitConsultationModalOpen, setIsExitConsultationModalOpen] = useState(false);
   const [consultationDraft, setConsultationDraft] = useState(null);
   const [exitConsultationAction, setExitConsultationAction] = useState('');
+  const [isBillingPaymentModalOpen, setIsBillingPaymentModalOpen] = useState(false);
+  const [billingPaymentContext, setBillingPaymentContext] = useState(null);
 
   // --- NOTIFICATION STATE (PERSISTENT) ---
   const [notificationStack, setNotificationStack] = useState(() => {
@@ -216,28 +224,9 @@ const Appointments = ({ data, setData, onLogout }) => {
   }, [openActionMenuId]);
 
   // --- 3. LOGIC HELPERS ---
-  const hasActiveConsultation = (appt) => (
-    Boolean(appt.consultationStartedAt) &&
-    !appt.consultationCompletedAt &&
-    !['Completed', 'Cancelled', 'Left Early'].includes(appt.status)
-  );
-
-  const hasVisitProgress = (appt) => (
-    hasActiveConsultation(appt) ||
-    Boolean(appt.checkedInAt) ||
-    Boolean(appt.consultationExitedAt)
-  );
-
-  const getUiStatus = (appt) => {
-    if (appt.status === 'Cancelled') return 'Cancelled';
-    if (appt.status === 'Completed' || appt.status === 'Done') return 'Completed';
-    if (appt.status === 'Left Early') return 'Left Early';
-    if (hasActiveConsultation(appt)) return 'In Consultation';
-    if (appt.checkedInAt) return 'Checked In';
-    const isPast = appt.date < safeCurrentDate;
-    if (isPast && (appt.status === 'Scheduled' || appt.status === 'Pending') && !hasVisitProgress(appt)) return 'No-Show';
-    return appt.status || 'Scheduled';
-  };
+  const hasActiveConsultation = (appt) => hasAppointmentActiveConsultation(appt);
+  const hasVisitProgress = (appt) => hasAppointmentVisitProgress(appt);
+  const getUiStatus = (appt) => getAppointmentUiStatus(appt, safeCurrentDate);
 
   const getEntityId = (value) => {
     if (!value) return '';
@@ -279,7 +268,7 @@ const Appointments = ({ data, setData, onLogout }) => {
   const buildConsultationDraftPayload = useCallback((appointment = {}, draftOverride = null) => {
     const sourceDraft = draftOverride && typeof draftOverride === 'object'
       ? draftOverride
-      : (appointment?.consultationDraft || {});
+      : (appointment?.consultationDraft || appointment?.followUpPrefill || {});
     const sanitizeText = (value) => String(value || '').trim();
     const normalizeMedicine = (medicine = {}) => ({
       name: sanitizeText(medicine.name),
@@ -703,12 +692,14 @@ const Appointments = ({ data, setData, onLogout }) => {
 
     const scheduled = sourceData.filter(a => getUiStatus(a) === 'Scheduled').length;
     const completed = sourceData.filter(a => getUiStatus(a) === 'Completed').length;
+    const awaitingReports = sourceData.filter(a => getUiStatus(a) === 'Awaiting Reports').length;
     const cancelled = sourceData.filter(a => getUiStatus(a) === 'Cancelled').length;
     const noShow = sourceData.filter(a => getUiStatus(a) === 'No-Show').length;
 
     return [
       { key: 'Scheduled', label: 'Scheduled', val: scheduled, color: 'bg-amber-50 text-amber-700' },
       { key: 'Completed', label: 'Completed', val: completed, color: 'bg-green-50 text-green-700' },
+      { key: 'Awaiting Reports', label: 'Awaiting', val: awaitingReports, color: 'bg-cyan-50 text-cyan-700' },
       { key: 'Cancelled', label: 'Cancelled', val: cancelled, color: 'bg-red-50 text-red-700' },
       { key: 'No-Show', label: 'No Show', val: noShow, color: 'bg-slate-100 text-slate-600' }
     ];
@@ -721,7 +712,7 @@ const Appointments = ({ data, setData, onLogout }) => {
     } else {
       newStatusList.push(key);
     }
-    if (['Scheduled', 'Completed', 'Cancelled', 'No-Show'].every(s => newStatusList.includes(s))) {
+    if (['Scheduled', 'Completed', 'Awaiting Reports', 'Cancelled', 'No-Show'].every(s => newStatusList.includes(s))) {
       newStatusList = [];
     }
     setActiveFilters({ ...activeFilters, status: newStatusList });
@@ -817,7 +808,8 @@ const Appointments = ({ data, setData, onLogout }) => {
 
     const payload = {
       clinicId: localStorage.getItem('clinicId'),
-      patientId: newAppt.patientId, doctorId: newAppt.doctorId, time: newAppt.time, date: newAppt.date, type: 'Consultation',
+      patientId: newAppt.patientId, doctorId: newAppt.doctorId, time: newAppt.time, date: newAppt.date, type: isFollowUpBooking ? 'Follow-Up' : 'Consultation',
+      followUpOfAppointmentId: isFollowUpBooking ? followUpSourceApptId : null,
       status: 'Scheduled', newPatientData: newAppt.patientId === 'add_new' ? {
         ...newPatientDetails,
         name: fullName 
@@ -833,7 +825,7 @@ const Appointments = ({ data, setData, onLogout }) => {
 
       if (res.ok) {
         await fetchAllData(true);
-        setIsAddModalOpen(false); setRebookingApptId(null); setIsFollowUpBooking(false);
+        setIsAddModalOpen(false); setRebookingApptId(null); setIsFollowUpBooking(false); setFollowUpSourceApptId('');
         setNewAppt({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate });
         setNewPatientDetails(defaultNewPatientDetails);
 
@@ -890,16 +882,16 @@ const Appointments = ({ data, setData, onLogout }) => {
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
-        return setModalError(result.error || 'Failed to mark patient as left early.');
+        return setModalError(result.error || 'Failed to mark patient as walked out.');
       }
 
       await fetchAllData(true);
       setIsLeftEarlyModalOpen(false);
       setLeftEarlyReason('');
-      showNotification('Patient Left Early', 'success', `${getPatientName(actionAppt.patientId)} left before consultation.`);
+      showNotification('Patient Walked Out', 'success', `${getPatientName(actionAppt.patientId)} left before consultation.`);
       setActionAppt(null);
     } catch (err) {
-      setModalError('Failed to mark patient as left early.');
+      setModalError('Failed to mark patient as walked out.');
     } finally {
       setIsSubmitting(false);
     }
@@ -1012,6 +1004,149 @@ const Appointments = ({ data, setData, onLogout }) => {
     }
   };
 
+  const handleStartAddendum = async (appt) => {
+    setProcessingAppointmentId(appt._id);
+    setOpenActionMenuId('');
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${appt._id}/start-addendum`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return showNotification(result.error || 'Failed to open follow-up note.', 'error');
+      }
+
+      openConsultation(buildConsultationAppointment(appt, result.appointment));
+      await fetchAllData(true);
+    } catch (err) {
+      showNotification('Failed to open follow-up note.', 'error');
+    } finally {
+      setProcessingAppointmentId('');
+    }
+  };
+
+  const handleReportsReady = async (appt) => {
+    setProcessingAppointmentId(appt._id);
+    setOpenActionMenuId('');
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${appt._id}/reports-ready`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return showNotification(result.error || 'Failed to mark reports ready.', 'error');
+      }
+
+      await fetchAllData(true);
+      showNotification('Reports Ready', 'success', `${getPatientName(appt.patientId)} is ready for doctor review.`);
+    } catch (err) {
+      showNotification('Failed to mark reports ready.', 'error');
+    } finally {
+      setProcessingAppointmentId('');
+    }
+  };
+
+  const getAutoFollowUpTime = (sourceAppt) => {
+    const slotMinutes = getClinicSchedule(data.clinic || {}).appointmentWindowMinutes || 15;
+    const now = new Date();
+    let minutes = Math.ceil(((now.getHours() * 60) + now.getMinutes()) / slotMinutes) * slotMinutes;
+    if (minutes >= 24 * 60) minutes = (24 * 60) - slotMinutes;
+
+    for (let attempt = 0; attempt < 24 * 12; attempt += 1) {
+      const candidateMinutes = (minutes + (attempt * slotMinutes)) % (24 * 60);
+      const hours = String(Math.floor(candidateMinutes / 60)).padStart(2, '0');
+      const mins = String(candidateMinutes % 60).padStart(2, '0');
+      const candidateTime = `${hours}:${mins}`;
+      if (!hasLocalPatientConflict(getEntityId(sourceAppt.patientId), safeCurrentDate, candidateTime, null)) {
+        return candidateTime;
+      }
+    }
+
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const handleCreateFollowUp = async (appt) => {
+    setProcessingAppointmentId(appt._id);
+    setOpenActionMenuId('');
+    const doctorRef = getDoctorById(appt.doctorId);
+    const followUpTime = getAutoFollowUpTime(appt);
+    const payload = {
+      clinicId,
+      patientId: getEntityId(appt.patientId),
+      doctorId: getEntityId(appt.doctorId),
+      time: followUpTime,
+      date: safeCurrentDate,
+      type: 'Follow-Up',
+      followUpOfAppointmentId: getEntityId(appt._id)
+    };
+
+    try {
+      const createResponse = await fetch(`${API_BASE_URL}/api/appointments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const createResult = await createResponse.json().catch(() => ({}));
+      if (!createResponse.ok || !createResult.appointmentId) {
+        return showNotification(createResult.error || 'Failed to create follow-up visit.', 'error');
+      }
+
+      const followUpAppointmentId = createResult.appointmentId;
+
+      if (canManageAppointments) {
+        const checkInResponse = await authFetch(`${API_BASE_URL}/api/appointments/${followUpAppointmentId}/check-in`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clinicId })
+        });
+        if (!checkInResponse.ok) {
+          const checkInResult = await checkInResponse.json().catch(() => ({}));
+          return showNotification(checkInResult.error || 'Follow-up created, but check-in failed.', 'error');
+        }
+      }
+
+      const provisionalFollowUpAppt = {
+        _id: followUpAppointmentId,
+        clinicId,
+        patientId: getPatientDetails(appt.patientId) || appt.patientId,
+        doctorId: doctorRef || appt.doctorId,
+        time: followUpTime,
+        date: safeCurrentDate,
+        type: 'Follow-Up',
+        status: 'Scheduled',
+        checkedInAt: canManageAppointments ? new Date().toISOString() : null,
+        followUpOfAppointmentId: getEntityId(appt._id)
+      };
+
+      if (isAssignedClinician(provisionalFollowUpAppt)) {
+        const startResponse = await authFetch(`${API_BASE_URL}/api/appointments/${followUpAppointmentId}/start-consultation`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clinicId })
+        });
+        const startResult = await startResponse.json().catch(() => ({}));
+        if (!startResponse.ok) {
+          return showNotification(startResult.error || 'Follow-up created, but consultation could not be opened.', 'error');
+        }
+
+        const followUpAppointment = buildConsultationAppointment(provisionalFollowUpAppt, startResult.appointment || {});
+        openConsultation(followUpAppointment);
+      } else {
+        showNotification('Follow-Up Checked In', 'success', `${getPatientName(appt.patientId)} is ready for follow-up consultation.`);
+      }
+
+      await fetchAllData(true);
+    } catch (err) {
+      showNotification('Failed to start follow-up workflow.', 'error');
+    } finally {
+      setProcessingAppointmentId('');
+    }
+  };
+
   const closeConsultationPadLocally = (message = '') => {
     setIsExitConsultationModalOpen(false);
     setIsConsultationPadOpen(false);
@@ -1021,6 +1156,30 @@ const Appointments = ({ data, setData, onLogout }) => {
     setExitConsultationAction('');
     if (message) {
       showNotification(message, 'success');
+    }
+  };
+
+  const closeUnchangedDraftQuietly = async () => {
+    if (!activeConsultationAppt?._id) {
+      closeConsultationPadLocally();
+      return;
+    }
+
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${activeConsultationAppt._id}/exit-consultation`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId, keepDraft: true })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return showNotification(result.error || 'Failed to close consultation.', 'error');
+      }
+
+      await fetchAllData(true);
+      closeConsultationPadLocally();
+    } catch (err) {
+      showNotification('Failed to close consultation.', 'error');
     }
   };
 
@@ -1034,7 +1193,7 @@ const Appointments = ({ data, setData, onLogout }) => {
 
     if (!hasConsultationChanges) {
       if (initialConsultationHadDraftRef.current) {
-        closeConsultationPadLocally('No new changes made. Existing draft remains available.');
+        await closeUnchangedDraftQuietly();
         return;
       }
       await handleDiscardConsultation();
@@ -1067,9 +1226,24 @@ const Appointments = ({ data, setData, onLogout }) => {
         activeConsultationAppt._id,
         consultationDraft || activeConsultationAppt.consultationDraft || {}
       );
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${activeConsultationAppt._id}/exit-consultation`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId, keepDraft: true })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return setModalError(result.error || 'Failed to close consultation after saving draft.');
+      }
       await fetchAllData(true);
       closeConsultationPadLocally();
-      showNotification('Draft Saved', 'success', 'Consultation can be resumed from the appointment card.');
+      showNotification(
+        'Draft Saved',
+        'success',
+        activeConsultationAppt.activeConsultationMode === 'Addendum'
+          ? 'Follow-up note draft can be resumed from this appointment.'
+          : 'Consultation can be resumed from the appointment card.'
+      );
     } catch (err) {
       setModalError(err.message || 'Failed to save consultation draft.');
     } finally {
@@ -1100,7 +1274,13 @@ const Appointments = ({ data, setData, onLogout }) => {
 
       await fetchAllData(true);
       closeConsultationPadLocally();
-      showNotification('Draft Discarded', 'success', 'Patient returned to the consultation queue.');
+      showNotification(
+        'Draft Discarded',
+        'success',
+        activeConsultationAppt.activeConsultationMode === 'Addendum'
+          ? 'Follow-up note draft was discarded.'
+          : 'Patient returned to the consultation queue.'
+      );
     } catch (err) {
       setModalError('Failed to leave consultation.');
     } finally {
@@ -1169,6 +1349,126 @@ const Appointments = ({ data, setData, onLogout }) => {
     } finally {
       setIsHistoryLoading(false);
     }
+  };
+
+  const loadPostConsultContext = async (appt) => {
+    const fallbackContext = {
+      appointment: appt,
+      patient: getPatientDetails(appt.patientId) || appt.patientId || {},
+      doctor: getDoctorById(appt.doctorId) || appt.doctorId || {},
+      prescription: {
+        medicines: Array.isArray(appt.medicines) ? appt.medicines : [],
+        labTests: Array.isArray(appt.labTests) ? appt.labTests : [],
+        complaints: appt.complaints || '',
+        diagnosis: appt.diagnosis || '',
+        advice: appt.advice || ''
+      }
+    };
+
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/visit/${appt._id}/post-consult?clinicId=${clinicId}`);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return fallbackContext;
+      }
+
+      return {
+        appointment: result.appointment || fallbackContext.appointment,
+        patient: result.patient || fallbackContext.patient,
+        doctor: result.doctor || fallbackContext.doctor,
+        prescription: result.prescription || fallbackContext.prescription
+      };
+    } catch (err) {
+      return fallbackContext;
+    }
+  };
+
+  const handlePrintPrescription = async (appt) => {
+    setProcessingAppointmentId(appt._id);
+    setOpenActionMenuId('');
+    try {
+      const context = await loadPostConsultContext(appt);
+      const didPrint = printPrescriptionDocument({
+        clinic: data.clinic,
+        appointment: context.appointment,
+        patient: context.patient,
+        doctor: context.doctor,
+        prescription: context.prescription
+      });
+
+      if (!didPrint) {
+        showNotification('No prescription to print.', 'error');
+        return;
+      }
+
+      const trackResponse = await authFetch(`${API_BASE_URL}/api/appointments/${appt._id}/prescription-printed`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId })
+      });
+      const trackResult = await trackResponse.json().catch(() => ({}));
+      if (!trackResponse.ok) {
+        showNotification(trackResult.error || 'Prescription was printed, but print tracking failed.', 'error');
+        return;
+      }
+      await fetchAllData(true);
+    } catch (err) {
+      showNotification('Failed to print prescription.', 'error');
+    } finally {
+      setProcessingAppointmentId('');
+    }
+  };
+
+  const handlePrintLabOrder = async (appt) => {
+    setProcessingAppointmentId(appt._id);
+    setOpenActionMenuId('');
+    try {
+      const context = await loadPostConsultContext(appt);
+      const didPrint = printLabOrderDocument({
+        clinic: data.clinic,
+        appointment: context.appointment,
+        patient: context.patient,
+        doctor: context.doctor,
+        prescription: context.prescription
+      });
+
+      if (!didPrint) {
+        showNotification('No lab order to print.', 'error');
+      }
+    } catch (err) {
+      showNotification('Failed to print lab order.', 'error');
+    } finally {
+      setProcessingAppointmentId('');
+    }
+  };
+
+  const handlePrintReceipt = async (appt) => {
+    setProcessingAppointmentId(appt._id);
+    setOpenActionMenuId('');
+    try {
+      const context = await loadPostConsultContext(appt);
+      const didPrint = printReceiptDocument({
+        clinic: data.clinic,
+        appointment: context.appointment,
+        patient: context.patient,
+        doctor: context.doctor
+      });
+
+      if (!didPrint) {
+        showNotification('No billing receipt found for this visit.', 'error');
+      }
+    } catch (err) {
+      showNotification('Failed to print receipt.', 'error');
+    } finally {
+      setProcessingAppointmentId('');
+    }
+  };
+
+  const openBillingPayment = async (appt) => {
+    setOpenActionMenuId('');
+    const context = await loadPostConsultContext(appt);
+    setBillingPaymentContext(context);
+    setIsBillingPaymentModalOpen(true);
   };
 
   const handleCheckIn = async (appt) => {
@@ -1246,14 +1546,18 @@ const Appointments = ({ data, setData, onLogout }) => {
 
   // --- ADDED: EMR SAVE HANDLER ---
   const handleCompleteConsultation = async (apptId, prescriptionData, finalStatus) => {
+    setConsultationSubmitAction(finalStatus);
     setIsSubmitting(true);
     try {
+      const sourceAppointment = buildConsultationAppointment(activeConsultationAppt);
       const payload = {
         clinicId: clinicId,
         appointmentId: apptId,
-        patientId: activeConsultationAppt.patientId?._id || activeConsultationAppt.patientId,
-        doctorId: activeConsultationAppt.doctorId?._id || activeConsultationAppt.doctorId,
+        patientId: sourceAppointment.patientId?._id || sourceAppointment.patientId,
+        doctorId: sourceAppointment.doctorId?._id || sourceAppointment.doctorId,
         status: finalStatus,
+        consultationMode: sourceAppointment.activeConsultationMode || 'Consultation',
+        parentConsultationId: sourceAppointment.parentConsultationId || sourceAppointment.activeAddendumParentConsultationId || null,
         prescriptionData: prescriptionData 
       };
 
@@ -1264,6 +1568,7 @@ const Appointments = ({ data, setData, onLogout }) => {
       });
 
       if (res.ok) {
+        const result = await res.json();
         if (consultationDraftSaveTimeoutRef.current) {
           window.clearTimeout(consultationDraftSaveTimeoutRef.current);
         }
@@ -1271,8 +1576,9 @@ const Appointments = ({ data, setData, onLogout }) => {
         setIsConsultationPadOpen(false);
         setActiveConsultationAppt(null);
         setConsultationDraft(null);
-        fetchAllData(true); // Refresh queue
-        showNotification('Consultation Completed', 'success', `Status updated to ${finalStatus}.`);
+        fetchAllData(true);
+        const shortMessage = finalStatus === 'Awaiting Reports' ? 'Awaiting Reports' : 'Consultation Saved';
+        showNotification(shortMessage, 'success', `Status updated to ${finalStatus}.`);
       } else {
         const errorData = await res.json();
         alert(`Error: ${errorData.error}`);
@@ -1280,6 +1586,7 @@ const Appointments = ({ data, setData, onLogout }) => {
     } catch (err) {
       console.error("Error saving consultation", err);
     } finally {
+      setConsultationSubmitAction('');
       setIsSubmitting(false);
     }
   };
@@ -1289,9 +1596,11 @@ const Appointments = ({ data, setData, onLogout }) => {
     const uiStatus = getUiStatus(appt);
     const isCancelled = uiStatus === 'Cancelled';
     const isCompleted = uiStatus === 'Completed';
+    const isTestRecommended = uiStatus === 'Test Recommended';
     const isNoShow = uiStatus === 'No-Show';
-    const isLeftEarly = uiStatus === 'Left Early';
-    const showActions = !isCancelled && !isCompleted && !isNoShow && !isLeftEarly;
+    const isDraft = uiStatus === 'Draft';
+    const isWalkedOut = uiStatus === 'Walked Out';
+    const showActions = !isCancelled && !isCompleted && !isNoShow && !isWalkedOut;
     const isToday = appt.date === safeCurrentDate;
     const isFuture = appt.date > safeCurrentDate;
     const isPast = appt.date < safeCurrentDate;
@@ -1303,6 +1612,14 @@ const Appointments = ({ data, setData, onLogout }) => {
     const todayPhase = getTodayAppointmentPhase(appt);
     const cardStatus = getCardStatus(appt);
     const isProcessing = processingAppointmentId === appt._id;
+    const hasPrescription = Array.isArray(appt.medicines) && appt.medicines.length > 0;
+    const hasLabOrder = Array.isArray(appt.labTests) && appt.labTests.length > 0;
+    const hasPrintedPrescription = Boolean(appt.prescriptionPrintedAt || Number(appt.prescriptionPrintCount || 0) > 0);
+    const hasReceipt = Boolean(
+      appt.billing?.receiptNumber ||
+      Number(appt.billing?.consultationFee || 0) > 0 ||
+      (Array.isArray(appt.billing?.payments) && appt.billing.payments.length > 0)
+    );
 
     const actions = {
       cancel: {
@@ -1315,26 +1632,68 @@ const Appointments = ({ data, setData, onLogout }) => {
         }
       },
       checkIn: { label: 'Check In', icon: UserCheck, onClick: () => handleCheckIn(appt) },
-      consult: { label: isInConsultation ? 'Resume Consult' : 'Consult', icon: Activity, onClick: () => handleStartConsultation(appt) },
+      consult: {
+        label: appt.activeConsultationMode === 'Addendum'
+          ? 'Resume Follow-Up Note'
+          : appt.type === 'Follow-Up'
+          ? 'Add Follow-Up Note'
+          : ((isInConsultation || isDraft || (uiStatus === 'Awaiting Reports' && Boolean(appt.reportsReadyAt))) ? 'Resume Consult' : 'Consult'),
+        icon: Activity,
+        onClick: () => handleStartConsultation(appt)
+      },
+      reportsReady: { label: 'Reports Ready', icon: FlaskConical, onClick: () => handleReportsReady(appt) },
+      followUp: { label: (isInConsultation || isDraft || appt.consultationDraftSavedAt) ? 'Resume Follow-Up Note' : 'Add Follow-Up Note', icon: CalendarDays, onClick: () => handleStartAddendum(appt) },
       reminder: { label: 'Send Reminder', icon: Bell, onClick: () => handleSendReminder(appt) },
       contact: { label: 'Contact Patient', icon: Phone, onClick: () => openContact(appt) },
       leftEarly: { label: 'Patient Left', icon: XCircle, onClick: () => openLeftEarly(appt) },
       reschedule: { label: 'Reschedule', icon: CalendarDays, onClick: () => openReschedule(appt) },
       vitals: { label: 'Add Vitals', icon: Activity, onClick: () => openVitals(appt) },
       history: { label: 'View History', icon: History, onClick: () => openHistory(appt) },
-      viewVitals: { label: 'View Vitals', icon: Activity, onClick: () => openViewVitals(appt) }
+      viewVitals: { label: 'View Vitals', icon: Activity, onClick: () => openViewVitals(appt) },
+      printPrescription: { label: 'Print Prescription', icon: Printer, onClick: () => handlePrintPrescription(appt) },
+      printLabOrder: { label: 'Print Lab Order', icon: FlaskConical, onClick: () => handlePrintLabOrder(appt) },
+      generateInvoice: { label: 'Generate Invoice', icon: Wallet, onClick: () => openBillingPayment(appt) },
+      printReceipt: { label: 'Print Receipt', icon: ReceiptText, onClick: () => handlePrintReceipt(appt) }
     };
 
     let primaryAction = null;
     let overflowActions = [];
     const clinicianOverflowActions = [
-      actions.history,
       ...(data.clinic?.type === 'Clinic' ? [actions.viewVitals] : []),
       actions.vitals
     ];
+    const testRecommendedOverflowActions = [
+      hasPrescription ? actions.printPrescription : null,
+      hasLabOrder ? actions.printLabOrder : null,
+      (hasPrintedPrescription || !hasPrescription) ? actions.generateInvoice : null,
+      hasReceipt ? actions.printReceipt : null
+    ].filter(Boolean);
+    const completedOverflowActions = [
+      (hasPrintedPrescription || !hasPrescription) ? actions.generateInvoice : null,
+      hasLabOrder ? actions.printLabOrder : null,
+      hasReceipt ? actions.printReceipt : null
+    ].filter(Boolean);
 
-    if (showActions && (isToday || isCarryoverVisit)) {
-      if (isInConsultation && isTreatingPhysician) {
+    if (isTestRecommended) {
+      if (isTreatingPhysician) {
+        primaryAction = actions.followUp;
+        overflowActions = testRecommendedOverflowActions;
+      } else {
+        overflowActions = testRecommendedOverflowActions;
+      }
+    } else if (isCompleted) {
+      primaryAction = hasPrescription ? actions.printPrescription : actions.generateInvoice;
+      overflowActions = completedOverflowActions;
+    } else if (showActions && (isToday || isCarryoverVisit)) {
+      if (uiStatus === 'Awaiting Reports') {
+        if (isTreatingPhysician && appt.reportsReadyAt) {
+          primaryAction = actions.consult;
+          overflowActions = clinicianOverflowActions;
+        } else if (canManageAppointments && !appt.reportsReadyAt) {
+          primaryAction = actions.reportsReady;
+          overflowActions = [];
+        }
+      } else if (isInConsultation && isTreatingPhysician) {
         primaryAction = actions.consult;
         overflowActions = clinicianOverflowActions;
       } else if (isCheckedIn || isCarryoverVisit) {
@@ -1364,20 +1723,16 @@ const Appointments = ({ data, setData, onLogout }) => {
       }
     }
 
-    if (showActions && (isToday || isCarryoverVisit) && !overflowActions.some((action) => action.label === actions.history.label)) {
-      overflowActions = [...overflowActions, actions.history];
-    }
-
     if (showActions && isFuture && canManageAppointments) {
       primaryAction = actions.reschedule;
-      overflowActions = [actions.reminder, actions.cancel, actions.history];
+      overflowActions = [actions.reminder, actions.cancel];
     }
 
-    const hasPrimaryInlineAction = showActions && Boolean(primaryAction);
-    const hasArchivedInlineAction = (isCancelled || isNoShow || isLeftEarly) && isAdmin;
-    const cardOverflowActions = showActions && (isToday || isCarryoverVisit || (isFuture && canManageAppointments))
+    const hasPrimaryInlineAction = (showActions || isTestRecommended || isCompleted) && Boolean(primaryAction);
+    const hasArchivedInlineAction = (isCancelled || isNoShow || isWalkedOut) && isAdmin;
+    const cardOverflowActions = ((showActions || isTestRecommended || isCompleted) && (isToday || isCarryoverVisit || isTestRecommended || isCompleted || (isFuture && canManageAppointments)))
       ? overflowActions
-      : [actions.history];
+      : [];
 
     const renderActionButton = (action, isPrimary = false) => {
       if (!action) return null;
@@ -1450,8 +1805,8 @@ const Appointments = ({ data, setData, onLogout }) => {
     };
 
     return (
-      <div key={appt._id} className={`p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col md:flex-row gap-2 ${isCancelled || isNoShow || isLeftEarly ? 'bg-slate-50 opacity-90' : 'bg-white'}`}>
-        <div className={`flex-1 min-w-0 ${(isCancelled || isNoShow || isLeftEarly) ? 'grayscale opacity-75' : ''}`}>
+      <div key={appt._id} className={`p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col md:flex-row gap-2 ${isCancelled || isNoShow || isWalkedOut ? 'bg-slate-50 opacity-90' : 'bg-white'}`}>
+        <div className={`flex-1 min-w-0 ${(isCancelled || isNoShow || isWalkedOut) ? 'grayscale opacity-75' : ''}`}>
           <div className="flex justify-between items-start mb-1.5">
             <div className="flex items-center gap-1.5 mt-0.5">
               <Clock size={12} className="text-slate-400" />
@@ -1465,7 +1820,9 @@ const Appointments = ({ data, setData, onLogout }) => {
             <div className="col-start-2 row-start-1 row-span-2 self-end">
               {renderOverflowMenu(cardOverflowActions)}
             </div>
-            <p className="col-start-1 row-start-2 type-label text-slate-500 leading-tight min-w-0 mt-0.5">{appt.type || 'Consultation'} with <span className="text-teal-600 font-medium">{getDoctorName(appt.doctorId)}</span></p>
+            <div className="col-start-1 row-start-2 min-w-0 mt-0.5">
+              <p className="type-label text-slate-500 leading-tight min-w-0">with <span className="text-teal-600 font-medium">{getDoctorName(appt.doctorId)}</span></p>
+            </div>
           </div>
         </div>
         {hasPrimaryInlineAction && (
@@ -1578,24 +1935,12 @@ const Appointments = ({ data, setData, onLogout }) => {
         </div>
       )}
 
-      <div className="flex-1 flex flex-col landscape:flex-row min-h-0 p-2 gap-2">
-        <div className="flex-none landscape:w-20 pb-1 landscape:pb-0">
-          <div className="flex flex-row landscape:flex-col gap-1.5 landscape:h-full">
-            {statsConfig.map((s, i) => {
-              const isActive = activeFilters.status.includes(s.key);
-              return (
-                <button
-                  key={s.key}
-                  onClick={() => handleStatsClick(s.key)}
-                  className={`flex-1 p-1.5 rounded-xl border duration-200 text-center flex flex-col items-center justify-center ${s.color} ${isActive ? 'border-slate-400 ring-2 ring-slate-200 shadow-inner' : 'border-slate-100 hover:shadow-sm'}`}
-                >
-                  <div className="type-page-title leading-tight">{s.val}</div>
-                  <div className="type-utility uppercase mt-0.5">{s.label}</div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      <div className="flex-1 flex flex-col min-h-0 p-2 gap-2">
+        <StatFilterStrip
+          items={statsConfig}
+          isActive={(item) => activeFilters.status.includes(item.key)}
+          onSelect={(item) => handleStatsClick(item.key)}
+        />
         <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
           {searchQuery ? (
             <div className="flex-1 flex flex-col min-h-0 animate-fadeIn bg-white">
@@ -1685,7 +2030,8 @@ const Appointments = ({ data, setData, onLogout }) => {
                     activeAppt={activeConsultationAppt} 
                     onComplete={handleCompleteConsultation}
                     onDraftChange={handleConsultationDraftChange}
-                    isSubmitting={isSubmitting} 
+                    isSubmitting={isSubmitting}
+                    submittingAction={consultationSubmitAction}
                     clinicalCatalog={data.clinicalCatalog}
                  />
              </div>
@@ -1710,8 +2056,8 @@ const Appointments = ({ data, setData, onLogout }) => {
             </div>
             <div className="p-4 space-y-3">
               <AlertMessage message={modalError} />
-              <p className="type-body text-slate-700">Choose how to exit this ongoing consultation.</p>
-              <p className="type-secondary text-slate-500">A saved draft remains available through Resume Consult. Discarding removes unsaved work and returns the patient to the waiting queue.</p>
+              <p className="type-body text-slate-700">Save as draft to easily resume this consultation later, or discard the progress and return the patient to the waiting room.</p>
+              <p className="type-secondary text-slate-500"></p>
             </div>
             <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex gap-2">
               <button
@@ -1730,7 +2076,7 @@ const Appointments = ({ data, setData, onLogout }) => {
                 className="type-section-title flex-1 h-8 bg-teal-600 text-white rounded-lg flex justify-center items-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {exitConsultationAction === 'save' ? <Loader2 size={14} className="animate-spin" /> : null}
-                Save Draft & Exit
+                Save Draft
               </button>
             </div>
           </div>
@@ -1745,7 +2091,7 @@ const Appointments = ({ data, setData, onLogout }) => {
         </div>
       </Modal>
 
-      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setRebookingApptId(null); setIsFollowUpBooking(false); setModalError(''); setInvalidFields([]); setPatientSearchQuery(''); setNewAppt({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate }); setNewPatientDetails(defaultNewPatientDetails); }} title={rebookingApptId || isFollowUpBooking ? "ReBook Appointment" : "New Appointment"}
+      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setRebookingApptId(null); setIsFollowUpBooking(false); setFollowUpSourceApptId(''); setModalError(''); setInvalidFields([]); setPatientSearchQuery(''); setNewAppt({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate }); setNewPatientDetails(defaultNewPatientDetails); }} title={rebookingApptId ? "ReBook Appointment" : (isFollowUpBooking ? "Follow-Up Appointment" : "New Appointment")}
         footer={
           <button
             onClick={handleAddAppointment}
@@ -2092,25 +2438,17 @@ const Appointments = ({ data, setData, onLogout }) => {
       <Modal
         isOpen={isLeftEarlyModalOpen}
         onClose={() => { setIsLeftEarlyModalOpen(false); setActionAppt(null); setLeftEarlyReason(''); setModalError(''); }}
-        title="Mark Left Early"
+        title="Patient Walked Out ?"
         footer={
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => { setIsLeftEarlyModalOpen(false); setActionAppt(null); setLeftEarlyReason(''); setModalError(''); }}
-              disabled={isSubmitting}
-              className="type-section-title flex-1 h-8 text-slate-600 border border-slate-200 rounded-lg bg-white disabled:opacity-50"
-            >
-              Keep Waiting
-            </button>
+          <div className="flex">
             <button
               type="button"
               onClick={confirmLeftEarly}
               disabled={isSubmitting}
-              className="type-section-title flex-1 h-8 bg-red-600 text-white rounded-lg flex justify-center items-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="type-section-title w-full h-8 bg-red-600 text-white rounded-lg flex justify-center items-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : null}
-              Mark Left Early
+              {isSubmitting ? 'Confirming...' : 'Confirm'}
             </button>
           </div>
         }
@@ -2136,6 +2474,19 @@ const Appointments = ({ data, setData, onLogout }) => {
           </div>
         </div>
       </Modal>
+
+      <BillingPaymentModal
+        isOpen={isBillingPaymentModalOpen}
+        onClose={() => {
+          setIsBillingPaymentModalOpen(false);
+          setBillingPaymentContext(null);
+        }}
+        clinic={data.clinic}
+        context={billingPaymentContext}
+        onSaved={() => {
+          fetchAllData(true);
+        }}
+      />
 
       <Modal isOpen={isCancelModalOpen} onClose={() => { setIsCancelModalOpen(false); setActionAppt(null); }} title="Cancel Appointment" footer={
         <div className="flex gap-2">

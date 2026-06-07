@@ -8,6 +8,7 @@ import Modal from '../components/ui/Modal';
 import FAB from '../components/ui/FAB';
 import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
+import StatFilterStrip from '../components/ui/StatFilterStrip';
 import { useGlobalDate } from '../context/DateContext';
 import { getLocalDateString } from '../utils/dateUtils';
 import API_BASE_URL from '../config';
@@ -48,6 +49,12 @@ const Patients = ({ data, setData, onLogout }) => {
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const hasActiveFilters = typeFilter !== '' || dateRange.from || dateRange.to || searchQuery !== '';
+  const statsConfig = [
+    { key: 'all', label: 'All', val: stats?.total || 0, color: 'bg-blue-50 text-blue-700', filterKey: '', isToggle: false },
+    { key: 'new', label: 'New', val: stats?.new || 0, color: 'bg-green-50 text-green-700', filterKey: 'New', isToggle: true },
+    { key: 'returning', label: 'Returning', val: stats?.returning || 0, color: 'bg-amber-50 text-amber-700', filterKey: 'Returning', isToggle: true },
+    { key: 'follow-up', label: 'Follow-Up', val: '-', color: 'bg-red-50 text-red-700', filterKey: '', isToggle: false }
+  ];
 
   // Notifications
   const [notification, setNotification] = useState(null);
@@ -380,27 +387,18 @@ const renderPatientCard = (p) => {
         onLogout={onLogout}
       />
 
-      <div className="flex-1 flex flex-col landscape:flex-row min-h-0 p-2 gap-2">
-        {/* Quick Filters sidebar/topbar */}
-        <div className="flex-none landscape:w-[76px] md:landscape:w-20 pb-1 landscape:pb-0">
-          <div className="flex flex-row landscape:flex-col gap-1.5 landscape:h-full">
-            {[
-              { label: 'All', val: stats?.total || 0, color: 'bg-blue-50 text-blue-700', filterKey: '', isToggle: false },
-              { label: 'New', val: stats?.new || 0, color: 'bg-green-50 text-green-700', filterKey: 'New', isToggle: true },
-              { label: 'Returning', val: stats?.returning || 0, color: 'bg-amber-50 text-amber-700', filterKey: 'Returning', isToggle: true },
-              { label: 'Reminder Due', val: '-', color: 'bg-red-50 text-red-700', filterKey: '', isToggle: false }
-            ].map((s, i) => {
-              const isActive = typeFilter === s.filterKey && s.isToggle;
-              return (
-                <button key={i} onClick={() => { if(s.isToggle) { setTypeFilter(isActive ? '' : s.filterKey); }}}
-                  className={`flex-1 p-1.5 rounded-xl border transition-all duration-200 text-center flex flex-col items-center justify-center ${s.color} ${isActive ? 'border-slate-400 shadow-inner ring-2 ring-slate-200' : 'border-slate-100 hover:shadow-sm'}`}>
-                  <div className="type-page-title leading-tight">{s.val}</div>
-                  <div className="type-utility uppercase mt-0.5">{s.label}</div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      <div className="flex-1 flex flex-col min-h-0 p-2 gap-2">
+        <StatFilterStrip
+          items={statsConfig}
+          isActive={(item) => item.isToggle && typeFilter === item.filterKey}
+          onSelect={(item) => {
+            if (item.isToggle) {
+              setTypeFilter(typeFilter === item.filterKey ? '' : item.filterKey);
+            } else {
+              setTypeFilter('');
+            }
+          }}
+        />
 
         {/* Main List Area */}
         {/* Main List Area */}

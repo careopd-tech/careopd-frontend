@@ -334,7 +334,7 @@ const Auth = ({ authState, setAuthState, setUserRole, sessionMessage = '' }) => 
         {/* Header/Logo Section */}
         <div className="mb-8">
           <div className="flex items-center justify-center mb-4">
-            <img src="/icon_x192.png" alt="CareOPD Icon" className="w-16 h-16 object-contain" />
+            <img src="/CareOPD-Logo.png" alt="CareOPD Logo" className="h-14 object-contain" />
           </div>
           <h2 className="text-2xl font-bold text-slate-800 text-center leading-tight">
             {authState === 'login' && 'Welcome to CareOPD'}

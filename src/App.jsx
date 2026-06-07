@@ -213,7 +213,12 @@ const App = () => {
   }
 
   if (authState === 'restoring-session') {
-    return renderWithUpdatePrompt(<LaunchScreen />);
+    return renderWithUpdatePrompt(
+      <LaunchScreen
+        title="Restoring your session"
+        message="Please wait while we reconnect you to your clinic workspace."
+      />
+    );
   }
 
   if (authState !== 'authenticated') {

@@ -7,6 +7,7 @@ import Modal from '../components/ui/Modal';
 import FAB from '../components/ui/FAB';
 import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
+import StatFilterStrip from '../components/ui/StatFilterStrip';
 import API_BASE_URL from '../config';
 import { getSessionUser } from '../utils/auth';
 import { hasPermission } from '../utils/permissions';
@@ -515,6 +516,12 @@ const Doctors = ({ data, setData, onLogout }) => {
     onLeave: (data.doctors || []).filter(d => d.status === 'On Leave').length, 
     inactive: (data.doctors || []).filter(d => d.status === 'Inactive').length
   };
+  const statsConfig = [
+    { key: 'all', label: 'All', val: stats.total, color: 'bg-blue-50 text-blue-700', filterKey: '', isToggle: false },
+    { key: 'available', label: 'Available', val: stats.available, color: 'bg-green-50 text-green-700', filterKey: 'Available', isToggle: true },
+    { key: 'on-leave', label: 'On Leave', val: stats.onLeave, color: 'bg-amber-50 text-amber-700', filterKey: 'On Leave', isToggle: true },
+    { key: 'inactive', label: 'Inactive', val: stats.inactive, color: 'bg-slate-50 text-slate-500', filterKey: 'Inactive', isToggle: true }
+  ];
   
   const departments = [...new Set((data.doctors || []).map(d => d.department))];
 
@@ -630,27 +637,12 @@ const Doctors = ({ data, setData, onLogout }) => {
         onLogout={onLogout}
       />
 
-      <div className="flex-1 flex flex-col landscape:flex-row min-h-0 p-2 gap-2">
-        <div className="flex-none landscape:w-[72px] md:landscape:w-20 landscape:h-full pb-1 landscape:pb-0">
-          <div className="flex flex-row landscape:flex-col gap-1.5 landscape:h-full">
-            {[
-              { label: 'All', val: stats.total, color: 'bg-blue-50 text-blue-700', filterKey: '', isToggle: false },
-              { label: 'Available', val: stats.available, color: 'bg-green-50 text-green-700', filterKey: 'Available', isToggle: true },
-              { label: 'On Leave', val: stats.onLeave, color: 'bg-amber-50 text-amber-700', filterKey: 'On Leave', isToggle: true },
-              { label: 'Inactive', val: stats.inactive, color: 'bg-slate-50 text-slate-500', filterKey: 'Inactive', isToggle: true }
-            ].map((s, i) => {
-              const isActive = statusFilter === s.filterKey && s.isToggle;
-              return (
-                <button key={i} onClick={() => setStatusFilter(s.filterKey === statusFilter && s.isToggle ? '' : s.filterKey)}
-                  className={`flex-1 p-1.5 landscape:p-1 md:landscape:p-1.5 rounded-xl border transition-all duration-200 text-center relative select-none flex flex-col items-center justify-center ${s.color} 
-                    ${isActive ? 'border-slate-400 shadow-inner scale-[0.98]' : 'border-slate-100 hover:opacity-90 hover:shadow-sm active:scale-95 active:shadow-inner'}`}>
-                  <div className="type-page-title leading-tight">{s.val}</div>
-                  <div className="type-utility uppercase mt-0.5">{s.label}</div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      <div className="flex-1 flex flex-col min-h-0 p-2 gap-2">
+        <StatFilterStrip
+          items={statsConfig}
+          isActive={(item) => item.isToggle && statusFilter === item.filterKey}
+          onSelect={(item) => setStatusFilter(item.isToggle && item.filterKey === statusFilter ? '' : item.filterKey)}
+        />
 
         <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
           {renderAccordionSection('available', 'Available', CheckCircle, 'text-green-600', sections.available)}
