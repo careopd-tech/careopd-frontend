@@ -7,8 +7,9 @@ import {
   isTimeWithinDoctorShift,
   timeToMinutes
 } from '../../utils/schedule';
+import { getLocalDateString } from '../../utils/dateUtils';
 
-const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, clinic }) => {
+const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, clinic, currentDate }) => {
   if (!doctor) {
     return (
       <div className="p-6 text-center border-2 border-dashed border-slate-100 rounded-xl bg-slate-50">
@@ -18,7 +19,7 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, cl
     );
   }
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = currentDate || getLocalDateString();
   const isToday = date === todayStr;
   const now = new Date();
   const currentHour = now.getHours();
@@ -62,6 +63,12 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, cl
       const { h, m, str24 } = parseTime(t);
 
       if (isTimeWithinDoctorShift(str24, doctorShifts)) {
+        const isBooked = bookedTimes.includes(t);
+        let isCurrent = false;
+        if (isBooked && selectedTime === t) {
+          isCurrent = true;
+        }
+
         let isExpired = false;
         if (isToday) {
           if (h < currentHour || (h === currentHour && m <= currentMinute)) {
@@ -69,17 +76,9 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, cl
           }
         }
 
-        const isBooked = bookedTimes.includes(t);
-
         let status = 'Available';
         if (isExpired) status = 'Passed';
         else if (isBooked) status = 'Booked';
-
-        // ISSUE 3 FIX: Identify if this is the original appointment time being rescheduled
-        let isCurrent = false;
-        if (isBooked && selectedTime === t) {
-          isCurrent = true;
-        }
 
         result.push({ time: t, status, isCurrent });
       }

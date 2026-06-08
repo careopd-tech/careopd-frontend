@@ -19,6 +19,7 @@ import { hasPermission } from '../utils/permissions';
 import { getClinicSchedule, timeToMinutes } from '../utils/schedule';
 import { getAppointmentUiStatus, hasActiveConsultation as hasAppointmentActiveConsultation, hasVisitProgress as hasAppointmentVisitProgress } from '../utils/appointmentStatus';
 import { printLabOrderDocument, printPrescriptionDocument, printReceiptDocument } from '../utils/postConsultPrint';
+import { getLocalDateString } from '../utils/dateUtils';
 
 // --- ADDED: IMPORT THE EMR PAD ---
 import ConsultationPad from '../components/doctor/ConsultationPad';
@@ -28,7 +29,7 @@ import BillingPaymentModal from '../components/billing/BillingPaymentModal';
 const Appointments = ({ data, setData, onLogout }) => {
   // --- 1. CONTEXT & BASICS ---
   const dateContext = useGlobalDate();
-  const safeCurrentDate = dateContext?.currentDate || new Date().toISOString().split('T')[0];
+  const safeCurrentDate = dateContext?.currentDate || getLocalDateString();
   const clinicId = localStorage.getItem('clinicId');
   const userRole = localStorage.getItem('userRole') || 'admin';
   const doctorId = localStorage.getItem('doctorId') || '';
@@ -43,7 +44,7 @@ const Appointments = ({ data, setData, onLogout }) => {
   // --- NEW: 30-Day Window Boundary ---
   const maxDateObj = new Date(safeCurrentDate);
   maxDateObj.setDate(maxDateObj.getDate() + 30);
-  const maxDateStr = maxDateObj.toISOString().split('T')[0];
+  const maxDateStr = getLocalDateString(maxDateObj);
 
   // --- 2. STATE MANAGEMENT ---
   const [searchQuery, setSearchQuery] = useState('');
@@ -369,9 +370,8 @@ const Appointments = ({ data, setData, onLogout }) => {
   const departments = useMemo(() => [...new Set((data.doctors || []).map(d => d.department))], [data.doctors]);
 
   const validateFutureDate = (inputDate, inputTime) => {
-    const today = new Date().toISOString().split('T')[0];
-    if (inputDate < today) return false;
-    if (inputDate === today && inputTime) {
+    if (inputDate < safeCurrentDate) return false;
+    if (inputDate === safeCurrentDate && inputTime) {
       const now = new Date();
       const currentHours = now.getHours();
       const currentMinutes = now.getMinutes();
@@ -1466,9 +1466,17 @@ const Appointments = ({ data, setData, onLogout }) => {
 
   const openBillingPayment = async (appt) => {
     setOpenActionMenuId('');
-    const context = await loadPostConsultContext(appt);
-    setBillingPaymentContext(context);
     setIsBillingPaymentModalOpen(true);
+    setBillingPaymentContext({
+      appointment: appt,
+      patient: appt.patientId,
+      doctor: appt.doctorId
+    });
+
+    try {
+      const context = await loadPostConsultContext(appt);
+      setBillingPaymentContext(context);
+    } catch (err) {}
   };
 
   const handleCheckIn = async (appt) => {
@@ -1612,9 +1620,23 @@ const Appointments = ({ data, setData, onLogout }) => {
     const todayPhase = getTodayAppointmentPhase(appt);
     const cardStatus = getCardStatus(appt);
     const isProcessing = processingAppointmentId === appt._id;
-    const hasPrescription = Array.isArray(appt.medicines) && appt.medicines.length > 0;
     const hasLabOrder = Array.isArray(appt.labTests) && appt.labTests.length > 0;
     const hasPrintedPrescription = Boolean(appt.prescriptionPrintedAt || Number(appt.prescriptionPrintCount || 0) > 0);
+    const clinicConsultationFee = Number(data.clinic?.consultationFee || 0);
+    const activeClinicBillingServices = Array.isArray(data.clinic?.billingServices)
+      ? data.clinic.billingServices.filter((service) => service.active !== false).length
+      : 0;
+    const billingTotalAmount = Number(appt.billing?.totalAmount || appt.billing?.consultationFee || 0);
+    const billingAmountPaid = Number(appt.billing?.amountPaid || 0);
+    const hasBillingItems = Array.isArray(appt.billing?.items) && appt.billing.items.length > 0;
+    const expectedBillAmount = hasBillingItems || billingTotalAmount > 0 ? billingTotalAmount : clinicConsultationFee;
+    const hasOutstandingBalance = expectedBillAmount > billingAmountPaid;
+    const canCollectPayment = canManageAppointments && (
+      clinicConsultationFee > 0 ||
+      activeClinicBillingServices > 0 ||
+      hasBillingItems ||
+      billingAmountPaid > 0
+    );
     const hasReceipt = Boolean(
       appt.billing?.receiptNumber ||
       Number(appt.billing?.consultationFee || 0) > 0 ||
@@ -1652,7 +1674,7 @@ const Appointments = ({ data, setData, onLogout }) => {
       viewVitals: { label: 'View Vitals', icon: Activity, onClick: () => openViewVitals(appt) },
       printPrescription: { label: 'Print Prescription', icon: Printer, onClick: () => handlePrintPrescription(appt) },
       printLabOrder: { label: 'Print Lab Order', icon: FlaskConical, onClick: () => handlePrintLabOrder(appt) },
-      generateInvoice: { label: 'Generate Invoice', icon: Wallet, onClick: () => openBillingPayment(appt) },
+      collectPayment: { label: 'Collect Payment', icon: Wallet, onClick: () => openBillingPayment(appt), disabled: !canCollectPayment },
       printReceipt: { label: 'Print Receipt', icon: ReceiptText, onClick: () => handlePrintReceipt(appt) }
     };
 
@@ -1662,49 +1684,55 @@ const Appointments = ({ data, setData, onLogout }) => {
       ...(data.clinic?.type === 'Clinic' ? [actions.viewVitals] : []),
       actions.vitals
     ];
-    const testRecommendedOverflowActions = [
-      hasPrescription ? actions.printPrescription : null,
-      hasLabOrder ? actions.printLabOrder : null,
-      (hasPrintedPrescription || !hasPrescription) ? actions.generateInvoice : null,
-      hasReceipt ? actions.printReceipt : null
-    ].filter(Boolean);
-    const completedOverflowActions = [
-      (hasPrintedPrescription || !hasPrescription) ? actions.generateInvoice : null,
+    const closedLoopOverflowActions = [
+      canCollectPayment ? actions.collectPayment : null,
+      hasPrintedPrescription ? actions.printPrescription : null,
       hasLabOrder ? actions.printLabOrder : null,
       hasReceipt ? actions.printReceipt : null
     ].filter(Boolean);
 
     if (isTestRecommended) {
-      if (isTreatingPhysician) {
+      if (!hasPrintedPrescription) {
+        primaryAction = actions.printPrescription;
+      } else if (hasOutstandingBalance && canCollectPayment) {
+        primaryAction = actions.collectPayment;
+      } else if (isTreatingPhysician) {
         primaryAction = actions.followUp;
-        overflowActions = testRecommendedOverflowActions;
-      } else {
-        overflowActions = testRecommendedOverflowActions;
       }
+      overflowActions = [
+        ...closedLoopOverflowActions.filter((action) => action.label !== primaryAction?.label),
+        ...(isTreatingPhysician && primaryAction?.label !== actions.followUp.label ? [actions.followUp] : [])
+      ];
     } else if (isCompleted) {
-      primaryAction = hasPrescription ? actions.printPrescription : actions.generateInvoice;
-      overflowActions = completedOverflowActions;
+      if (!hasPrintedPrescription) {
+        primaryAction = actions.printPrescription;
+      } else if (hasOutstandingBalance && canCollectPayment) {
+        primaryAction = actions.collectPayment;
+      }
+      overflowActions = closedLoopOverflowActions.filter((action) => action.label !== primaryAction?.label);
     } else if (showActions && (isToday || isCarryoverVisit)) {
       if (uiStatus === 'Awaiting Reports') {
         if (isTreatingPhysician && appt.reportsReadyAt) {
           primaryAction = actions.consult;
-          overflowActions = clinicianOverflowActions;
+          overflowActions = [...clinicianOverflowActions, ...(canCollectPayment ? [actions.collectPayment] : [])];
         } else if (canManageAppointments && !appt.reportsReadyAt) {
           primaryAction = actions.reportsReady;
-          overflowActions = [];
+          overflowActions = canCollectPayment ? [actions.collectPayment] : [];
         }
       } else if (isInConsultation && isTreatingPhysician) {
         primaryAction = actions.consult;
-        overflowActions = clinicianOverflowActions;
+        overflowActions = [...clinicianOverflowActions, ...(canCollectPayment ? [actions.collectPayment] : [])];
       } else if (isCheckedIn || isCarryoverVisit) {
         if (isTreatingPhysician) {
           primaryAction = actions.consult;
-          overflowActions = isCheckedIn ? [...clinicianOverflowActions, actions.leftEarly] : clinicianOverflowActions;
+          overflowActions = isCheckedIn
+            ? [...clinicianOverflowActions, ...(canCollectPayment ? [actions.collectPayment] : []), actions.leftEarly]
+            : [...clinicianOverflowActions, ...(canCollectPayment ? [actions.collectPayment] : [])];
         } else if (canManageAppointments && hasPreConsultVitalsWorkflow && isCheckedIn) {
           primaryAction = actions.vitals;
-          overflowActions = [actions.leftEarly];
+          overflowActions = [...(canCollectPayment ? [actions.collectPayment] : []), actions.leftEarly];
         } else if (canManageAppointments && isCheckedIn) {
-          overflowActions = [actions.leftEarly];
+          overflowActions = [...(canCollectPayment ? [actions.collectPayment] : []), actions.leftEarly];
         }
       } else if (isToday && canManageAppointments) {
         if (todayPhase === 'arrival-window') {
@@ -1741,12 +1769,13 @@ const Appointments = ({ data, setData, onLogout }) => {
         <button
           type="button"
           onClick={action.onClick}
-          disabled={isProcessing}
+          disabled={isProcessing || action.disabled}
           className={`type-label h-8 rounded-lg flex items-center gap-1.5 whitespace-nowrap transition-colors disabled:opacity-70 ${
             isPrimary
               ? 'justify-center px-3 text-white bg-teal-600 hover:bg-teal-700 shadow-sm'
               : 'justify-start w-full px-3 text-slate-700 hover:bg-slate-50'
           }`}
+          title={action.disabled ? 'Print prescription first to unlock invoice.' : undefined}
         >
           {isPrimary && isProcessing ? <Loader2 size={13} className="animate-spin" /> : Icon ? <Icon size={13} /> : null}
           {action.label}
@@ -2279,11 +2308,11 @@ const Appointments = ({ data, setData, onLogout }) => {
               </select>
             </div>
           </div>
-          <div><label className="type-label block text-slate-500 mb-1 uppercase">Select Date <span className="text-red-500">*</span></label><input type="date" min={new Date().toISOString().split('T')[0]} max={maxDateStr} className={`type-body w-full p-2 border rounded-lg bg-slate-50 outline-none ${invalidFields.includes('date') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.date} onChange={(e) => setNewAppt({ ...newAppt, date: e.target.value, time: '' })} /></div>
+          <div><label className="type-label block text-slate-500 mb-1 uppercase">Select Date <span className="text-red-500">*</span></label><input type="date" min={safeCurrentDate} max={maxDateStr} className={`type-body w-full p-2 border rounded-lg bg-slate-50 outline-none ${invalidFields.includes('date') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.date} onChange={(e) => setNewAppt({ ...newAppt, date: e.target.value, time: '' })} /></div>
           <div>
             <label className="type-label block text-slate-500 mb-1 uppercase">Available Slots <span className="text-red-500">*</span></label>
             <div className={`rounded-lg ${invalidFields.includes('time') ? 'border border-red-500 p-1' : ''}`}>
-              <TimeSlotPicker selectedTime={newAppt.time} onSelect={(t) => setNewAppt({ ...newAppt, time: t })} doctor={getDoctorById(newAppt.doctorId)} date={newAppt.date} appointments={data.calendar30 || []} clinic={data.clinic} />
+              <TimeSlotPicker selectedTime={newAppt.time} onSelect={(t) => setNewAppt({ ...newAppt, time: t })} doctor={getDoctorById(newAppt.doctorId)} date={newAppt.date} appointments={data.calendar30 || []} clinic={data.clinic} currentDate={safeCurrentDate} />
             </div>
           </div>
         </div>
@@ -2301,7 +2330,7 @@ const Appointments = ({ data, setData, onLogout }) => {
         <div className="space-y-3">
           {actionAppt && (<div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex items-center justify-between mb-2"><span className="type-utility text-slate-500 uppercase">Currently Scheduled:</span><span className="type-body text-slate-700">{actionAppt.date} at {actionAppt.time}</span></div>)}
           <AlertMessage message={modalError} />
-          <div><label className="type-label block text-slate-500 mb-1 uppercase">New Date</label><input type="date" min={new Date().toISOString().split('T')[0]} max={maxDateStr} className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50" value={rescheduleData.date} onChange={(e) => setRescheduleData({ ...rescheduleData, date: e.target.value, time: '' })} /></div><div><label className="type-label block text-slate-500 mb-1 uppercase">Available Slots</label><TimeSlotPicker selectedTime={rescheduleData.time} onSelect={(t) => setRescheduleData({ ...rescheduleData, time: t })} doctor={getDoctorById(actionAppt?.doctorId)} date={rescheduleData.date} appointments={data.calendar30 || []} clinic={data.clinic} /></div>
+          <div><label className="type-label block text-slate-500 mb-1 uppercase">New Date</label><input type="date" min={safeCurrentDate} max={maxDateStr} className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50" value={rescheduleData.date} onChange={(e) => setRescheduleData({ ...rescheduleData, date: e.target.value, time: '' })} /></div><div><label className="type-label block text-slate-500 mb-1 uppercase">Available Slots</label><TimeSlotPicker selectedTime={rescheduleData.time} onSelect={(t) => setRescheduleData({ ...rescheduleData, time: t })} doctor={getDoctorById(actionAppt?.doctorId)} date={rescheduleData.date} appointments={data.calendar30 || []} clinic={data.clinic} currentDate={safeCurrentDate} /></div>
         </div>
       </Modal>
 

@@ -153,7 +153,8 @@ export const printLabOrderDocument = ({ clinic, appointment, patient, doctor, pr
 export const printReceiptDocument = ({ clinic, appointment, patient, doctor }) => {
   const billing = appointment?.billing || {};
   const payments = Array.isArray(billing.payments) ? billing.payments : [];
-  const hasReceipt = Boolean(billing.receiptNumber || billing.consultationFee > 0 || payments.length > 0);
+  const items = Array.isArray(billing.items) ? billing.items : [];
+  const hasReceipt = Boolean(billing.receiptNumber || billing.consultationFee > 0 || billing.totalAmount > 0 || payments.length > 0 || items.length > 0);
   if (!hasReceipt) return false;
 
   const content = `
@@ -167,12 +168,37 @@ export const printReceiptDocument = ({ clinic, appointment, patient, doctor }) =
         <div class="value">${escapeHtml(billing.paymentStatus || 'Unbilled')}</div>
       </div>
       <div class="card">
-        <div class="label">Consultation Fee</div>
-        <div class="value">Rs ${escapeHtml(Number(billing.consultationFee || 0).toFixed(2))}</div>
+        <div class="label">Total Payable</div>
+        <div class="value">Rs ${escapeHtml(Number(billing.totalAmount || billing.consultationFee || 0).toFixed(2))}</div>
         <div class="label" style="margin-top:12px;">Paid / Balance</div>
         <div class="value">Rs ${escapeHtml(Number(billing.amountPaid || 0).toFixed(2))} / Rs ${escapeHtml(Number(billing.balanceAmount || 0).toFixed(2))}</div>
       </div>
     </div>
+    <h2>Items</h2>
+    ${
+      items.length > 0
+        ? `
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Type</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map((item) => `
+                <tr>
+                  <td>${escapeHtml(item.name || '--')}</td>
+                  <td>${escapeHtml(item.type === 'consultation' ? 'Consultation' : 'Service')}</td>
+                  <td>Rs ${escapeHtml(Number(item.amount || 0).toFixed(2))}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `
+        : '<div class="card"><div class="muted">No billable items recorded yet.</div></div>'
+    }
     <h2>Payments</h2>
     ${
       payments.length > 0

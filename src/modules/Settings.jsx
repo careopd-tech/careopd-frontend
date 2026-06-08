@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Building2, MessageCircle, FileText, Plus, Edit2, ChevronDown, ChevronRight, UserPlus, Users, CheckCircle, AlertCircle, ShieldCheck
+  Building2, MessageCircle, FileText, Plus, Edit2, ChevronDown, ChevronRight, UserPlus, Users, CheckCircle, AlertCircle, ShieldCheck, Trash2
 } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import ModuleHeader from '../components/ui/ModuleHeader';
@@ -44,6 +44,17 @@ const normalizeSearchText = (value) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+
+const normalizeBillingServiceRows = (services = []) => (
+  Array.isArray(services)
+    ? services.map((service) => ({
+        _id: service?._id,
+        name: String(service?.name || ''),
+        price: service?.price === 0 || service?.price ? String(service.price) : '',
+        active: service?.active !== false
+      }))
+    : []
+);
 
 const Settings = ({ data, setData, onLogout }) => {
   const [expandedSection, setExpandedSection] = useState('clinic');
@@ -149,6 +160,8 @@ const Settings = ({ data, setData, onLogout }) => {
         if (clinicData) {
           const mergedData = {
              ...clinicData,
+             consultationFee: Number(clinicData.consultationFee || 0),
+             billingServices: Array.isArray(clinicData.billingServices) ? clinicData.billingServices : [],
              templates: (clinicData.templates && clinicData.templates.length > 0) ? clinicData.templates : DEFAULT_TEMPLATES,
              policies: (clinicData.policies && clinicData.policies.length > 0) ? clinicData.policies : DEFAULT_POLICIES
           };
@@ -255,6 +268,18 @@ const Settings = ({ data, setData, onLogout }) => {
       if (!formData.workingHoursStart) errors.push('workingHoursStart');
       if (!formData.workingHoursEnd) errors.push('workingHoursEnd');
       if (!formData.appointmentWindowMinutes) errors.push('appointmentWindowMinutes');
+    } else if (editModal.type === 'billing_services') {
+      const numericConsultationFee = Number(formData.consultationFee);
+      if (!Number.isFinite(numericConsultationFee) || numericConsultationFee < 0) errors.push('consultationFee');
+
+      const hasInvalidService = (formData.billingServices || []).some((service) => {
+        const name = String(service?.name || '').trim();
+        const priceRaw = String(service?.price ?? '').trim();
+        if (!name && !priceRaw) return false;
+        const numericPrice = Number(priceRaw);
+        return !name || !Number.isFinite(numericPrice) || numericPrice < 0;
+      });
+      if (hasInvalidService) errors.push('billingServices');
     } else if (editModal.type === 'template' || editModal.type === 'policy') {
       if (!formData.title) errors.push('title');
       if (!formData.text) errors.push('text');
@@ -312,6 +337,18 @@ const Settings = ({ data, setData, onLogout }) => {
     } else if (editModal.type === 'consultation_workflow') {
       updatePayload = {
         preConsultVitalsEnabled: formData.preConsultVitalsEnabled === true
+      };
+    } else if (editModal.type === 'billing_services') {
+      updatePayload = {
+        consultationFee: Number(formData.consultationFee || 0),
+        billingServices: (formData.billingServices || [])
+          .map((service) => ({
+            _id: service._id,
+            name: String(service.name || '').trim(),
+            price: Number(service.price || 0),
+            active: service.active !== false
+          }))
+          .filter((service) => service.name)
       };
     } else if (editModal.stateKey === 'hours') {
       updatePayload = { hours: formData.value };
@@ -936,6 +973,24 @@ const Settings = ({ data, setData, onLogout }) => {
               })}
             />
           )
+        },
+        {
+          key: 'billing-services',
+          searchText: `billing services consultation fee pricing ecg blood sugar diabetic check ${data.clinic?.consultationFee || 0} ${(data.clinic?.billingServices || []).map(service => `${service.name} ${service.price}`).join(' ')}`,
+          render: () => (
+            <SettingItem
+              title="Billing & Services"
+              subtitle={`Consultation Rs ${Number(data.clinic?.consultationFee || 0).toFixed(2)} • ${(data.clinic?.billingServices || []).filter(service => service.active !== false).length} services configured`}
+              onEdit={() => openEdit({
+                title: 'Billing & Services',
+                type: 'billing_services',
+                initialData: {
+                  consultationFee: String(Number(data.clinic?.consultationFee || 0)),
+                  billingServices: normalizeBillingServiceRows(data.clinic?.billingServices || [])
+                }
+              })}
+            />
+          )
         }
       );
 
@@ -1258,6 +1313,18 @@ const Settings = ({ data, setData, onLogout }) => {
                   }
                 })}
               />
+              <SettingItem
+                title="Billing & Services"
+                subtitle={`Consultation Rs ${Number(data.clinic?.consultationFee || 0).toFixed(2)} - ${(data.clinic?.billingServices || []).filter(service => service.active !== false).length} services configured`}
+                onEdit={() => openEdit({
+                  title: 'Billing & Services',
+                  type: 'billing_services',
+                  initialData: {
+                    consultationFee: String(Number(data.clinic?.consultationFee || 0)),
+                    billingServices: normalizeBillingServiceRows(data.clinic?.billingServices || [])
+                  }
+                })}
+              />
               {canConfigureVitalsWorkflow && (
                 <SettingItem
                   title="Consultation Workflow"
@@ -1492,6 +1559,86 @@ const Settings = ({ data, setData, onLogout }) => {
                  <p className="type-secondary text-slate-500 mt-1">Adds pre-consult vitals capture to the appointment workflow. Consultation is not blocked.</p>
                </div>
              </label>
+           )}
+
+           {editModal?.type === 'billing_services' && (
+             <>
+               <div>
+                 <label className="type-label block text-slate-500 mb-1 uppercase">Consultation Fee *</label>
+                 <input
+                   type="number"
+                   min="0"
+                   step="0.01"
+                   className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('consultationFee') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
+                   value={formData.consultationFee || ''}
+                   onChange={e => setFormData({ ...formData, consultationFee: e.target.value })}
+                 />
+               </div>
+
+               <div className="space-y-2">
+                 <div className="flex items-center justify-between">
+                   <label className="type-label text-slate-500 uppercase">Available Services</label>
+                   <button
+                     type="button"
+                     onClick={() => setFormData({
+                       ...formData,
+                       billingServices: [...(formData.billingServices || []), { name: '', price: '', active: true }]
+                     })}
+                     className="type-label text-teal-600 bg-teal-50 border border-teal-100 px-2 py-1 rounded-lg flex items-center gap-1"
+                   >
+                     <Plus size={12} /> Add Service
+                   </button>
+                 </div>
+
+                 <div className="space-y-2">
+                   {(formData.billingServices || []).length === 0 && (
+                     <div className="type-secondary text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded-lg">
+                       No services configured yet.
+                     </div>
+                   )}
+
+                   {(formData.billingServices || []).map((service, index) => (
+                     <div key={service._id || `service-${index}`} className={`grid grid-cols-[minmax(0,1fr)_110px_auto] gap-2 items-center border rounded-lg p-2 ${invalidFields.includes('billingServices') ? 'border-red-200 bg-red-50/40' : 'border-slate-200 bg-slate-50'}`}>
+                       <input
+                         type="text"
+                         placeholder="Service name"
+                         className="type-body w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-500"
+                         value={service.name || ''}
+                         onChange={e => {
+                           const nextServices = [...(formData.billingServices || [])];
+                           nextServices[index] = { ...nextServices[index], name: e.target.value };
+                           setFormData({ ...formData, billingServices: nextServices });
+                         }}
+                       />
+                       <input
+                         type="number"
+                         min="0"
+                         step="0.01"
+                         placeholder="Price"
+                         className="type-body w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-500"
+                         value={service.price || ''}
+                         onChange={e => {
+                           const nextServices = [...(formData.billingServices || [])];
+                           nextServices[index] = { ...nextServices[index], price: e.target.value };
+                           setFormData({ ...formData, billingServices: nextServices });
+                         }}
+                       />
+                       <button
+                         type="button"
+                         onClick={() => setFormData({
+                           ...formData,
+                           billingServices: (formData.billingServices || []).filter((_, serviceIndex) => serviceIndex !== index)
+                         })}
+                         className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50 flex items-center justify-center"
+                         aria-label="Delete service"
+                       >
+                         <Trash2 size={14} />
+                       </button>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+             </>
            )}
 
            {(editModal?.type === 'template' || editModal?.type === 'policy') && (
