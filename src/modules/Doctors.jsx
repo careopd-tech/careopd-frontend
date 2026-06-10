@@ -90,14 +90,14 @@ const Doctors = ({ data, setData, onLogout }) => {
   const getWorkspaceDoctorHours = (doctorState = {}) => (
     isSoloWorkspace
       ? {
-          morningStart: clinicSchedule.workingHoursStart,
-          morningEnd: clinicSchedule.workingHoursEnd,
-          eveningStart: '',
-          eveningEnd: ''
+          morningStart: clinicSchedule.morningStart,
+          morningEnd: clinicSchedule.morningEnd,
+          eveningStart: clinicSchedule.eveningStart,
+          eveningEnd: clinicSchedule.eveningEnd
         }
       : {
-          morningStart: doctorState.morningStart || clinicSchedule.workingHoursStart,
-          morningEnd: doctorState.morningEnd || clinicSchedule.workingHoursEnd,
+          morningStart: doctorState.morningStart || clinicSchedule.morningStart,
+          morningEnd: doctorState.morningEnd || clinicSchedule.morningEnd,
           eveningStart: doctorState.eveningStart || '',
           eveningEnd: doctorState.eveningEnd || ''
         }
@@ -873,10 +873,10 @@ const Doctors = ({ data, setData, onLogout }) => {
                       type="button"
                       onClick={() => setNewDoctor(prev => ({
                         ...prev,
-                        morningStart: clinicSchedule.workingHoursStart,
-                        morningEnd: clinicSchedule.workingHoursEnd,
-                        eveningStart: '',
-                        eveningEnd: ''
+                        morningStart: clinicSchedule.morningStart,
+                        morningEnd: clinicSchedule.morningEnd,
+                        eveningStart: clinicSchedule.eveningStart,
+                        eveningEnd: clinicSchedule.eveningEnd
                       }))}
                       className="type-label rounded-md border border-teal-200 bg-white px-2.5 py-1 text-teal-700 transition-colors hover:bg-teal-100"
                     >
@@ -890,11 +890,11 @@ const Doctors = ({ data, setData, onLogout }) => {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="type-label block text-slate-500 mb-0.5 uppercase">Start Time <span className="text-red-500">*</span></label>
-                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('morningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningStart} onChange={e => setNewDoctor({...newDoctor, morningStart: e.target.value})} />
+                      <input type="time" min={clinicSchedule.morningStart} max={clinicSchedule.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('morningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningStart} onChange={e => setNewDoctor({...newDoctor, morningStart: e.target.value})} />
                     </div>
                     <div>
                       <label className="type-label block text-slate-500 mb-0.5 uppercase">End Time <span className="text-red-500">*</span></label>
-                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('morningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningEnd} onChange={e => setNewDoctor({...newDoctor, morningEnd: e.target.value})} />
+                      <input type="time" min={clinicSchedule.morningStart} max={clinicSchedule.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('morningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningEnd} onChange={e => setNewDoctor({...newDoctor, morningEnd: e.target.value})} />
                     </div>
                   </div>
                 </div>
@@ -913,11 +913,11 @@ const Doctors = ({ data, setData, onLogout }) => {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="type-label block text-slate-500 mb-0.5 uppercase">Start Time</label>
-                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('eveningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningStart} onChange={e => setNewDoctor({...newDoctor, eveningStart: e.target.value})} />
+                      <input type="time" min={clinicSchedule.eveningStart || clinicSchedule.morningStart} max={clinicSchedule.eveningEnd || clinicSchedule.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('eveningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningStart} onChange={e => setNewDoctor({...newDoctor, eveningStart: e.target.value})} />
                     </div>
                     <div>
                       <label className="type-label block text-slate-500 mb-0.5 uppercase">End Time</label>
-                      <input type="time" min={clinicSchedule.workingHoursStart} max={clinicSchedule.workingHoursEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('eveningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningEnd} onChange={e => setNewDoctor({...newDoctor, eveningEnd: e.target.value})} />
+                      <input type="time" min={clinicSchedule.eveningStart || clinicSchedule.morningStart} max={clinicSchedule.eveningEnd || clinicSchedule.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('eveningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningEnd} onChange={e => setNewDoctor({...newDoctor, eveningEnd: e.target.value})} />
                     </div>
                   </div>
                   <p className="type-label mt-1 text-slate-400">Optional. Leave this blank if the doctor follows a single continuous shift.</p>

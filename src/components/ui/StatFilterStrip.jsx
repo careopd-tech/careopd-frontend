@@ -6,9 +6,11 @@ const StatFilterStrip = ({
   onSelect = () => {},
   className = ''
 }) => {
-  const visibleCount = items.length > 4 ? 3.2 : 4;
   const gapRem = 0.375;
-  const cardWidth = `calc((100% - ${(visibleCount - 1) * gapRem}rem) / ${visibleCount})`;
+  const baseColumns = 4;
+  const cardWidth = items.length > 0
+    ? `calc((100% - ${(baseColumns - 1) * gapRem}rem) / ${baseColumns})`
+    : '0px';
 
   return (
     <div className={`overflow-x-auto scrollbar-hide px-1 ${className}`}>
@@ -29,7 +31,7 @@ const StatFilterStrip = ({
               }`}
               style={{
                 width: cardWidth,
-                minWidth: '92px'
+                minWidth: cardWidth
               }}
             >
               <div className="type-page-title leading-tight">{item.val}</div>

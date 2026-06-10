@@ -49,6 +49,23 @@ const getInitialConsultationState = (appointment = {}) => {
   };
 };
 
+const formatLabOrderTimestamp = (order = {}) => {
+  if (order?.recordedAt) {
+    const parsed = new Date(order.recordedAt);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+    }
+  }
+  if (order?.date && order?.time) return `${order.date} | ${order.time}`;
+  return order?.date || '--';
+};
+
 const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, submittingAction = '', clinicalCatalog }) => {
   const loggedInDoctorId = localStorage.getItem('doctorId');
   const loggedInRole = localStorage.getItem('userRole') || 'admin';
@@ -80,6 +97,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
   const [sheetSearch, setSheetSearch] = useState('');
   const [tempComplaintSelection, setTempComplaintSelection] = useState([]);
   const [tempLabSelection, setTempLabSelection] = useState([]);
+  const [isPreviousLabOrdersExpanded, setIsPreviousLabOrdersExpanded] = useState(false);
 
   const complaintCatalog = (clinicalCatalog?.complaints || []).filter(isActiveCatalogItem);
   const labCatalog = (clinicalCatalog?.labTests || []).filter(isActiveCatalogItem);
@@ -95,6 +113,8 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
     items: group.items.map((item) => item.label)
   }));
   const previousConsultation = activeAppt?.previousConsultation || null;
+  const previousLabOrders = Array.isArray(activeAppt?.previousLabOrders) ? activeAppt.previousLabOrders : [];
+  const isReportReview = Boolean(activeAppt?.reportsReadyAt && previousLabOrders.length > 0);
 
 
 
@@ -134,6 +154,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
     setTempComplaintSelection([]);
     setTempLabSelection([]);
     setSelectedPastVisit(null);
+    setIsPreviousLabOrdersExpanded(false);
   }, [activeAppt?._id]);
 
   useEffect(() => {
@@ -346,28 +367,20 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
           )}
         </section>
 
-        {previousConsultation && (
-          <section className="bg-white border border-amber-200 rounded-xl shadow-sm overflow-hidden">
-            <div className="p-3 bg-amber-50/70 border-b border-amber-100">
-              <div className="text-[12px] font-bold uppercase tracking-wider text-amber-800">
-                {activeAppt?.consultationMode === 'Addendum' || activeAppt?.activeConsultationMode === 'Addendum'
-                  ? 'Previous Clinical Record'
-                  : (activeAppt?.type === 'Follow-Up' ? 'Previous Closed Consultation' : 'Previous Consultation')}
-              </div>
-              <div className="text-[12px] text-amber-700 mt-1">
-                {previousConsultation.date || '--'} {previousConsultation.time ? `| ${previousConsultation.time}` : ''}
-                {previousConsultation.type ? ` | ${previousConsultation.type}` : ''}
-                {previousConsultation.doctor?.name ? ` | Dr. ${previousConsultation.doctor.name.replace(/^Dr\.\s*/i, '')}` : ''}
-              </div>
+        {previousConsultation && !isReportReview && (
+          <div className="px-1">
+            <div className="text-[12px] text-slate-500">
+              {activeAppt?.consultationMode === 'Addendum' || activeAppt?.activeConsultationMode === 'Addendum'
+                ? 'Linked to earlier clinical record'
+                : 'Linked to visit'}{' '}
+              <span className="font-semibold text-slate-700">
+                {previousConsultation.date || '--'}{previousConsultation.time ? ` | ${previousConsultation.time}` : ''}
+              </span>
+              {previousConsultation.doctor?.name ? (
+                <span className="text-slate-500">{` | Dr. ${previousConsultation.doctor.name.replace(/^Dr\.\s*/i, '')}`}</span>
+              ) : null}
             </div>
-            <div className="px-3 py-2.5 bg-amber-50/20">
-              <div className="text-[12px] text-amber-800">
-                {activeAppt?.consultationMode === 'Addendum' || activeAppt?.activeConsultationMode === 'Addendum'
-                  ? 'This follow-up note is linked to the same appointment. The earlier clinical record remains unchanged, and the latest closed prescription has been carried into the form below as the starting point.'
-                  : 'This follow-up is linked to the earlier closed visit. Previous prescription details are preserved and have been carried into the form below for this new record.'}
-              </div>
-            </div>
-          </section>
+          </div>
         )}
 
         {/* --- EMR WRAPPER --- */}
@@ -626,6 +639,39 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
           </section>
 
           <hr className="border-slate-100" />
+
+          {previousLabOrders.length > 0 && (
+            <section className="rounded-xl border border-amber-200 bg-amber-50/40 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setIsPreviousLabOrdersExpanded((prev) => !prev)}
+                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left"
+              >
+                <div>
+                  <div className="text-[12px] font-bold uppercase tracking-wider text-amber-800">Previous Lab Test Orders</div>
+                  <div className="text-[12px] text-amber-700 mt-0.5">{previousLabOrders.length} prior {previousLabOrders.length === 1 ? 'order' : 'orders'} on this appointment</div>
+                </div>
+                <ChevronDown size={16} className={`text-amber-700 transition-transform ${isPreviousLabOrdersExpanded ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isPreviousLabOrdersExpanded && (
+                <div className="border-t border-amber-200 bg-white/80 px-3 py-2.5 space-y-2">
+                  {previousLabOrders.map((order, index) => (
+                    <div key={order._id || index} className="rounded-lg border border-amber-100 bg-white px-2.5 py-2">
+                      <div className="text-[12px] font-bold text-amber-900">{formatLabOrderTimestamp(order)}</div>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {(order.labTests || []).map((test, testIndex) => (
+                          <span key={`${order._id || index}-${test.name}-${testIndex}`} className="bg-amber-50 text-amber-800 px-2 py-1 rounded-md text-[12px] font-medium border border-amber-200">
+                            {test.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
 
           {/* LAB TESTS / DIAGNOSTICS */}
           <section>

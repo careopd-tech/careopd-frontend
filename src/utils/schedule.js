@@ -1,6 +1,12 @@
-export const DEFAULT_CLINIC_START_TIME = '09:00';
-export const DEFAULT_CLINIC_END_TIME = '17:00';
+export const DEFAULT_CLINIC_START_TIME = '10:00';
+export const DEFAULT_CLINIC_END_TIME = '20:00';
+export const DEFAULT_CLINIC_MORNING_START_TIME = '10:00';
+export const DEFAULT_CLINIC_MORNING_END_TIME = '13:00';
+export const DEFAULT_CLINIC_EVENING_START_TIME = '17:00';
+export const DEFAULT_CLINIC_EVENING_END_TIME = '20:00';
 export const DEFAULT_APPOINTMENT_WINDOW_MINUTES = 15;
+export const FULL_DAY_START_TIME = '00:00';
+export const FULL_DAY_END_TIME = '23:59';
 export const APPOINTMENT_WINDOW_OPTIONS = [5, 10, 15, 20, 30, 45, 60];
 
 const TIME_VALUE_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -35,22 +41,70 @@ export const formatTimeLabel = (value) => {
   return `${displayHours}:${String(minutes).padStart(2, '0')} ${suffix}`;
 };
 
-export const formatClinicHoursLabel = (start, end) => {
+export const formatClinicHoursLabel = (start, end, open24Hours = false) => {
+  if (open24Hours) return 'Open 24 Hours';
   const safeStart = normalizeTimeValue(start, DEFAULT_CLINIC_START_TIME);
   const safeEnd = normalizeTimeValue(end, DEFAULT_CLINIC_END_TIME);
   return `${formatTimeLabel(safeStart)} - ${formatTimeLabel(safeEnd)}`;
 };
 
+export const buildClinicShiftWindows = (clinic = {}) => {
+  const open24Hours = clinic?.open24Hours === true;
+  if (open24Hours) {
+    return [{ start: FULL_DAY_START_TIME, end: FULL_DAY_END_TIME }];
+  }
+
+  const morningStart = normalizeTimeValue(clinic.morningStart, normalizeTimeValue(clinic.workingHoursStart, DEFAULT_CLINIC_MORNING_START_TIME));
+  const morningEnd = normalizeTimeValue(clinic.morningEnd, normalizeTimeValue(clinic.workingHoursEnd, DEFAULT_CLINIC_MORNING_END_TIME));
+  const eveningStart = normalizeTimeValue(clinic.eveningStart, DEFAULT_CLINIC_EVENING_START_TIME);
+  const eveningEnd = normalizeTimeValue(clinic.eveningEnd, DEFAULT_CLINIC_EVENING_END_TIME);
+  const shifts = [];
+
+  if (morningStart && morningEnd) {
+    shifts.push({ start: morningStart, end: morningEnd });
+  }
+
+  if (eveningStart && eveningEnd) {
+    shifts.push({ start: eveningStart, end: eveningEnd });
+  }
+
+  if (shifts.length === 0) {
+    shifts.push({ start: DEFAULT_CLINIC_MORNING_START_TIME, end: DEFAULT_CLINIC_MORNING_END_TIME });
+    shifts.push({ start: DEFAULT_CLINIC_EVENING_START_TIME, end: DEFAULT_CLINIC_EVENING_END_TIME });
+  }
+
+  return shifts;
+};
+
+export const formatClinicShiftSummary = (shifts = [], open24Hours = false) => {
+  if (open24Hours) return 'Open 24 Hours';
+  return shifts
+    .map((shift) => `${formatTimeLabel(shift.start)} - ${formatTimeLabel(shift.end)}`)
+    .join(', ');
+};
+
 export const getClinicSchedule = (clinic = {}) => {
-  const workingHoursStart = normalizeTimeValue(clinic.workingHoursStart, DEFAULT_CLINIC_START_TIME);
-  const workingHoursEnd = normalizeTimeValue(clinic.workingHoursEnd, DEFAULT_CLINIC_END_TIME);
+  const open24Hours = clinic?.open24Hours === true;
+  const shifts = buildClinicShiftWindows(clinic);
+  const morningStart = shifts[0]?.start || DEFAULT_CLINIC_START_TIME;
+  const morningEnd = shifts[0]?.end || DEFAULT_CLINIC_END_TIME;
+  const eveningStart = shifts[1]?.start || '';
+  const eveningEnd = shifts[1]?.end || '';
+  const workingHoursStart = shifts[0]?.start || DEFAULT_CLINIC_START_TIME;
+  const workingHoursEnd = shifts[shifts.length - 1]?.end || DEFAULT_CLINIC_END_TIME;
   const appointmentWindowMinutes = normalizeAppointmentWindow(clinic.appointmentWindowMinutes);
 
   return {
+    open24Hours,
+    morningStart,
+    morningEnd,
+    eveningStart,
+    eveningEnd,
+    shifts,
     workingHoursStart,
     workingHoursEnd,
     appointmentWindowMinutes,
-    hours: formatClinicHoursLabel(workingHoursStart, workingHoursEnd)
+    hours: formatClinicShiftSummary(shifts, open24Hours)
   };
 };
 
@@ -74,17 +128,61 @@ export const generateTimeSlots = (slotMinutes = DEFAULT_APPOINTMENT_WINDOW_MINUT
   return slots;
 };
 
-export const validateClinicSchedule = ({ workingHoursStart, workingHoursEnd, appointmentWindowMinutes }) => {
-  if (!TIME_VALUE_REGEX.test(String(workingHoursStart || ''))) {
-    return 'Enter a valid clinic start time.';
+export const validateClinicSchedule = ({
+  workingHoursStart,
+  workingHoursEnd,
+  appointmentWindowMinutes,
+  open24Hours,
+  morningStart,
+  morningEnd,
+  eveningStart,
+  eveningEnd
+}) => {
+  if (open24Hours === true) {
+    const normalizedWindow = normalizeAppointmentWindow(appointmentWindowMinutes);
+    if (Number(appointmentWindowMinutes) !== normalizedWindow) {
+      return 'Appointment window must be between 5 and 120 minutes in 5-minute steps.';
+    }
+    return '';
   }
 
-  if (!TIME_VALUE_REGEX.test(String(workingHoursEnd || ''))) {
-    return 'Enter a valid clinic end time.';
+  const resolvedMorningStart = normalizeTimeValue(morningStart, normalizeTimeValue(workingHoursStart, ''));
+  const resolvedMorningEnd = normalizeTimeValue(morningEnd, normalizeTimeValue(workingHoursEnd, ''));
+  const resolvedEveningStart = normalizeTimeValue(eveningStart, '');
+  const resolvedEveningEnd = normalizeTimeValue(eveningEnd, '');
+
+  if (!TIME_VALUE_REGEX.test(String(resolvedMorningStart || ''))) {
+    return 'Enter a valid morning start time.';
   }
 
-  if (timeToMinutes(workingHoursStart) >= timeToMinutes(workingHoursEnd)) {
-    return 'Clinic end time must be later than clinic start time.';
+  if (!TIME_VALUE_REGEX.test(String(resolvedMorningEnd || ''))) {
+    return 'Enter a valid morning end time.';
+  }
+
+  if (timeToMinutes(resolvedMorningStart) >= timeToMinutes(resolvedMorningEnd)) {
+    return 'Morning shift end time must be later than start time.';
+  }
+
+  if ((resolvedEveningStart && !resolvedEveningEnd) || (!resolvedEveningStart && resolvedEveningEnd)) {
+    return 'Evening shift must include both start and end time.';
+  }
+
+  if (resolvedEveningStart && resolvedEveningEnd) {
+    if (timeToMinutes(resolvedMorningStart) >= timeToMinutes(resolvedEveningStart)) {
+      return 'Evening shift must be later than the morning shift.';
+    }
+
+    if (timeToMinutes(resolvedMorningEnd) > timeToMinutes(resolvedEveningStart)) {
+      return 'Evening shift cannot overlap the morning shift.';
+    }
+
+    if (!TIME_VALUE_REGEX.test(String(resolvedEveningStart || '')) || !TIME_VALUE_REGEX.test(String(resolvedEveningEnd || ''))) {
+      return 'Enter valid evening shift timings.';
+    }
+
+    if (timeToMinutes(resolvedEveningStart) >= timeToMinutes(resolvedEveningEnd)) {
+      return 'Evening shift end time must be later than start time.';
+    }
   }
 
   const normalizedWindow = normalizeAppointmentWindow(appointmentWindowMinutes);
@@ -113,9 +211,6 @@ export const validateDoctorWorkingHours = ({
     return 'Secondary working hours must include both start and end time.';
   }
 
-  const clinicStartMinutes = timeToMinutes(schedule.workingHoursStart);
-  const clinicEndMinutes = timeToMinutes(schedule.workingHoursEnd);
-
   const validateShift = (label, start, end) => {
     if (!start && !end) return '';
     if (!TIME_VALUE_REGEX.test(start) || !TIME_VALUE_REGEX.test(end)) {
@@ -129,7 +224,12 @@ export const validateDoctorWorkingHours = ({
       return `${label} end time must be later than start time.`;
     }
 
-    if (startMinutes < clinicStartMinutes || endMinutes > clinicEndMinutes) {
+    const fitsWithinClinicShift = schedule.shifts.some((shift) => (
+      startMinutes >= timeToMinutes(shift.start) &&
+      endMinutes <= timeToMinutes(shift.end)
+    ));
+
+    if (!fitsWithinClinicShift) {
       return `${label} working hours must stay within clinic working hours.`;
     }
 
@@ -142,6 +242,10 @@ export const validateDoctorWorkingHours = ({
   const secondaryError = validateShift('Secondary', eveningStart, eveningEnd);
   if (secondaryError) return secondaryError;
 
+  if (eveningStart && timeToMinutes(morningStart) >= timeToMinutes(eveningStart)) {
+    return 'Secondary working hours must be later than the primary shift.';
+  }
+
   if (eveningStart && timeToMinutes(morningEnd) > timeToMinutes(eveningStart)) {
     return 'Secondary working hours cannot overlap the primary shift.';
   }
@@ -152,10 +256,7 @@ export const validateDoctorWorkingHours = ({
 export const getDoctorShiftWindows = (doctor = {}, clinic = {}) => {
   const schedule = getClinicSchedule(clinic);
   if (isSoloClinic(clinic)) {
-    return [{
-      start: schedule.workingHoursStart,
-      end: schedule.workingHoursEnd
-    }];
+    return schedule.shifts;
   }
   const morningStart = normalizeTimeValue(doctor.morningStart, '');
   const morningEnd = normalizeTimeValue(doctor.morningEnd, '');
@@ -173,10 +274,7 @@ export const getDoctorShiftWindows = (doctor = {}, clinic = {}) => {
   }
 
   if (shifts.length === 0) {
-    shifts.push({
-      start: schedule.workingHoursStart,
-      end: schedule.workingHoursEnd
-    });
+    return schedule.shifts;
   }
 
   return shifts;

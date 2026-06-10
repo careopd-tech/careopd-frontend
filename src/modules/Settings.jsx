@@ -11,6 +11,12 @@ import { authFetch, getSessionUser, updateSessionFromAuth } from '../utils/auth'
 import { hasPermission } from '../utils/permissions';
 import {
   APPOINTMENT_WINDOW_OPTIONS,
+  DEFAULT_CLINIC_END_TIME,
+  DEFAULT_CLINIC_EVENING_END_TIME,
+  DEFAULT_CLINIC_EVENING_START_TIME,
+  DEFAULT_CLINIC_MORNING_END_TIME,
+  DEFAULT_CLINIC_MORNING_START_TIME,
+  DEFAULT_CLINIC_START_TIME,
   formatClinicScheduleSummary,
   getClinicSchedule,
   normalizeAppointmentWindow,
@@ -265,8 +271,13 @@ const Settings = ({ data, setData, onLogout }) => {
     } else if (editModal.type === 'single_input') {
       if (!formData.value) errors.push('value');
     } else if (editModal.type === 'clinic_schedule') {
-      if (!formData.workingHoursStart) errors.push('workingHoursStart');
-      if (!formData.workingHoursEnd) errors.push('workingHoursEnd');
+      if (formData.open24Hours !== true) {
+        if (!formData.morningStart) errors.push('morningStart');
+        if (!formData.morningEnd) errors.push('morningEnd');
+        if ((formData.eveningStart && !formData.eveningEnd) || (!formData.eveningStart && formData.eveningEnd)) {
+          errors.push('eveningStart', 'eveningEnd');
+        }
+      }
       if (!formData.appointmentWindowMinutes) errors.push('appointmentWindowMinutes');
     } else if (editModal.type === 'billing_services') {
       const numericConsultationFee = Number(formData.consultationFee);
@@ -292,13 +303,39 @@ const Settings = ({ data, setData, onLogout }) => {
 
     if (editModal.type === 'clinic_schedule') {
       const scheduleError = validateClinicSchedule({
-        workingHoursStart: formData.workingHoursStart,
-        workingHoursEnd: formData.workingHoursEnd,
+        open24Hours: formData.open24Hours === true,
+        morningStart: formData.morningStart,
+        morningEnd: formData.morningEnd,
+        eveningStart: formData.eveningStart,
+        eveningEnd: formData.eveningEnd,
         appointmentWindowMinutes: formData.appointmentWindowMinutes
       });
 
       if (scheduleError) {
-        setInvalidFields(['workingHoursStart', 'workingHoursEnd', 'appointmentWindowMinutes']);
+        let scheduleErrorFields = ['appointmentWindowMinutes'];
+        const scheduleErrorText = scheduleError.toLowerCase();
+        if (scheduleErrorText.includes('evening shift must be later than the morning shift')) {
+          scheduleErrorFields = ['morningStart', 'eveningStart'];
+        } else if (scheduleErrorText.includes('evening shift cannot overlap')) {
+          scheduleErrorFields = ['morningEnd', 'eveningStart'];
+        } else if (scheduleErrorText.includes('morning start')) {
+          scheduleErrorFields = ['morningStart'];
+        } else if (scheduleErrorText.includes('morning shift end')) {
+          scheduleErrorFields = ['morningEnd'];
+        } else if (scheduleErrorText.includes('morning end')) {
+          scheduleErrorFields = ['morningEnd'];
+        } else if (scheduleErrorText.includes('morning shift')) {
+          scheduleErrorFields = ['morningStart', 'morningEnd'];
+        } else if (scheduleErrorText.includes('evening shift must include both')) {
+          scheduleErrorFields = ['eveningStart', 'eveningEnd'];
+        } else if (scheduleErrorText.includes('evening shift end')) {
+          scheduleErrorFields = ['eveningEnd'];
+        } else if (scheduleErrorText.includes('evening shift')) {
+          scheduleErrorFields = ['eveningStart', 'eveningEnd'];
+        } else if (scheduleErrorText.includes('appointment window')) {
+          scheduleErrorFields = ['appointmentWindowMinutes'];
+        }
+        setInvalidFields(scheduleErrorFields);
         return setModalError(scheduleError);
       }
     }
@@ -330,8 +367,11 @@ const Settings = ({ data, setData, onLogout }) => {
       updatePayload = { name: formData.name, address: formData.address };
     } else if (editModal.type === 'clinic_schedule') {
       updatePayload = {
-        workingHoursStart: formData.workingHoursStart,
-        workingHoursEnd: formData.workingHoursEnd,
+        open24Hours: formData.open24Hours === true,
+        morningStart: formData.morningStart,
+        morningEnd: formData.morningEnd,
+        eveningStart: formData.eveningStart || '',
+        eveningEnd: formData.eveningEnd || '',
         appointmentWindowMinutes: normalizeAppointmentWindow(formData.appointmentWindowMinutes)
       };
     } else if (editModal.type === 'consultation_workflow') {
@@ -966,8 +1006,11 @@ const Settings = ({ data, setData, onLogout }) => {
                 title: 'Edit Clinic Schedule',
                 type: 'clinic_schedule',
                 initialData: {
-                  workingHoursStart: clinicSchedule.workingHoursStart,
-                  workingHoursEnd: clinicSchedule.workingHoursEnd,
+                  open24Hours: clinicSchedule.open24Hours === true,
+                  morningStart: clinicSchedule.morningStart,
+                  morningEnd: clinicSchedule.morningEnd,
+                  eveningStart: clinicSchedule.eveningStart,
+                  eveningEnd: clinicSchedule.eveningEnd,
                   appointmentWindowMinutes: clinicSchedule.appointmentWindowMinutes
                 }
               })}
@@ -1307,8 +1350,11 @@ const Settings = ({ data, setData, onLogout }) => {
                   title: 'Edit Clinic Schedule',
                   type: 'clinic_schedule',
                   initialData: {
-                    workingHoursStart: clinicSchedule.workingHoursStart,
-                    workingHoursEnd: clinicSchedule.workingHoursEnd,
+                    open24Hours: clinicSchedule.open24Hours === true,
+                    morningStart: clinicSchedule.morningStart,
+                    morningEnd: clinicSchedule.morningEnd,
+                    eveningStart: clinicSchedule.eveningStart,
+                    eveningEnd: clinicSchedule.eveningEnd,
                     appointmentWindowMinutes: clinicSchedule.appointmentWindowMinutes
                   }
                 })}
@@ -1525,15 +1571,58 @@ const Settings = ({ data, setData, onLogout }) => {
                  <p className="type-utility uppercase text-teal-700">Scheduling Rule</p>
                  <p className="type-secondary text-teal-900">Doctor working hours and appointment slots will follow this clinic schedule.</p>
                </div>
-               <div className="grid grid-cols-2 gap-2">
-                 <div>
-                   <label className="type-label block text-slate-500 mb-1 uppercase">Clinic Start Time *</label>
-                   <input type="time" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('workingHoursStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.workingHoursStart || ''} onChange={e => setFormData({...formData, workingHoursStart: e.target.value})} />
+               <label className="flex items-center gap-2 cursor-pointer">
+                 <input
+                   type="checkbox"
+                   checked={formData.open24Hours === true}
+                   onChange={e => setFormData({
+                     ...formData,
+                     open24Hours: e.target.checked,
+                     morningStart: e.target.checked ? DEFAULT_CLINIC_START_TIME : DEFAULT_CLINIC_MORNING_START_TIME,
+                     morningEnd: e.target.checked ? DEFAULT_CLINIC_END_TIME : DEFAULT_CLINIC_MORNING_END_TIME,
+                     eveningStart: e.target.checked ? '' : DEFAULT_CLINIC_EVENING_START_TIME,
+                     eveningEnd: e.target.checked ? '' : DEFAULT_CLINIC_EVENING_END_TIME
+                   })}
+                   className="h-4 w-4 accent-teal-600"
+                 />
+                 <span className="type-section-title text-teal-700">Open 24 Hours</span>
+               </label>
+               <div>
+                 <h4 className="type-utility uppercase text-slate-700 mb-1 border-b border-slate-100 pb-1">Morning Shift</h4>
+                 <div className="grid grid-cols-2 gap-2">
+                   <div>
+                     <label className="type-label block text-slate-500 mb-1 uppercase">Start Time *</label>
+                     <input type="time" disabled={formData.open24Hours === true} className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('morningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.open24Hours === true ? '' : (formData.morningStart || '')} onChange={e => setFormData({...formData, morningStart: e.target.value})} />
+                   </div>
+                   <div>
+                     <label className="type-label block text-slate-500 mb-1 uppercase">End Time *</label>
+                     <input type="time" disabled={formData.open24Hours === true} className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('morningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.open24Hours === true ? '' : (formData.morningEnd || '')} onChange={e => setFormData({...formData, morningEnd: e.target.value})} />
+                   </div>
                  </div>
-                 <div>
-                   <label className="type-label block text-slate-500 mb-1 uppercase">Clinic End Time *</label>
-                   <input type="time" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('workingHoursEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.workingHoursEnd || ''} onChange={e => setFormData({...formData, workingHoursEnd: e.target.value})} />
+               </div>
+               <div>
+                 <div className="mb-1 flex items-center justify-between border-b border-slate-100 pb-1">
+                   <h4 className="type-utility uppercase text-slate-700">Evening Shift</h4>
+                   <button
+                     type="button"
+                     disabled={formData.open24Hours === true}
+                     onClick={() => setFormData(prev => ({ ...prev, eveningStart: '', eveningEnd: '' }))}
+                     className="type-utility uppercase text-slate-400 transition-colors hover:text-red-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                   >
+                     Clear
+                   </button>
                  </div>
+                 <div className="grid grid-cols-2 gap-2">
+                   <div>
+                     <label className="type-label block text-slate-500 mb-1 uppercase">Start Time</label>
+                     <input type="time" disabled={formData.open24Hours === true} className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('eveningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.open24Hours === true ? '' : (formData.eveningStart || '')} onChange={e => setFormData({...formData, eveningStart: e.target.value})} />
+                   </div>
+                   <div>
+                     <label className="type-label block text-slate-500 mb-1 uppercase">End Time</label>
+                     <input type="time" disabled={formData.open24Hours === true} className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('eveningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.open24Hours === true ? '' : (formData.eveningEnd || '')} onChange={e => setFormData({...formData, eveningEnd: e.target.value})} />
+                   </div>
+                 </div>
+                 <p className="type-label mt-1 text-slate-400">Optional. Leave this blank if the clinic follows a single continuous shift.</p>
                </div>
                <div>
                  <label className="type-label block text-slate-500 mb-1 uppercase">Appointment Window *</label>

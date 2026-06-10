@@ -1659,7 +1659,7 @@ const Appointments = ({ data, setData, onLogout }) => {
           ? 'Resume Follow-Up Note'
           : appt.type === 'Follow-Up'
           ? 'Add Follow-Up Note'
-          : ((isInConsultation || isDraft || (uiStatus === 'Awaiting Reports' && Boolean(appt.reportsReadyAt))) ? 'Resume Consult' : 'Consult'),
+          : ((isInConsultation || isDraft || (uiStatus === 'Awaiting Reports' && Boolean(appt.reportsReadyAt))) ? 'Resume Consult' : 'Start Consult'),
         icon: Activity,
         onClick: () => handleStartConsultation(appt)
       },

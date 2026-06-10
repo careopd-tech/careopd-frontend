@@ -20,6 +20,7 @@ export const getAppointmentUiStatus = (appt = {}, todayStr = getLocalDateString(
   if (appt.status === 'Completed' || appt.status === 'Done') return 'Completed';
   if (appt.status === 'Tests Recommended') return 'Test Recommended';
   if (appt.status === 'Awaiting Reports') return 'Awaiting Reports';
+  if (appt.status === 'Checked In') return 'Checked In';
   if (appt.status === 'Left Early') return 'Walked Out';
   if (hasActiveConsultation(appt)) return 'In Consultation';
   if (appt.consultationDraft && appt.consultationDraftSavedAt) return 'Draft';
