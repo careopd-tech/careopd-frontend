@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Plus, CheckCircle, CalendarDays, XCircle, Building2, AlertTriangle, 
-  ChevronDown, ChevronRight, Edit2, CheckCircle as CheckIcon, AlertCircle, Loader2 
+  ChevronDown, ChevronRight, Edit2, CheckCircle as CheckIcon, AlertCircle, Loader2, MoreVertical
 } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import FAB from '../components/ui/FAB';
@@ -12,7 +12,7 @@ import API_BASE_URL from '../config';
 import { getSessionUser } from '../utils/auth';
 import { hasPermission } from '../utils/permissions';
 import {
-  formatClinicScheduleSummary,
+  formatTimeLabel,
   generateTimeSlots,
   getClinicSchedule,
   getDoctorShiftWindows,
@@ -73,6 +73,7 @@ const Doctors = ({ data, setData, onLogout }) => {
   const [expandedSection, setExpandedSection] = useState('available');
   const [isSavingDoctor, setIsSavingDoctor] = useState(false);
   const [isStatusSubmitting, setIsStatusSubmitting] = useState(false);
+  const [openStatusMenuId, setOpenStatusMenuId] = useState('');
 
   const [loading, setLoading] = useState(!data.doctors || data.doctors.length === 0);
 
@@ -87,28 +88,68 @@ const Doctors = ({ data, setData, onLogout }) => {
   });
 
   const clinicSchedule = useMemo(() => getClinicSchedule(data.clinic || {}), [data.clinic]);
-  const getWorkspaceDoctorHours = (doctorState = {}) => (
-    isSoloWorkspace
+  const clinicHoursForDoctorForm = useMemo(() => ({
+    morningStart: clinicSchedule.morningStart,
+    morningEnd: clinicSchedule.morningEnd,
+    eveningStart: clinicSchedule.eveningStart,
+    eveningEnd: clinicSchedule.eveningEnd
+  }), [clinicSchedule]);
+  const clinicScheduleDisplayLines = useMemo(() => {
+    if (clinicSchedule.open24Hours) return ['Open 24 Hours'];
+
+    const lines = [];
+    if (clinicSchedule.morningStart && clinicSchedule.morningEnd) {
+      lines.push(`${formatTimeLabel(clinicSchedule.morningStart)} - ${formatTimeLabel(clinicSchedule.morningEnd)}`);
+    }
+    if (clinicSchedule.eveningStart && clinicSchedule.eveningEnd) {
+      lines.push(`${formatTimeLabel(clinicSchedule.eveningStart)} - ${formatTimeLabel(clinicSchedule.eveningEnd)}`);
+    }
+
+    return lines.length > 0 ? lines : ['Clinic hours not set'];
+  }, [clinicSchedule]);
+  const editableClinicHoursFallback = useMemo(() => (
+    clinicSchedule.open24Hours
       ? {
+          morningStart: '',
+          morningEnd: '',
+          eveningStart: '',
+          eveningEnd: ''
+        }
+      : {
           morningStart: clinicSchedule.morningStart,
           morningEnd: clinicSchedule.morningEnd,
           eveningStart: clinicSchedule.eveningStart,
           eveningEnd: clinicSchedule.eveningEnd
         }
-      : {
-          morningStart: doctorState.morningStart || clinicSchedule.morningStart,
-          morningEnd: doctorState.morningEnd || clinicSchedule.morningEnd,
-          eveningStart: doctorState.eveningStart || '',
-          eveningEnd: doctorState.eveningEnd || ''
-        }
-  );
+  ), [clinicSchedule]);
+
+  const getWorkspaceDoctorHours = (doctorState = {}, options = {}) => {
+    const followsClinicSchedule = isSoloWorkspace
+      ? true
+      : doctorState.followsClinicSchedule ?? options.defaultFollowsClinicSchedule ?? false;
+
+    if (isSoloWorkspace || followsClinicSchedule) {
+      return {
+        followsClinicSchedule,
+        ...clinicHoursForDoctorForm
+      };
+    }
+
+    return {
+      followsClinicSchedule,
+      morningStart: doctorState.morningStart || '',
+      morningEnd: doctorState.morningEnd || '',
+      eveningStart: doctorState.eveningStart || '',
+      eveningEnd: doctorState.eveningEnd || ''
+    };
+  };
 
   const getDefaultDoctorState = () => ({
     _id: null,
     firstName: '', middleName: '', lastName: '',
     name: '', phone: '', email: '', gender: 'M', address: '',
     department: '', qualification: '', experience: '', regNo: '',
-    ...getWorkspaceDoctorHours(),
+    ...getWorkspaceDoctorHours({}, { defaultFollowsClinicSchedule: false }),
     photoUrl: '', photo: ''
   });
 
@@ -116,6 +157,22 @@ const Doctors = ({ data, setData, onLogout }) => {
   useEffect(() => {
       localStorage.setItem('doc_notifications', JSON.stringify(notificationStack));
   }, [notificationStack]);
+
+  useEffect(() => {
+    if (!openStatusMenuId) return;
+
+    const closeMenu = () => setOpenStatusMenuId('');
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') closeMenu();
+    };
+
+    document.addEventListener('pointerdown', closeMenu);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', closeMenu);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openStatusMenuId]);
 
   const [newDoctor, setNewDoctor] = useState(() => getDefaultDoctorState());
 
@@ -188,40 +245,64 @@ const Doctors = ({ data, setData, onLogout }) => {
   }, [setData]);
 
   // --- 2. ACTIONS ---
-  const toggleStatus = async (doctor) => {
-    // SCENARIO: REACTIVATING (Inactive -> Available)
+  const isOwnerDoctor = (doctor) => (
+    sessionUser.accountRole === 'super_admin' &&
+    String(sessionUser.doctorId || '') === String(doctor?._id || '')
+  );
+
+  const getDoctorStatusActions = (doctor) => {
     if (doctor.status === 'Inactive') {
-       // Open Modal for Activation Remarks
-       setReason('');
-       setCustomReason('');
-       setActiveModal({ type: 'status_change', subType: 'activate', doctorId: doctor._id, doctorName: doctor.name });
-    } 
-    // SCENARIO: DEACTIVATING (Available -> Inactive)
-    else {
-       // STRICT VALIDATION: Check for active appointments (Today or Future)
-       const todayStr = new Date().toISOString().split('T')[0];
-       const hasAppointments = (data.calendar30 || []).some(a => {
-           // Handle Populated vs String ID
-           const apptDocId = a.doctorId && typeof a.doctorId === 'object' ? a.doctorId._id : a.doctorId;
-           return String(apptDocId) === String(doctor._id) && 
-                  a.date >= todayStr && 
-                  a.status !== 'Cancelled';
-       });
-
-       if (hasAppointments) {
-           showNotification(
-        'Cannot Deactivate', 
-        'error', 
-        `${doctor.name} has upcoming appointments. Please cancel them first.`
-    );
-           return;
-       }
-
-       // Open Modal for Deactivation Remarks
-       setReason('');
-       setCustomReason('');
-       setActiveModal({ type: 'status_change', subType: 'deactivate', doctorId: doctor._id, doctorName: doctor.name });
+      return [{ label: 'Reactivate', targetStatus: 'Available', tone: 'teal' }];
     }
+
+    const actions = doctor.status === 'On Leave'
+      ? [{ label: 'Mark Available', targetStatus: 'Available', tone: 'teal' }]
+      : [{ label: 'Mark On Leave', targetStatus: 'On Leave', tone: 'amber' }];
+
+    if (!isOwnerDoctor(doctor)) {
+      actions.push({ label: 'Deactivate', targetStatus: 'Inactive', tone: 'red' });
+    }
+
+    return actions;
+  };
+
+  const openStatusChange = (doctor, targetStatus) => {
+    if (targetStatus === 'Inactive' && isOwnerDoctor(doctor)) {
+      showNotification(
+        'Cannot Deactivate',
+        'error',
+        'The clinic owner doctor profile must remain active.'
+      );
+      return;
+    }
+
+    if (targetStatus === 'Inactive') {
+      const hasAppointments = (data.calendar30 || []).some(a => {
+        const apptDocId = a.doctorId && typeof a.doctorId === 'object' ? a.doctorId._id : a.doctorId;
+        return String(apptDocId) === String(doctor._id) &&
+          a.date >= todayStr &&
+          a.status !== 'Cancelled';
+      });
+
+      if (hasAppointments) {
+        showNotification(
+          'Cannot Deactivate',
+          'error',
+          `${doctor.name} has upcoming appointments. Please cancel them first.`
+        );
+        return;
+      }
+    }
+
+    setReason('');
+    setCustomReason('');
+    setOpenStatusMenuId('');
+    setActiveModal({
+      type: 'status_change',
+      targetStatus,
+      doctorId: doctor._id,
+      doctorName: doctor.name
+    });
   };
 
   const confirmStatusChange = async () => {
@@ -230,7 +311,7 @@ const Doctors = ({ data, setData, onLogout }) => {
     if (reason === 'Others' && !customReason.trim()) return setModalError('Please enter remarks.');
 
     const finalReason = reason === 'Others' ? customReason : reason;
-    const targetStatus = activeModal.subType === 'activate' ? 'Available' : 'Inactive';
+    const targetStatus = activeModal.targetStatus || 'Available';
 
     try {
       setIsStatusSubmitting(true);
@@ -249,7 +330,11 @@ const Doctors = ({ data, setData, onLogout }) => {
         setReason('');
         setCustomReason('');
         
-        const actionWord = targetStatus === 'Available' ? 'Activated' : 'Deactivated';
+        const actionWord = targetStatus === 'Inactive'
+          ? 'Deactivated'
+          : targetStatus === 'On Leave'
+            ? 'Marked On Leave'
+            : 'Activated';
         showNotification(`Doctor ${actionWord}`, 'success', `${activeModal.doctorName} marked as ${targetStatus}.`);
       } else {
         const errData = await response.json().catch(() => ({}));
@@ -262,9 +347,23 @@ const Doctors = ({ data, setData, onLogout }) => {
     }
   };
 
-  const handleEditDoctor = (doc) => {
+  const handleEditDoctor = async (doc) => {
+    const clinicId = localStorage.getItem('clinicId');
+    let resolvedDoctor = doc;
+
+    if (clinicId && doc?._id) {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/doctors/${clinicId}/${doc._id}`);
+        if (response.ok) {
+          resolvedDoctor = await response.json();
+        }
+      } catch (error) {
+        console.error('Error fetching doctor detail:', error);
+      }
+    }
+
     // 1. Remove "Dr." prefix and trim
-    const rawName = doc.name.replace(/^Dr\.\s*/, '').trim();
+    const rawName = resolvedDoctor.name.replace(/^Dr\.\s*/, '').trim();
     
     // 2. Split by spaces
     const parts = rawName.split(' ');
@@ -284,8 +383,8 @@ const Doctors = ({ data, setData, onLogout }) => {
 
     setNewDoctor({
       ...getDefaultDoctorState(),
-      ...doc,
-      ...getWorkspaceDoctorHours(doc),
+      ...resolvedDoctor,
+      ...getWorkspaceDoctorHours(resolvedDoctor),
       firstName: fName,
       middleName: mName,
       lastName: lName,
@@ -341,6 +440,32 @@ const Doctors = ({ data, setData, onLogout }) => {
     }
   };
 
+  const handleFollowsClinicScheduleChange = (checked) => {
+    setNewDoctor(prev => ({
+      ...prev,
+      followsClinicSchedule: checked,
+      ...(checked
+        ? clinicHoursForDoctorForm
+        : clinicSchedule.open24Hours
+          ? {
+              morningStart: '',
+              morningEnd: '',
+              eveningStart: '',
+              eveningEnd: ''
+            }
+          : {
+              morningStart: prev.morningStart,
+              morningEnd: prev.morningEnd,
+              eveningStart: prev.eveningStart,
+              eveningEnd: prev.eveningEnd
+            })
+    }));
+
+    if (checked) {
+      setInvalidFields(prev => prev.filter(field => !['morningStart', 'morningEnd', 'eveningStart', 'eveningEnd'].includes(field)));
+    }
+  };
+
   const handleSaveDoctor = async () => {
     setModalError('');
     let errors = [];
@@ -373,9 +498,10 @@ const Doctors = ({ data, setData, onLogout }) => {
     if (newDoctor.experience === '' || newDoctor.experience === null) errors.push('experience');
     if (!newDoctor.regNo) errors.push('regNo');
 
-    if (!isSoloWorkspace && !newDoctor.morningStart) errors.push('morningStart');
-    if (!isSoloWorkspace && !newDoctor.morningEnd) errors.push('morningEnd');
-    if (!isSoloWorkspace && ((newDoctor.eveningStart && !newDoctor.eveningEnd) || (!newDoctor.eveningStart && newDoctor.eveningEnd))) {
+    const doctorFollowsClinicSchedule = newDoctor.followsClinicSchedule === true;
+    if (!isSoloWorkspace && !doctorFollowsClinicSchedule && !newDoctor.morningStart) errors.push('morningStart');
+    if (!isSoloWorkspace && !doctorFollowsClinicSchedule && !newDoctor.morningEnd) errors.push('morningEnd');
+    if (!isSoloWorkspace && !doctorFollowsClinicSchedule && ((newDoctor.eveningStart && !newDoctor.eveningEnd) || (!newDoctor.eveningStart && newDoctor.eveningEnd))) {
       errors.push('eveningStart', 'eveningEnd');
     }
 
@@ -393,6 +519,7 @@ const Doctors = ({ data, setData, onLogout }) => {
     const resolvedDoctorHours = getWorkspaceDoctorHours(newDoctor);
     const doctorHoursError = validateDoctorWorkingHours({
       ...resolvedDoctorHours,
+      followsClinicSchedule: doctorFollowsClinicSchedule,
       clinic: data.clinic || {}
     });
 
@@ -418,6 +545,7 @@ const Doctors = ({ data, setData, onLogout }) => {
       experience: newDoctor.experience,
       regNo: newDoctor.regNo,
       ...resolvedDoctorHours,
+      followsClinicSchedule: doctorFollowsClinicSchedule,
       status: newDoctor.status || 'Available',
       photo: newDoctor.photo || newDoctor.name.charAt(0) 
     };
@@ -527,9 +655,11 @@ const Doctors = ({ data, setData, onLogout }) => {
 
   const renderDoctorCard = (doc) => {
     const isInactive = doc.status === 'Inactive';
-    
+    const isOwnerDoctorProfile = isOwnerDoctor(doc);
+    const statusActions = getDoctorStatusActions(doc);
+
     return (
-      <div key={doc._id} className={`p-3 rounded-xl border flex flex-col md:flex-row landscape:flex-row md:items-stretch landscape:items-stretch gap-2 md:gap-3 landscape:gap-3 transition-all ${isInactive ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100 shadow-sm'}`}>
+      <div key={doc._id} className={`p-3 rounded-xl border flex flex-col md:flex-row landscape:flex-row md:items-stretch landscape:items-stretch gap-2 md:gap-3 landscape:gap-3 transition-all relative ${isInactive ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100 shadow-sm'}`}>
         
         <div className={`flex-1 min-w-0 flex flex-col ${isInactive ? 'opacity-70' : ''}`}>
           <div className="flex items-start justify-between">
@@ -543,18 +673,44 @@ const Doctors = ({ data, setData, onLogout }) => {
                 <p className="type-label text-slate-400 leading-tight mt-1">Mobile: {doc.phone || 'Not Added'}</p>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className={`type-utility uppercase transition-colors ${!isInactive ? 'text-teal-600' : 'text-slate-400'}`}>
-                {!isInactive ? 'Active' : 'Inactive'}
-              </span>
-              <button 
-                onClick={() => toggleStatus(doc)} 
-                className={`w-8 h-4.5 rounded-full p-0.5 transition-all flex-shrink-0 relative ${
-                  !isInactive ? 'bg-teal-600' : 'bg-slate-300 ring-2 ring-teal-500/50 ring-offset-1 animate-pulse'
-                }`}
-              >
-                <div className={`w-3.5 h-3.5 rounded-full bg-white transform transition-transform ${!isInactive ? 'translate-x-3.5' : ''}`} />
-              </button>
+            <div className="flex items-center gap-1.5 mt-1 relative">
+              {canManageDoctors && (
+                <button
+                  type="button"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setOpenStatusMenuId(prev => prev === doc._id ? '' : doc._id);
+                  }}
+                  className="h-7 w-7 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-teal-600 hover:bg-teal-50 flex items-center justify-center"
+                  aria-label="Doctor status actions"
+                >
+                  <MoreVertical size={14} />
+                </button>
+              )}
+              {openStatusMenuId === doc._id && (
+                <div
+                  onPointerDown={(event) => event.stopPropagation()}
+                  className="absolute right-0 top-8 z-20 w-40 rounded-lg border border-slate-200 bg-white shadow-lg py-1"
+                >
+                  {statusActions.map((action) => (
+                    <button
+                      key={action.targetStatus}
+                      type="button"
+                      onClick={() => openStatusChange(doc, action.targetStatus)}
+                      className={`type-label w-full px-3 py-2 text-left hover:bg-slate-50 ${
+                        action.tone === 'red'
+                          ? 'text-red-600'
+                          : action.tone === 'amber'
+                            ? 'text-amber-700'
+                            : 'text-teal-700'
+                      }`}
+                    >
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -614,6 +770,28 @@ const Doctors = ({ data, setData, onLogout }) => {
       </div>
     );
   };
+
+  const statusTarget = activeModal?.targetStatus || 'Available';
+  const statusModalTitle = statusTarget === 'Inactive'
+    ? 'Deactivate Doctor'
+    : statusTarget === 'On Leave'
+      ? 'Mark Doctor On Leave'
+      : 'Mark Doctor Available';
+  const statusModalTone = statusTarget === 'Inactive'
+    ? 'red'
+    : statusTarget === 'On Leave'
+      ? 'amber'
+      : 'teal';
+  const statusModalMessage = statusTarget === 'Inactive'
+    ? 'This action deactivates the doctor profile and blocks new appointments.'
+    : statusTarget === 'On Leave'
+      ? 'This action pauses new appointments while keeping the doctor profile active.'
+      : 'This action allows new appointments again.';
+  const statusConfirmLabel = statusTarget === 'Inactive'
+    ? 'Confirm Deactivation'
+    : statusTarget === 'On Leave'
+      ? 'Confirm Leave'
+      : 'Confirm Availability';
 
   return (
     <div className="h-full flex flex-col relative">
@@ -864,24 +1042,24 @@ const Doctors = ({ data, setData, onLogout }) => {
             {addDoctorTab === 'working_hours' && !isSoloWorkspace && (
               <div className="space-y-4 animate-fadeIn">
                 <div className="rounded-lg border border-teal-100 bg-teal-50 px-3 py-2">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="type-utility uppercase text-teal-700">Clinic Schedule</p>
-                      <p className="type-secondary text-teal-900">{formatClinicScheduleSummary(clinicSchedule)}</p>
+                      <div className="mt-0.5 space-y-0.5">
+                        {clinicScheduleDisplayLines.map(line => (
+                          <p key={line} className="type-secondary text-teal-900">{line}</p>
+                        ))}
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setNewDoctor(prev => ({
-                        ...prev,
-                        morningStart: clinicSchedule.morningStart,
-                        morningEnd: clinicSchedule.morningEnd,
-                        eveningStart: clinicSchedule.eveningStart,
-                        eveningEnd: clinicSchedule.eveningEnd
-                      }))}
-                      className="type-label rounded-md border border-teal-200 bg-white px-2.5 py-1 text-teal-700 transition-colors hover:bg-teal-100"
-                    >
-                      Use Clinic Hours
-                    </button>
+                    <label className="type-label flex shrink-0 items-center gap-1.5 rounded-md border border-teal-200 bg-white px-2.5 py-1 text-teal-700">
+                      <input
+                        type="checkbox"
+                        checked={newDoctor.followsClinicSchedule === true}
+                        onChange={e => handleFollowsClinicScheduleChange(e.target.checked)}
+                        className="accent-teal-600"
+                      />
+                      <span>Same as clinic</span>
+                    </label>
                   </div>
                 </div>
 
@@ -890,11 +1068,11 @@ const Doctors = ({ data, setData, onLogout }) => {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="type-label block text-slate-500 mb-0.5 uppercase">Start Time <span className="text-red-500">*</span></label>
-                      <input type="time" min={clinicSchedule.morningStart} max={clinicSchedule.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('morningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningStart} onChange={e => setNewDoctor({...newDoctor, morningStart: e.target.value})} />
+                      <input type="time" disabled={newDoctor.followsClinicSchedule === true} min={editableClinicHoursFallback.morningStart} max={editableClinicHoursFallback.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('morningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningStart} onChange={e => setNewDoctor({...newDoctor, morningStart: e.target.value})} />
                     </div>
                     <div>
                       <label className="type-label block text-slate-500 mb-0.5 uppercase">End Time <span className="text-red-500">*</span></label>
-                      <input type="time" min={clinicSchedule.morningStart} max={clinicSchedule.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('morningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningEnd} onChange={e => setNewDoctor({...newDoctor, morningEnd: e.target.value})} />
+                      <input type="time" disabled={newDoctor.followsClinicSchedule === true} min={editableClinicHoursFallback.morningStart} max={editableClinicHoursFallback.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('morningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningEnd} onChange={e => setNewDoctor({...newDoctor, morningEnd: e.target.value})} />
                     </div>
                   </div>
                 </div>
@@ -904,8 +1082,9 @@ const Doctors = ({ data, setData, onLogout }) => {
                     <h4 className="type-utility uppercase text-slate-700">Evening Shift</h4>
                     <button
                       type="button"
+                      disabled={newDoctor.followsClinicSchedule === true}
                       onClick={() => setNewDoctor(prev => ({ ...prev, eveningStart: '', eveningEnd: '' }))}
-                      className="type-utility uppercase text-slate-400 transition-colors hover:text-red-500"
+                      className="type-utility uppercase text-slate-400 transition-colors hover:text-red-500 disabled:cursor-not-allowed disabled:text-slate-300"
                     >
                       Clear
                     </button>
@@ -913,11 +1092,11 @@ const Doctors = ({ data, setData, onLogout }) => {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="type-label block text-slate-500 mb-0.5 uppercase">Start Time</label>
-                      <input type="time" min={clinicSchedule.eveningStart || clinicSchedule.morningStart} max={clinicSchedule.eveningEnd || clinicSchedule.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('eveningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningStart} onChange={e => setNewDoctor({...newDoctor, eveningStart: e.target.value})} />
+                      <input type="time" disabled={newDoctor.followsClinicSchedule === true} min={editableClinicHoursFallback.eveningStart || editableClinicHoursFallback.morningStart} max={editableClinicHoursFallback.eveningEnd || editableClinicHoursFallback.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('eveningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningStart} onChange={e => setNewDoctor({...newDoctor, eveningStart: e.target.value})} />
                     </div>
                     <div>
                       <label className="type-label block text-slate-500 mb-0.5 uppercase">End Time</label>
-                      <input type="time" min={clinicSchedule.eveningStart || clinicSchedule.morningStart} max={clinicSchedule.eveningEnd || clinicSchedule.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('eveningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningEnd} onChange={e => setNewDoctor({...newDoctor, eveningEnd: e.target.value})} />
+                      <input type="time" disabled={newDoctor.followsClinicSchedule === true} min={editableClinicHoursFallback.eveningStart || editableClinicHoursFallback.morningStart} max={editableClinicHoursFallback.eveningEnd || editableClinicHoursFallback.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('eveningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningEnd} onChange={e => setNewDoctor({...newDoctor, eveningEnd: e.target.value})} />
                     </div>
                   </div>
                   <p className="type-label mt-1 text-slate-400">Optional. Leave this blank if the doctor follows a single continuous shift.</p>
@@ -944,16 +1123,22 @@ const Doctors = ({ data, setData, onLogout }) => {
       <Modal 
         isOpen={activeModal?.type === 'status_change'} 
         onClose={() => { setActiveModal(null); setModalError(''); setReason(''); setCustomReason(''); }} 
-        title={activeModal?.subType === 'activate' ? 'Reactivate Doctor' : 'Deactivate Doctor'} 
+        title={statusModalTitle} 
         footer={
           <button
             onClick={confirmStatusChange}
             disabled={isStatusSubmitting}
-            className={`type-section-title w-full py-1.5 rounded-lg text-white flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed ${activeModal?.subType === 'activate' ? 'bg-teal-600' : 'bg-red-600'}`}
+            className={`type-section-title w-full py-1.5 rounded-lg text-white flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed ${
+              statusModalTone === 'red'
+                ? 'bg-red-600'
+                : statusModalTone === 'amber'
+                  ? 'bg-amber-600'
+                  : 'bg-teal-600'
+            }`}
           >
             {isStatusSubmitting
               ? <><Loader2 size={16} className="animate-spin" /> Updating...</>
-              : activeModal?.subType === 'activate' ? 'Confirm Activation' : 'Confirm Deactivation'}
+              : statusConfirmLabel}
           </button>
         }
       >
@@ -961,25 +1146,38 @@ const Doctors = ({ data, setData, onLogout }) => {
           <AlertMessage message={modalError} />
           
           {/* Dynamic Warning Message */}
-          <div className={`type-body p-2 rounded-lg flex gap-2 ${activeModal?.subType === 'activate' ? 'bg-teal-50 text-teal-800' : 'bg-amber-50 text-amber-800'}`}>
+          <div className={`type-body p-2 rounded-lg flex gap-2 ${
+            statusModalTone === 'teal'
+              ? 'bg-teal-50 text-teal-800'
+              : statusModalTone === 'amber'
+                ? 'bg-amber-50 text-amber-800'
+                : 'bg-red-50 text-red-800'
+          }`}>
              <AlertTriangle size={16} className="shrink-0" />
-             <p>{activeModal?.subType === 'activate' ? 'This action will allow new appointments.' : 'This action blocks new appointments.'}</p>
+             <p>{statusModalMessage}</p>
           </div>
 
           <div>
             <label className="type-body block text-slate-700 mb-1">Reason</label>
             <select className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50" value={reason} onChange={(e) => setReason(e.target.value)}>
               <option value="">Select Reason...</option>
-              {activeModal?.subType === 'activate' ? (
+              {statusTarget === 'Available' ? (
                   <>
                     <option value="Returned from Leave">Returned from Leave</option>
                     <option value="Re-joined">Re-joined</option>
                     <option value="Others">Others</option>
                   </>
+              ) : statusTarget === 'On Leave' ? (
+                  <>
+                    <option value="Short Leave">Short Leave</option>
+                    <option value="Long Leave">Long Leave</option>
+                    <option value="Personal Leave">Personal Leave</option>
+                    <option value="Others">Others</option>
+                  </>
               ) : (
                   <>
                     <option value="Resigned">Resigned</option>
-                    <option value="Long Leave">Long Leave</option>
+                    <option value="No longer associated">No longer associated</option>
                     <option value="Others">Others</option>
                   </>
               )}

@@ -13,6 +13,11 @@ const normalizeMoney = (value) => {
   if (!Number.isFinite(numeric) || numeric < 0) return 0;
   return Math.round(numeric * 100) / 100;
 };
+const normalizeSignedMoney = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.round(numeric * 100) / 100;
+};
 
 const buildConsultationItem = (clinic = {}, appointment = {}) => {
   const billing = appointment?.billing || {};
@@ -114,7 +119,18 @@ const BillingPaymentModal = ({
     [billingItems]
   );
   const amountPaid = normalizeMoney(billing.amountPaid || 0);
-  const currentBalance = Math.max(0, normalizeMoney(totalPayable - amountPaid));
+  const savedBalance = normalizeSignedMoney(totalPayable - amountPaid);
+  const canCollectAdditionalPayment = savedBalance > 0;
+  const newPaymentAmount = canCollectAdditionalPayment
+    ? normalizeMoney(amountCollected === '' ? 0 : amountCollected)
+    : 0;
+  const projectedPaid = normalizeMoney(amountPaid + newPaymentAmount);
+  const currentBalance = normalizeSignedMoney(totalPayable - projectedPaid);
+
+  useEffect(() => {
+    if (!isOpen || canCollectAdditionalPayment || amountCollected === '') return;
+    setAmountCollected('');
+  }, [amountCollected, canCollectAdditionalPayment, isOpen]);
 
   const toggleServiceSelection = (serviceId) => {
     setSelectedServiceIds((prev) => (
@@ -163,7 +179,7 @@ const BillingPaymentModal = ({
           clinicId,
           items: billingItems,
           payment: {
-            amount: amountCollected === '' ? 0 : Number(amountCollected),
+            amount: newPaymentAmount,
             mode: paymentMode
           }
         })
@@ -301,7 +317,10 @@ const BillingPaymentModal = ({
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-3">
             <div className="text-[12px] text-slate-400 uppercase font-bold">Paid</div>
-            <div className="text-[14px] font-bold text-slate-800 mt-1">Rs {formatMoney(amountPaid)}</div>
+            <div className="text-[14px] font-bold text-slate-800 mt-1">Rs {formatMoney(projectedPaid)}</div>
+            {newPaymentAmount > 0 ? (
+              <div className="text-[11px] text-teal-600 mt-0.5">Includes Rs {formatMoney(newPaymentAmount)} now</div>
+            ) : null}
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-3">
             <div className="text-[12px] text-slate-400 uppercase font-bold">Balance</div>
@@ -309,37 +328,45 @@ const BillingPaymentModal = ({
           </div>
         </div>
 
-        <div>
-          <label className="type-label text-slate-600 uppercase block mb-1.5">Amount Collected</label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={amountCollected}
-            onChange={(e) => {
-              markUserEdited();
-              setAmountCollected(e.target.value);
-            }}
-            className="w-full h-11 rounded-xl border border-slate-200 px-3 text-[14px] text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500"
-            placeholder="Enter amount collected"
-          />
-        </div>
+        {canCollectAdditionalPayment ? (
+          <>
+            <div>
+              <label className="type-label text-slate-600 uppercase block mb-1.5">Amount Collected</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={amountCollected}
+                onChange={(e) => {
+                  markUserEdited();
+                  setAmountCollected(e.target.value);
+                }}
+                className="w-full h-11 rounded-xl border border-slate-200 px-3 text-[14px] text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500"
+                placeholder="Enter amount collected"
+              />
+            </div>
 
-        <div>
-          <label className="type-label text-slate-600 uppercase block mb-1.5">Payment Mode</label>
-          <select
-            value={paymentMode}
-            onChange={(e) => {
-              markUserEdited();
-              setPaymentMode(e.target.value);
-            }}
-            className="w-full h-11 rounded-xl border border-slate-200 px-3 text-[14px] text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500"
-          >
-            {PAYMENT_MODES.map((mode) => (
-              <option key={mode} value={mode}>{mode}</option>
-            ))}
-          </select>
-        </div>
+            <div>
+              <label className="type-label text-slate-600 uppercase block mb-1.5">Payment Mode</label>
+              <select
+                value={paymentMode}
+                onChange={(e) => {
+                  markUserEdited();
+                  setPaymentMode(e.target.value);
+                }}
+                className="w-full h-11 rounded-xl border border-slate-200 px-3 text-[14px] text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500"
+              >
+                {PAYMENT_MODES.map((mode) => (
+                  <option key={mode} value={mode}>{mode}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        ) : (
+          <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-[13px] text-amber-800">
+            No amount collection is required for the current bill. A negative balance means amount to return to the patient.
+          </div>
+        )}
 
         {error ? (
           <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[13px] text-red-700">

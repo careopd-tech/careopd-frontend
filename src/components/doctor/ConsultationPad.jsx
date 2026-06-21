@@ -114,7 +114,11 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
   }));
   const previousConsultation = activeAppt?.previousConsultation || null;
   const previousLabOrders = Array.isArray(activeAppt?.previousLabOrders) ? activeAppt.previousLabOrders : [];
-  const isReportReview = Boolean(activeAppt?.reportsReadyAt && previousLabOrders.length > 0);
+  const isReportReview = Boolean(
+    activeAppt?.consultationMode === 'Report Review' ||
+    activeAppt?.activeConsultationMode === 'Report Review' ||
+    (activeAppt?.reportsReadyAt && previousLabOrders.length > 0)
+  );
 
 
 
@@ -370,9 +374,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
         {previousConsultation && !isReportReview && (
           <div className="px-1">
             <div className="text-[12px] text-slate-500">
-              {activeAppt?.consultationMode === 'Addendum' || activeAppt?.activeConsultationMode === 'Addendum'
-                ? 'Linked to earlier clinical record'
-                : 'Linked to visit'}{' '}
+              Linked to earlier clinical record{' '}
               <span className="font-semibold text-slate-700">
                 {previousConsultation.date || '--'}{previousConsultation.time ? ` | ${previousConsultation.time}` : ''}
               </span>
@@ -385,16 +387,16 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
 
         {/* --- EMR WRAPPER --- */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden p-2 space-y-3">
-          {(activeAppt?.type === 'Follow-Up' || activeAppt?.consultationMode === 'Addendum' || activeAppt?.activeConsultationMode === 'Addendum') && (
+          {(activeAppt?.type === 'Follow-Up' || isReportReview) && (
             <div className="rounded-xl border border-teal-200 bg-teal-50 px-3 py-2">
               <div className="text-[12px] font-bold uppercase tracking-wider text-teal-800">
-                {activeAppt?.consultationMode === 'Addendum' || activeAppt?.activeConsultationMode === 'Addendum'
-                  ? 'Current Follow-Up Note'
+                {isReportReview
+                  ? 'Current Report Review'
                   : 'Current Follow-Up'}
               </div>
               <div className="text-[12px] text-teal-700 mt-1">
-                {activeAppt?.consultationMode === 'Addendum' || activeAppt?.activeConsultationMode === 'Addendum'
-                  ? 'Add the updated notes, medicines, and test plan as a new clinical addendum. The earlier record will remain unchanged.'
+                {isReportReview
+                  ? 'Record the review, update treatment, and add any fresh test plan as a new clinical record. The earlier record remains unchanged.'
                   : 'Add the updated notes, medicines, and test plan for this new follow-up record. The previous consultation remains unchanged.'}
               </div>
             </div>

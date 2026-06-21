@@ -11,7 +11,7 @@ export const getStatusStyling = (status) => {
   if (s === 'TEST RECOMMENDED' || s === 'TESTS RECOMMENDED') return { badge: 'text-emerald-700 bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500 ring-emerald-100' };
   if (s === 'AWAITING REPORTS') return { badge: 'text-cyan-700 bg-cyan-50 border-cyan-200', dot: 'bg-cyan-500 ring-cyan-100' };
   if (s === 'CANCELLED') return { badge: 'text-red-700 bg-red-50 border-red-200', dot: 'bg-red-500 ring-red-100' };
-  if (s === 'WALKED OUT' || s === 'LEFT EARLY') return { badge: 'text-slate-700 bg-slate-100 border-slate-200', dot: 'bg-slate-500 ring-slate-100' };
+  if (s === 'WALKED OUT') return { badge: 'text-slate-700 bg-slate-100 border-slate-200', dot: 'bg-slate-500 ring-slate-100' };
   if (s === 'DRAFT') return { badge: 'text-violet-700 bg-violet-50 border-violet-200', dot: 'bg-violet-500 ring-violet-100' };
   if (s === 'NO SHOW' || s === 'NO-SHOW') return { badge: 'text-slate-600 bg-slate-100 border-slate-200', dot: 'bg-slate-400 ring-slate-100' };
   if (s === 'CHECKED IN') return { badge: 'text-teal-700 bg-teal-50 border-teal-200', dot: 'bg-teal-500 ring-teal-100' };
@@ -25,7 +25,7 @@ export const filterValidHistory = (historyData = [], currentApptId = null) => {
   return historyData.filter((visit) => {
     if (currentApptId && String(visit._id) === String(currentApptId)) return false;
     if (visit.date < todayStr) return true;
-    if (visit.date === todayStr && ['Completed', 'Done', 'Tests Recommended', 'Left Early'].includes(visit.status)) return true;
+    if (visit.date === todayStr && ['Completed', 'Walked Out'].includes(visit.status)) return true;
     return false;
   });
 };

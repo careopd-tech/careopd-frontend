@@ -1,12 +1,12 @@
 import { getLocalDateString } from './dateUtils';
 
-export const CLINICALLY_CLOSED_STATUSES = ['Completed', 'Tests Recommended'];
-export const TERMINAL_APPOINTMENT_STATUSES = ['Completed', 'Tests Recommended', 'Cancelled', 'Left Early'];
+export const CLINICALLY_CLOSED_STATUSES = ['Completed'];
+export const TERMINAL_APPOINTMENT_STATUSES = ['Completed', 'Cancelled', 'Walked Out'];
 
 export const hasActiveConsultation = (appt = {}) => (
-  Boolean(appt.consultationStartedAt) &&
+  (appt.status === 'In Consultation' || Boolean(appt.consultationStartedAt)) &&
   !appt.consultationCompletedAt &&
-  (appt.activeConsultationMode === 'Addendum' || !TERMINAL_APPOINTMENT_STATUSES.includes(appt.status))
+  (appt.activeConsultationMode === 'Report Review' || !TERMINAL_APPOINTMENT_STATUSES.includes(appt.status))
 );
 
 export const hasVisitProgress = (appt = {}) => (
@@ -17,13 +17,14 @@ export const hasVisitProgress = (appt = {}) => (
 
 export const getAppointmentUiStatus = (appt = {}, todayStr = getLocalDateString()) => {
   if (appt.status === 'Cancelled') return 'Cancelled';
-  if (appt.status === 'Completed' || appt.status === 'Done') return 'Completed';
-  if (appt.status === 'Tests Recommended') return 'Test Recommended';
+  if (appt.status === 'Completed') return 'Completed';
   if (appt.status === 'Awaiting Reports') return 'Awaiting Reports';
+  if (appt.status === 'Draft') return 'Draft';
+  if (appt.status === 'In Consultation') return 'In Consultation';
   if (appt.status === 'Checked In') return 'Checked In';
-  if (appt.status === 'Left Early') return 'Walked Out';
+  if (appt.status === 'Walked Out') return 'Walked Out';
   if (hasActiveConsultation(appt)) return 'In Consultation';
-  if (appt.consultationDraft && appt.consultationDraftSavedAt) return 'Draft';
+  if ((appt.hasConsultationDraft || appt.consultationDraft) && appt.consultationDraftSavedAt) return 'Draft';
   if (appt.checkedInAt) return 'Checked In';
 
   const isPast = appt.date < todayStr;

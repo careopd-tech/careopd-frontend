@@ -9,6 +9,7 @@ import ClinicalLibraryModal from '../components/settings/ClinicalLibraryModal';
 import API_BASE_URL from '../config';
 import { authFetch, getSessionUser, updateSessionFromAuth } from '../utils/auth';
 import { hasPermission } from '../utils/permissions';
+import { getLocalDateString } from '../utils/dateUtils';
 import {
   APPOINTMENT_WINDOW_OPTIONS,
   DEFAULT_CLINIC_END_TIME,
@@ -62,7 +63,20 @@ const normalizeBillingServiceRows = (services = []) => (
     : []
 );
 
+const preventInvalidMoneyKey = (event) => {
+  if (['-', '+', 'e', 'E'].includes(event.key)) {
+    event.preventDefault();
+  }
+};
+
+const getNonNegativeMoneyInput = (value, fallback = '') => {
+  if (value === '') return '';
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? value : fallback;
+};
+
 const Settings = ({ data, setData, onLogout }) => {
+  const todayStr = getLocalDateString();
   const [expandedSection, setExpandedSection] = useState('clinic');
   const [searchQuery, setSearchQuery] = useState('');
   const [editModal, setEditModal] = useState(null);
@@ -75,12 +89,7 @@ const Settings = ({ data, setData, onLogout }) => {
     clinicName: '',
     clinicalEstablishmentNo: '',
     ceIssueDate: '',
-    registeringAuthority: '',
-    createAdmin: false,
-    adminName: '',
-    adminEmail: '',
-    adminPhone: '',
-    adminPassword: ''
+    registeringAuthority: ''
   });
   const [accessUsers, setAccessUsers] = useState([]);
   const [accessLoading, setAccessLoading] = useState(false);
@@ -145,6 +154,19 @@ const Settings = ({ data, setData, onLogout }) => {
 
   const handleClearNotifications = () => setNotificationStack([]);
   const handleDismissNotification = (id) => setNotificationStack(prev => prev.filter(n => n.id !== id));
+
+  useEffect(() => {
+    const clinic = data.clinic || {};
+    const clinicId = clinic._id || localStorage.getItem('clinicId');
+    if (!clinicId || clinic.type !== 'Clinic' || clinic.clinicRegistrationStatus !== 'Approved') return;
+
+    const approvedMarker = clinic.clinicRegistrationApprovedAt || clinic.upgradedFromSoloAt || 'approved';
+    const seenKey = `clinic_upgrade_approved_seen_${clinicId}`;
+    if (localStorage.getItem(seenKey) === String(approvedMarker)) return;
+
+    showNotification('Clinic Approved', 'success', 'Your clinic registration is approved. Clinic-level features are now unlocked.');
+    localStorage.setItem(seenKey, String(approvedMarker));
+  }, [data.clinic]);
 
   // --- 1. FETCH & SYNC DATA ---
   useEffect(() => {
@@ -237,18 +259,14 @@ const Settings = ({ data, setData, onLogout }) => {
   };
 
   const openUpgradeModal = () => {
+    const pendingDetails = data.clinic?.clinicRegistrationDetails || {};
     setModalError('');
     setInvalidFields([]);
     setUpgradeData({
-      clinicName: '',
-      clinicalEstablishmentNo: '',
-      ceIssueDate: '',
-      registeringAuthority: '',
-      createAdmin: false,
-      adminName: '',
-      adminEmail: '',
-      adminPhone: '',
-      adminPassword: ''
+      clinicName: pendingDetails.clinicName || data.clinic?.name || '',
+      clinicalEstablishmentNo: pendingDetails.clinicalEstablishmentNo || data.clinic?.clinicalEstablishmentNo || '',
+      ceIssueDate: pendingDetails.ceIssueDate || data.clinic?.ceIssueDate || '',
+      registeringAuthority: pendingDetails.registeringAuthority || data.clinic?.registeringAuthority || ''
     });
     setUpgradeModalOpen(true);
   };
@@ -280,17 +298,27 @@ const Settings = ({ data, setData, onLogout }) => {
       }
       if (!formData.appointmentWindowMinutes) errors.push('appointmentWindowMinutes');
     } else if (editModal.type === 'billing_services') {
-      const numericConsultationFee = Number(formData.consultationFee);
-      if (!Number.isFinite(numericConsultationFee) || numericConsultationFee < 0) errors.push('consultationFee');
+      const consultationFeeRaw = String(formData.consultationFee ?? '').trim();
+      const numericConsultationFee = Number(consultationFeeRaw);
+      if (!consultationFeeRaw || !Number.isFinite(numericConsultationFee) || numericConsultationFee < 0) errors.push('consultationFee');
 
-      const hasInvalidService = (formData.billingServices || []).some((service) => {
+      const seenServiceNames = new Map();
+      (formData.billingServices || []).forEach((service, index) => {
         const name = String(service?.name || '').trim();
         const priceRaw = String(service?.price ?? '').trim();
-        if (!name && !priceRaw) return false;
+        if (!name && !priceRaw) return;
         const numericPrice = Number(priceRaw);
-        return !name || !Number.isFinite(numericPrice) || numericPrice < 0;
+        if (!name) errors.push(`billingService-${index}-name`);
+        if (!priceRaw || !Number.isFinite(numericPrice) || numericPrice < 0) errors.push(`billingService-${index}-price`);
+        const normalizedName = name.toLowerCase().replace(/\s+/g, ' ');
+        if (normalizedName) {
+          if (seenServiceNames.has(normalizedName)) {
+            errors.push('billingServicesDuplicateName', `billingService-${seenServiceNames.get(normalizedName)}-name`, `billingService-${index}-name`);
+          } else {
+            seenServiceNames.set(normalizedName, index);
+          }
+        }
       });
-      if (hasInvalidService) errors.push('billingServices');
     } else if (editModal.type === 'template' || editModal.type === 'policy') {
       if (!formData.title) errors.push('title');
       if (!formData.text) errors.push('text');
@@ -298,6 +326,20 @@ const Settings = ({ data, setData, onLogout }) => {
 
     if (errors.length > 0) {
       setInvalidFields(errors);
+      if (editModal.type === 'billing_services') {
+        if (errors.includes('consultationFee')) {
+          return setModalError('Consultation fee must be entered as a valid non-negative amount.');
+        }
+        if (errors.some((field) => field.endsWith('-name'))) {
+          if (errors.includes('billingServicesDuplicateName')) {
+            return setModalError('Service names must be unique.');
+          }
+          return setModalError('Service name is required when service price is entered.');
+        }
+        if (errors.some((field) => field.endsWith('-price'))) {
+          return setModalError('Service price must be entered as a valid non-negative amount.');
+        }
+      }
       return setModalError('Please fill all required details marked with *');
     }
 
@@ -366,12 +408,13 @@ const Settings = ({ data, setData, onLogout }) => {
     } else if (editModal.type === 'clinic_details') {
       updatePayload = { name: formData.name, address: formData.address };
     } else if (editModal.type === 'clinic_schedule') {
+      const isOpen24Hours = formData.open24Hours === true;
       updatePayload = {
-        open24Hours: formData.open24Hours === true,
-        morningStart: formData.morningStart,
-        morningEnd: formData.morningEnd,
-        eveningStart: formData.eveningStart || '',
-        eveningEnd: formData.eveningEnd || '',
+        open24Hours: isOpen24Hours,
+        morningStart: isOpen24Hours ? '' : formData.morningStart,
+        morningEnd: isOpen24Hours ? '' : formData.morningEnd,
+        eveningStart: isOpen24Hours ? '' : (formData.eveningStart || ''),
+        eveningEnd: isOpen24Hours ? '' : (formData.eveningEnd || ''),
         appointmentWindowMinutes: normalizeAppointmentWindow(formData.appointmentWindowMinutes)
       };
     } else if (editModal.type === 'consultation_workflow') {
@@ -380,15 +423,20 @@ const Settings = ({ data, setData, onLogout }) => {
       };
     } else if (editModal.type === 'billing_services') {
       updatePayload = {
-        consultationFee: Number(formData.consultationFee || 0),
+        consultationFee: Number(formData.consultationFee),
         billingServices: (formData.billingServices || [])
-          .map((service) => ({
-            _id: service._id,
-            name: String(service.name || '').trim(),
-            price: Number(service.price || 0),
-            active: service.active !== false
-          }))
-          .filter((service) => service.name)
+          .map((service) => {
+            const name = String(service.name || '').trim();
+            const priceRaw = String(service.price ?? '').trim();
+            if (!name && !priceRaw) return null;
+            return {
+              _id: service._id,
+              name,
+              price: Number(priceRaw),
+              active: service.active !== false
+            };
+          })
+          .filter(Boolean)
       };
     } else if (editModal.stateKey === 'hours') {
       updatePayload = { hours: formData.value };
@@ -413,7 +461,8 @@ const Settings = ({ data, setData, onLogout }) => {
           setEditModal(null);
           showNotification('Settings Saved', 'success', `${editModal.title || 'Settings'} updated successfully.`);
         } else {
-          setModalError("Failed to save changes.");
+          const result = await response.json().catch(() => ({}));
+          setModalError(result.error || "Failed to save changes.");
         }
       } catch (err) {
         setModalError("Server connection error.");
@@ -431,23 +480,18 @@ const Settings = ({ data, setData, onLogout }) => {
     const clinicName = upgradeData.clinicName.trim();
     const clinicalEstablishmentNo = upgradeData.clinicalEstablishmentNo.trim();
     const registeringAuthority = upgradeData.registeringAuthority.trim();
-    const adminName = upgradeData.adminName.trim();
-    const adminEmail = upgradeData.adminEmail.trim().toLowerCase();
 
     if (!clinicName) errors.push('clinicName');
     if (!clinicalEstablishmentNo) errors.push('clinicalEstablishmentNo');
     if (!upgradeData.ceIssueDate) errors.push('ceIssueDate');
+    if (upgradeData.ceIssueDate && upgradeData.ceIssueDate > todayStr) errors.push('ceIssueDate');
     if (!registeringAuthority) errors.push('registeringAuthority');
-
-    if (upgradeData.createAdmin) {
-      if (!adminName) errors.push('adminName');
-      if (!adminEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) errors.push('adminEmail');
-      if (!upgradeData.adminPhone || upgradeData.adminPhone.length < 10) errors.push('adminPhone');
-      if (!upgradeData.adminPassword || upgradeData.adminPassword.length < 6) errors.push('adminPassword');
-    }
 
     if (errors.length > 0) {
       setInvalidFields(errors);
+      if (errors.includes('ceIssueDate') && upgradeData.ceIssueDate && upgradeData.ceIssueDate > todayStr) {
+        return setModalError('Date of issue cannot be a future date.');
+      }
       return setModalError('Please fill all required details correctly *');
     }
 
@@ -464,13 +508,6 @@ const Settings = ({ data, setData, onLogout }) => {
         registeringAuthority
       };
 
-      if (upgradeData.createAdmin) {
-        payload.adminName = adminName;
-        payload.adminEmail = adminEmail;
-        payload.adminPhone = upgradeData.adminPhone;
-        payload.adminPassword = upgradeData.adminPassword;
-      }
-
       const response = await fetch(`${API_BASE_URL}/api/clinics/${clinicId}/upgrade-to-clinic`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -483,9 +520,9 @@ const Settings = ({ data, setData, onLogout }) => {
         setData(prev => ({ ...prev, clinic: result.clinic }));
         setUpgradeModalOpen(false);
         setInvalidFields([]);
-        showNotification('Practice Upgraded', 'success', 'Solo doctor setup has been upgraded to a clinic workspace.');
+        showNotification('Registration Submitted', 'success', 'Clinic registration details submitted for operations review.');
       } else {
-        setModalError(result.error || 'Failed to upgrade practice.');
+        setModalError(result.error || 'Failed to submit clinic registration.');
       }
     } catch (err) {
       setModalError('Server connection error.');
@@ -714,24 +751,31 @@ const Settings = ({ data, setData, onLogout }) => {
   };
 
   // --- RENDER HELPERS ---
-  const SettingItem = ({ title, subtitle, onEdit }) => (
-    <div 
-      onClick={onEdit}
-      // Compact Padding: p-2.5 to match standard cards
-      className="flex justify-between items-center p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-teal-300 transition-colors cursor-pointer group"
-    >
-      <div className="min-w-0 pr-2">
-        <h4 className="type-card-title text-slate-800 truncate group-hover:text-teal-700 transition-colors">{title}</h4>
-        {subtitle && <p className="type-label text-slate-500 truncate mt-0.5">{subtitle}</p>}
-      </div>
-      <button 
-        onClick={(e) => { e.stopPropagation(); onEdit(); }}
-        className="flex-shrink-0 text-slate-400 group-hover:text-teal-600 bg-slate-50 group-hover:bg-teal-50 p-1.5 rounded-md transition-colors"
+  const SettingItem = ({ title, subtitle, onEdit }) => {
+    const isClinicDetails = title === 'Clinic Details';
+
+    return (
+      <div
+        onClick={onEdit}
+        // Compact Padding: p-2.5 to match standard cards
+        className="flex justify-between items-center p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-teal-300 transition-colors cursor-pointer group"
       >
-        <Edit2 size={14} />
-      </button>
-    </div>
-  );
+        <div className="min-w-0 pr-2">
+          <h4 className="type-card-title text-slate-800 truncate group-hover:text-teal-700 transition-colors">{title}</h4>
+          {isClinicDetails && (
+            <p className="type-label text-teal-700 truncate mt-0.5">{workspaceTypeLabel} ({workspaceStatusLabel})</p>
+          )}
+          {subtitle && <p className="type-label text-slate-500 truncate mt-0.5">{subtitle}</p>}
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onEdit(); }}
+          className="flex-shrink-0 text-slate-400 group-hover:text-teal-600 bg-slate-50 group-hover:bg-teal-50 p-1.5 rounded-md transition-colors"
+        >
+          <Edit2 size={14} />
+        </button>
+      </div>
+    );
+  };
 
   const renderAccordion = (sectionOrId, legacyTitle, legacyIcon, legacyColorClass, legacyChildren) => {
     const isSectionObject = typeof sectionOrId === 'object' && sectionOrId !== null && 'id' in sectionOrId;
@@ -796,6 +840,24 @@ const Settings = ({ data, setData, onLogout }) => {
   const loggedInDoctorId = savedUser.doctorId || localStorage.getItem('doctorId');
   const canUpgradeSolo = data.clinic?.type === 'Solo' || (!data.clinic?.type && Boolean(loggedInDoctorId));
   const clinicSchedule = getClinicSchedule(data.clinic || {});
+  const clinicRegistrationStatus = data.clinic?.clinicRegistrationStatus || (data.clinic?.type === 'Clinic' ? 'Approved' : 'Not Submitted');
+  const clinicRegistrationRemark = String(data.clinic?.clinicRegistrationReviewRemark || '').trim();
+  const workspaceTypeLabel = data.clinic?.type === 'Clinic' ? 'Clinic Workspace' : 'Solo Practice';
+  const workspaceStatusLabel = data.clinic?.type === 'Clinic'
+    ? 'Clinic-level features unlocked'
+    : clinicRegistrationStatus === 'Under Review'
+      ? 'Registration Under Review'
+      : clinicRegistrationStatus === 'Correction Required'
+        ? 'Correction Required'
+        : 'Registration Not Submitted';
+  const registrationActionSubtitle = clinicRegistrationStatus === 'Under Review'
+    ? 'Submitted for operations review. You can edit and resubmit if details need correction.'
+    : clinicRegistrationStatus === 'Correction Required'
+      ? (clinicRegistrationRemark ? `Correction required: ${clinicRegistrationRemark}` : 'Correction required. Update details and resubmit for review.')
+      : 'Add official establishment details and submit them for operations review.';
+  const registrationSubmitLabel = clinicRegistrationStatus === 'Under Review' || clinicRegistrationStatus === 'Correction Required'
+    ? 'Resubmit for Review'
+    : 'Submit for Review';
   const roleLabels = {
     super_admin: 'Super Admin',
     clinic_admin: 'Clinic Admin',
@@ -980,7 +1042,7 @@ const Settings = ({ data, setData, onLogout }) => {
               <p className="type-page-title tracking-[0.18em] text-teal-600 mt-1">
                 {data.clinic?.clinicCode ? `${data.clinic.clinicCode.slice(0, 4)}-${data.clinic.clinicCode.slice(4)}` : 'Not Available'}
               </p>
-              <p className="type-secondary text-slate-400 mt-1">Share this code with your clinic team for secure sign-in.</p>
+              <p className="type-secondary text-slate-400 mt-1">Share this code with your team for secure sign-in.</p>
             </div>
           )
         },
@@ -1062,11 +1124,11 @@ const Settings = ({ data, setData, onLogout }) => {
       if (canUpgradeSolo) {
         clinicItems.push({
           key: 'upgrade-clinic',
-          searchText: 'upgrade clinic add receptionists multiple doctors growing clinic expand practice',
+          searchText: `register clinic upgrade establishment review ${clinicRegistrationStatus} ${clinicRegistrationRemark}`,
           render: () => (
             <SettingItem
-              title="Upgrade to Clinic"
-              subtitle="Add receptionists, manage multiple doctors, and scale your growing clinic."
+              title="Register Your Clinic"
+              subtitle={registrationActionSubtitle}
               onEdit={openUpgradeModal}
             />
           )
@@ -1336,7 +1398,7 @@ const Settings = ({ data, setData, onLogout }) => {
                 <p className="type-page-title tracking-[0.18em] text-teal-600 mt-1">
                   {data.clinic?.clinicCode ? `${data.clinic.clinicCode.slice(0, 4)}-${data.clinic.clinicCode.slice(4)}` : 'Not Available'}
                 </p>
-                <p className="type-secondary text-slate-400 mt-1">Share this code with your clinic team for secure sign-in.</p>
+                <p className="type-secondary text-slate-400 mt-1">Share this code with your team for secure sign-in.</p>
               </div>
               <SettingItem 
                 title="Clinic Details" 
@@ -1388,8 +1450,8 @@ const Settings = ({ data, setData, onLogout }) => {
               )}
               {canUpgradeSolo && (
                 <SettingItem
-                  title="Upgrade to Clinic"
-                  subtitle="Add receptionists, manage multiple doctors, and scale your growing clinic."
+                  title="Register Your Clinic"
+                  subtitle={registrationActionSubtitle}
                   onEdit={openUpgradeModal}
                 />
               )}
@@ -1578,8 +1640,8 @@ const Settings = ({ data, setData, onLogout }) => {
                    onChange={e => setFormData({
                      ...formData,
                      open24Hours: e.target.checked,
-                     morningStart: e.target.checked ? DEFAULT_CLINIC_START_TIME : DEFAULT_CLINIC_MORNING_START_TIME,
-                     morningEnd: e.target.checked ? DEFAULT_CLINIC_END_TIME : DEFAULT_CLINIC_MORNING_END_TIME,
+                     morningStart: e.target.checked ? '' : DEFAULT_CLINIC_MORNING_START_TIME,
+                     morningEnd: e.target.checked ? '' : DEFAULT_CLINIC_MORNING_END_TIME,
                      eveningStart: e.target.checked ? '' : DEFAULT_CLINIC_EVENING_START_TIME,
                      eveningEnd: e.target.checked ? '' : DEFAULT_CLINIC_EVENING_END_TIME
                    })}
@@ -1660,7 +1722,12 @@ const Settings = ({ data, setData, onLogout }) => {
                    step="0.01"
                    className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('consultationFee') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
                    value={formData.consultationFee || ''}
-                   onChange={e => setFormData({ ...formData, consultationFee: e.target.value })}
+                   onKeyDown={preventInvalidMoneyKey}
+                   onPaste={e => {
+                     const pastedValue = e.clipboardData.getData('text');
+                     if (Number(pastedValue) < 0 || pastedValue.includes('-')) e.preventDefault();
+                   }}
+                   onChange={e => setFormData({ ...formData, consultationFee: getNonNegativeMoneyInput(e.target.value, formData.consultationFee || '') })}
                  />
                </div>
 
@@ -1687,11 +1754,11 @@ const Settings = ({ data, setData, onLogout }) => {
                    )}
 
                    {(formData.billingServices || []).map((service, index) => (
-                     <div key={service._id || `service-${index}`} className={`grid grid-cols-[minmax(0,1fr)_110px_auto] gap-2 items-center border rounded-lg p-2 ${invalidFields.includes('billingServices') ? 'border-red-200 bg-red-50/40' : 'border-slate-200 bg-slate-50'}`}>
+                     <div key={service._id || `service-${index}`} className="grid grid-cols-[minmax(0,1fr)_110px_auto] gap-2 items-center border border-slate-200 bg-slate-50 rounded-lg p-2">
                        <input
                          type="text"
                          placeholder="Service name"
-                         className="type-body w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-500"
+                         className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes(`billingService-${index}-name`) ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
                          value={service.name || ''}
                          onChange={e => {
                            const nextServices = [...(formData.billingServices || [])];
@@ -1704,11 +1771,19 @@ const Settings = ({ data, setData, onLogout }) => {
                          min="0"
                          step="0.01"
                          placeholder="Price"
-                         className="type-body w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-500"
+                         className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes(`billingService-${index}-price`) ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
                          value={service.price || ''}
+                         onKeyDown={preventInvalidMoneyKey}
+                         onPaste={e => {
+                           const pastedValue = e.clipboardData.getData('text');
+                           if (Number(pastedValue) < 0 || pastedValue.includes('-')) e.preventDefault();
+                         }}
                          onChange={e => {
                            const nextServices = [...(formData.billingServices || [])];
-                           nextServices[index] = { ...nextServices[index], price: e.target.value };
+                           nextServices[index] = {
+                             ...nextServices[index],
+                             price: getNonNegativeMoneyInput(e.target.value, nextServices[index]?.price || '')
+                           };
                            setFormData({ ...formData, billingServices: nextServices });
                          }}
                        />
@@ -1743,12 +1818,20 @@ const Settings = ({ data, setData, onLogout }) => {
         </div>
       </Modal>
 
-      <Modal isOpen={upgradeModalOpen} onClose={() => { setUpgradeModalOpen(false); setModalError(''); setInvalidFields([]); }} title="Add Establishment Details" footer={
+      <Modal isOpen={upgradeModalOpen} onClose={() => { setUpgradeModalOpen(false); setModalError(''); setInvalidFields([]); }} title="Register Your Clinic" footer={
           <button onClick={handleUpgradeToClinic} disabled={loading} className="type-section-title w-full bg-teal-600 text-white py-1.5 rounded-lg disabled:opacity-70 hover:bg-teal-700 transition-colors">
-             {loading ? 'Upgrading...' : 'Upgrade to Clinic'}
+             {loading ? 'Submitting...' : registrationSubmitLabel}
           </button>
         }>
-        <div className="space-y-3">
+        <div className="space-y-2">
+          <div className="rounded-lg border border-teal-100 bg-teal-50 px-2 py-2">
+            <p className="type-secondary text-teal-900">Congratulations on expanding your practice! Add your official establishment details to unlock clinic-level features.</p>
+          </div>
+          {clinicRegistrationStatus === 'Correction Required' && clinicRegistrationRemark ? (
+            <div className="rounded-lg border border-amber-100 bg-amber-50 px-2 py-2">
+              <p className="type-secondary text-amber-800">{clinicRegistrationRemark}</p>
+            </div>
+          ) : null}
           <AlertMessage message={modalError} />
 
           <div>
@@ -1761,33 +1844,15 @@ const Settings = ({ data, setData, onLogout }) => {
             <input type="text" placeholder="CE registration number" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('clinicalEstablishmentNo') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.clinicalEstablishmentNo} onChange={e => setUpgradeData({...upgradeData, clinicalEstablishmentNo: e.target.value})} />
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase">Date of Issue <span className="text-red-500">*</span></label>
-              <input type="date" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('ceIssueDate') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.ceIssueDate} onChange={e => setUpgradeData({...upgradeData, ceIssueDate: e.target.value})} />
-            </div>
-            <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase">Registering State Authority <span className="text-red-500">*</span></label>
-              <input type="text" placeholder="e.g. Delhi Health Authority" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('registeringAuthority') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.registeringAuthority} onChange={e => setUpgradeData({...upgradeData, registeringAuthority: e.target.value})} />
-            </div>
+          <div>
+            <label className="type-label block text-slate-500 mb-1 uppercase">Registering State Authority <span className="text-red-500">*</span></label>
+            <input type="text" placeholder="e.g. Delhi Health Authority" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('registeringAuthority') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.registeringAuthority} onChange={e => setUpgradeData({...upgradeData, registeringAuthority: e.target.value})} />
           </div>
 
-          <label className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer">
-            <input type="checkbox" checked={upgradeData.createAdmin} onChange={e => setUpgradeData({...upgradeData, createAdmin: e.target.checked})} className="accent-teal-600" />
-            <UserPlus size={14} className="text-slate-500" />
-            <span className="type-body text-slate-700">Create clinic admin</span>
-          </label>
-
-          {upgradeData.createAdmin && (
-            <div className="space-y-2 animate-fadeIn">
-              <input type="text" placeholder="Admin name *" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('adminName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminName} onChange={e => setUpgradeData({...upgradeData, adminName: e.target.value})} />
-              <input type="email" placeholder="Admin email *" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('adminEmail') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminEmail} onChange={e => setUpgradeData({...upgradeData, adminEmail: e.target.value})} />
-              <div className="grid grid-cols-2 gap-2">
-                <input type="tel" maxLength={10} placeholder="Admin phone *" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('adminPhone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminPhone} onChange={e => setUpgradeData({...upgradeData, adminPhone: e.target.value.replace(/\D/g, '')})} />
-                <input type="password" placeholder="Password *" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('adminPassword') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.adminPassword} onChange={e => setUpgradeData({...upgradeData, adminPassword: e.target.value})} />
-              </div>
-            </div>
-          )}
+          <div>
+            <label className="type-label block text-slate-500 mb-1 uppercase">Date of Issue <span className="text-red-500">*</span></label>
+            <input type="date" max={todayStr} className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('ceIssueDate') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.ceIssueDate} onChange={e => setUpgradeData({...upgradeData, ceIssueDate: e.target.value})} />
+          </div>
         </div>
       </Modal>
 

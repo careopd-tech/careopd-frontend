@@ -86,10 +86,10 @@ export const formatClinicShiftSummary = (shifts = [], open24Hours = false) => {
 export const getClinicSchedule = (clinic = {}) => {
   const open24Hours = clinic?.open24Hours === true;
   const shifts = buildClinicShiftWindows(clinic);
-  const morningStart = shifts[0]?.start || DEFAULT_CLINIC_START_TIME;
-  const morningEnd = shifts[0]?.end || DEFAULT_CLINIC_END_TIME;
-  const eveningStart = shifts[1]?.start || '';
-  const eveningEnd = shifts[1]?.end || '';
+  const morningStart = open24Hours ? '' : (shifts[0]?.start || DEFAULT_CLINIC_START_TIME);
+  const morningEnd = open24Hours ? '' : (shifts[0]?.end || DEFAULT_CLINIC_END_TIME);
+  const eveningStart = open24Hours ? '' : (shifts[1]?.start || '');
+  const eveningEnd = open24Hours ? '' : (shifts[1]?.end || '');
   const workingHoursStart = shifts[0]?.start || DEFAULT_CLINIC_START_TIME;
   const workingHoursEnd = shifts[shifts.length - 1]?.end || DEFAULT_CLINIC_END_TIME;
   const appointmentWindowMinutes = normalizeAppointmentWindow(clinic.appointmentWindowMinutes);
@@ -198,9 +198,10 @@ export const validateDoctorWorkingHours = ({
   morningEnd,
   eveningStart,
   eveningEnd,
+  followsClinicSchedule,
   clinic
 }) => {
-  if (isSoloClinic(clinic)) return '';
+  if (isSoloClinic(clinic) || followsClinicSchedule === true) return '';
   const schedule = getClinicSchedule(clinic);
 
   if (!morningStart || !morningEnd) {
@@ -255,7 +256,7 @@ export const validateDoctorWorkingHours = ({
 
 export const getDoctorShiftWindows = (doctor = {}, clinic = {}) => {
   const schedule = getClinicSchedule(clinic);
-  if (isSoloClinic(clinic)) {
+  if (isSoloClinic(clinic) || doctor?.followsClinicSchedule === true) {
     return schedule.shifts;
   }
   const morningStart = normalizeTimeValue(doctor.morningStart, '');
