@@ -205,11 +205,11 @@ export const validateDoctorWorkingHours = ({
   const schedule = getClinicSchedule(clinic);
 
   if (!morningStart || !morningEnd) {
-    return 'Primary working hours are required.';
+    return 'Morning working hours are required.';
   }
 
   if ((eveningStart && !eveningEnd) || (!eveningStart && eveningEnd)) {
-    return 'Secondary working hours must include both start and end time.';
+    return 'Evening working hours must include both start and end time.';
   }
 
   const validateShift = (label, start, end) => {
@@ -237,18 +237,18 @@ export const validateDoctorWorkingHours = ({
     return '';
   };
 
-  const primaryError = validateShift('Primary', morningStart, morningEnd);
-  if (primaryError) return primaryError;
+  const morningError = validateShift('Morning', morningStart, morningEnd);
+  if (morningError) return morningError;
 
-  const secondaryError = validateShift('Secondary', eveningStart, eveningEnd);
-  if (secondaryError) return secondaryError;
+  const eveningError = validateShift('Evening', eveningStart, eveningEnd);
+  if (eveningError) return eveningError;
 
   if (eveningStart && timeToMinutes(morningStart) >= timeToMinutes(eveningStart)) {
-    return 'Secondary working hours must be later than the primary shift.';
+    return 'Evening working hours must be later than morning shift.';
   }
 
   if (eveningStart && timeToMinutes(morningEnd) > timeToMinutes(eveningStart)) {
-    return 'Secondary working hours cannot overlap the primary shift.';
+    return 'Evening working hours cannot overlap morning shift.';
   }
 
   return '';

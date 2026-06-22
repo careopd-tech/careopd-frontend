@@ -461,7 +461,7 @@ const Appointments = ({ data, setData, onLogout }) => {
           const activeSection = expandedSectionRef.current;
 
           const syncGroup = async (group, serverCount) => {
-            if (resetLazySections) return [];
+            if (resetLazySections && activeSection !== group) return [];
             if (activeSection !== group) return sectionsRef.current[group];
 
             const currentList = sectionsRef.current[group];

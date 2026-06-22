@@ -466,6 +466,21 @@ const Doctors = ({ data, setData, onLogout }) => {
     }
   };
 
+  const getDoctorHoursErrorFields = (message = '') => {
+    const normalized = message.toLowerCase();
+
+    if (normalized.includes('evening working hours must be later') || normalized.includes('evening working hours cannot overlap')) {
+      return ['eveningStart'];
+    }
+
+    if (normalized.includes('morning end time')) return ['morningEnd'];
+    if (normalized.includes('evening end time')) return ['eveningEnd'];
+    if (normalized.includes('morning')) return ['morningStart', 'morningEnd'];
+    if (normalized.includes('evening')) return ['eveningStart', 'eveningEnd'];
+
+    return ['morningStart', 'morningEnd'];
+  };
+
   const handleSaveDoctor = async () => {
     setModalError('');
     let errors = [];
@@ -524,7 +539,7 @@ const Doctors = ({ data, setData, onLogout }) => {
     });
 
     if (doctorHoursError) {
-      setInvalidFields(['morningStart', 'morningEnd', 'eveningStart', 'eveningEnd']);
+      setInvalidFields(getDoctorHoursErrorFields(doctorHoursError));
       setAddDoctorTab('working_hours');
       return setModalError(doctorHoursError);
     }
@@ -662,7 +677,7 @@ const Doctors = ({ data, setData, onLogout }) => {
       <div key={doc._id} className={`p-3 rounded-xl border flex flex-col md:flex-row landscape:flex-row md:items-stretch landscape:items-stretch gap-2 md:gap-3 landscape:gap-3 transition-all relative ${isInactive ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100 shadow-sm'}`}>
         
         <div className={`flex-1 min-w-0 flex flex-col ${isInactive ? 'opacity-70' : ''}`}>
-          <div className="flex items-start justify-between">
+          <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2.5 mt-0.5">
               <div className="type-card-title w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 flex-shrink-0 overflow-hidden">
                 {typeof doc.photo === 'string' && doc.photo.length > 50 ? <img src={doc.photo} alt="Doc" className="w-full h-full object-cover"/> : <Building2 size={16} className="text-slate-400" />}
@@ -673,7 +688,7 @@ const Doctors = ({ data, setData, onLogout }) => {
                 <p className="type-label text-slate-400 leading-tight mt-1">Mobile: {doc.phone || 'Not Added'}</p>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 mt-1 relative">
+            <div className="flex items-center gap-1.5 mt-0.5 relative">
               {canManageDoctors && (
                 <button
                   type="button"

@@ -304,7 +304,7 @@ const Auth = ({ authState, setAuthState, setUserRole, sessionMessage = '' }) => 
       <div data-careopd-scroll-root className="auth-screen min-h-dvh bg-slate-50 flex flex-col justify-start sm:justify-center items-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-slate-100 animate-scaleIn">
           <div className="flex flex-col items-center mb-6">
-            <img src="/CareOPD-Logo.png" alt="CareOPD Logo" className="h-24 mb-2 object-contain" />
+            <img src="/icon_x512.png" alt="CareOPD Logo" className="h-24 mb-2 object-contain" />
             <h2 className="text-2xl font-bold text-slate-800 text-center leading-tight">CareOPD</h2>
           </div>
 
@@ -334,7 +334,7 @@ const Auth = ({ authState, setAuthState, setUserRole, sessionMessage = '' }) => 
         {/* Header/Logo Section */}
         <div className="mb-8">
           <div className="flex items-center justify-center mb-4">
-            <img src="/CareOPD-Logo.png" alt="CareOPD Logo" className="h-14 object-contain" />
+            <img src="/icon_x512.png" alt="CareOPD Logo" className="h-14 object-contain" />
           </div>
           <h2 className="text-2xl font-bold text-slate-800 text-center leading-tight">
             {authState === 'login' && 'Welcome to CareOPD'}

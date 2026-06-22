@@ -1,13 +1,13 @@
 import React from 'react';
 
 const LaunchScreen = ({
-  title = 'Restoring your workspace',
-  message = 'Securely reconnecting to your last session. This usually takes a moment.',
+  title = 'Preparing your workspace',
+  message = 'Please wait while CareOPD gets things ready.',
 }) => (
   <div className="launch-screen" aria-live="polite" aria-busy="true">
     <div className="launch-screen__content">
       <img
-        src="/CareOPD-Logo.png"
+        src="/icon_x512.png"
         alt="CareOPD"
         className="launch-screen__logo"
         width="188"

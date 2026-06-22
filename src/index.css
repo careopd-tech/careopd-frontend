@@ -44,6 +44,7 @@ body,
   align-items: center;
   justify-content: center;
   background: #f8fafc;
+  font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   z-index: 60;
 }
 
