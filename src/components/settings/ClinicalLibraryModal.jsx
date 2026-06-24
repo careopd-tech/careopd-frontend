@@ -679,7 +679,7 @@ const ClinicalLibraryModal = ({
             type="button"
             onClick={() => removeGroupLocally(group)}
             disabled={savingGroupId === pendingGroup.id}
-            className={`${actionButtonClass} text-slate-500 hover:bg-slate-100`}
+            className={`${actionButtonClass} text-slate-600 hover:bg-slate-100`}
             aria-label="Cancel category group"
             title="Cancel"
           >
@@ -788,10 +788,10 @@ const ClinicalLibraryModal = ({
                     title={isEditing ? 'Cancel' : item.pinned === true ? 'Pinned' : 'Pin'}
                     className={`${actionButtonClass} ${
                       isEditing
-                        ? 'text-slate-500 hover:bg-slate-100'
+                        ? 'text-slate-600 hover:bg-slate-100'
                         : item.pinned === true
                           ? 'text-amber-700 hover:bg-amber-50'
-                          : 'text-slate-500 hover:bg-slate-100'
+                          : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
                     {isPinning ? (

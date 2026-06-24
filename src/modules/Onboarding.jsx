@@ -157,12 +157,12 @@ const Onboarding = ({ setAuthState }) => {
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center animate-scaleIn">
           <ShieldCheck size={64} className="mx-auto text-teal-500 mb-4" />
           <h2 className="text-2xl font-bold text-slate-800 mb-2">{onboardingTitle}</h2>
-          <p className="text-slate-500 mb-6">Your account is fully set up and ready to use.</p>
+          <p className="text-slate-600 mb-6">Your account is fully set up and ready to use.</p>
           {createdClinicCode && (
             <div className="mb-6 p-4 rounded-2xl border border-teal-100 bg-teal-50">
               <p className="text-[12px] font-bold uppercase tracking-wide text-teal-700 mb-1">Your Clinic Code</p>
               <p className="text-[22px] font-bold tracking-[0.2em] text-slate-800">{createdClinicCode}</p>
-              <p className="text-[12px] text-slate-500 mt-2">Save and share it securely with your team so they can join your clinic&apos;s network on CareOPD.</p>
+              <p className="text-[12px] text-slate-600 mt-2">Save and share it securely with your team so they can join your clinic&apos;s network on CareOPD.</p>
             </div>
           )}
           <button onClick={() => setAuthState('login')} className="w-full bg-teal-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-teal-700">
@@ -183,7 +183,7 @@ const Onboarding = ({ setAuthState }) => {
             {step === 3 && (formData.type === 'Solo' ? 'Professional Credentials' : 'Establishment Details')}
             {step === 4 && 'Secure your account'}
           </h2>
-          <p className="text-slate-500 text-sm mt-1">Step {step} of 4</p>
+          <p className="text-slate-600 text-sm mt-1">Step {step} of 4</p>
         </div>
 
         <AlertMessage message={error} />
@@ -193,13 +193,13 @@ const Onboarding = ({ setAuthState }) => {
             <button type="button" onClick={() => handleSelectType('Solo')} className="p-6 border-2 border-slate-100 hover:border-teal-500 rounded-2xl flex flex-col items-center text-center group transition-all hover:shadow-md hover:bg-teal-50/30">
               <div className="w-16 h-16 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><Stethoscope size={32} /></div>
               <h3 className="font-bold text-slate-800 text-[15px]">Solo Doctor</h3>
-              <p className="text-[12px] text-slate-500 mt-2 leading-tight">I operate my own private practice independently.</p>
+              <p className="text-[12px] text-slate-600 mt-2 leading-tight">I operate my own private practice independently.</p>
             </button>
 
             <button type="button" onClick={() => handleSelectType('Clinic')} className="p-6 border-2 border-slate-100 hover:border-blue-500 rounded-2xl flex flex-col items-center text-center group transition-all hover:shadow-md hover:bg-blue-50/30">
               <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform"><Building2 size={32} /></div>
               <h3 className="font-bold text-slate-800 text-[15px]">Clinic / Poly</h3>
-              <p className="text-[12px] text-slate-500 mt-2 leading-tight">We have an admin desk and multiple doctors.</p>
+              <p className="text-[12px] text-slate-600 mt-2 leading-tight">We have an admin desk and multiple doctors.</p>
             </button>
           </div>
         )}

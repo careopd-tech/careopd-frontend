@@ -283,9 +283,9 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
           <div className="p-3 bg-white border-b border-slate-200 flex justify-between items-center z-10 min-h-[48px]">
             <div>
               <h3 className="text-[14px] font-bold text-slate-800">{title}</h3>
-              <p className="text-[12px] text-slate-500 font-medium">Browse from {totalCount} items</p>
+              <p className="text-[12px] text-slate-600 font-medium">Browse from {totalCount} items</p>
             </div>
-            <button type="button" onClick={() => setActiveSheet(null)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-full transition-colors"><X size={16} /></button>
+            <button type="button" onClick={() => setActiveSheet(null)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-colors"><X size={16} /></button>
           </div>
           <div className="p-2 bg-white border-b border-slate-100 shadow-sm z-10">
             <div className="relative">
@@ -373,13 +373,13 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
 
         {previousConsultation && !isReportReview && (
           <div className="px-1">
-            <div className="text-[12px] text-slate-500">
+            <div className="text-[12px] text-slate-600">
               Linked to earlier clinical record{' '}
               <span className="font-semibold text-slate-700">
                 {previousConsultation.date || '--'}{previousConsultation.time ? ` | ${previousConsultation.time}` : ''}
               </span>
               {previousConsultation.doctor?.name ? (
-                <span className="text-slate-500">{` | Dr. ${previousConsultation.doctor.name.replace(/^Dr\.\s*/i, '')}`}</span>
+                <span className="text-slate-600">{` | Dr. ${previousConsultation.doctor.name.replace(/^Dr\.\s*/i, '')}`}</span>
               ) : null}
             </div>
           </div>
@@ -411,15 +411,15 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <label className="block text-[12px] font-bold text-slate-500 mb-1 uppercase">Blood Pressure</label>
+                <label className="block text-[12px] font-bold text-slate-600 mb-1 uppercase">Blood Pressure</label>
                 <input type="text" placeholder="120/80" className="w-full p-2 border border-slate-200 rounded-lg text-[12px] bg-slate-50 outline-none focus:border-teal-400 focus:bg-white" value={vitals.bp} onChange={e => setVitals({ ...vitals, bp: e.target.value })} />
               </div>
               <div>
-                <label className="block text-[12px] font-bold text-slate-500 mb-1 uppercase">Temp (°F)</label>
+                <label className="block text-[12px] font-bold text-slate-600 mb-1 uppercase">Temp (°F)</label>
                 <input type="text" placeholder="98.6" className="w-full p-2 border border-slate-200 rounded-lg text-[12px] bg-slate-50 outline-none focus:border-teal-400 focus:bg-white" value={vitals.temp} onChange={e => setVitals({ ...vitals, temp: e.target.value })} />
               </div>
               <div>
-                <label className="block text-[12px] font-bold text-slate-500 mb-1 uppercase">Weight (Kg)</label>
+                <label className="block text-[12px] font-bold text-slate-600 mb-1 uppercase">Weight (Kg)</label>
                 <input type="text" placeholder="70" className="w-full p-2 border border-slate-200 rounded-lg text-[12px] bg-slate-50 outline-none focus:border-teal-400 focus:bg-white" value={vitals.weight} onChange={e => setVitals({ ...vitals, weight: e.target.value })} />
               </div>
             </div>
@@ -437,7 +437,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
 
             <div className="space-y-2">
               <div>
-                <label className="block text-[12px] font-bold text-slate-500 mb-1 uppercase">Chief Complaints</label>
+                <label className="block text-[12px] font-bold text-slate-600 mb-1 uppercase">Chief Complaints</label>
 
                 {/* --- QUICK LIST (COMPLAINTS) --- */}
                 <div className="flex gap-2 overflow-x-auto mb-2 pb-2 w-full custom-scrollbar-hide">
@@ -478,7 +478,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
               </div>
 
               <div>
-                <label className="block text-[12px] font-bold text-slate-500 mb-1 uppercase">Provisional Diagnosis</label>
+                <label className="block text-[12px] font-bold text-slate-600 mb-1 uppercase">Provisional Diagnosis</label>
                 <input type="text" placeholder="e.g. Viral Pyrexia" className="w-full p-2 border border-slate-200 rounded-lg text-[12px] bg-slate-50 outline-none focus:border-teal-400 focus:bg-white" value={clinicalNotes.diagnosis} onChange={e => setClinicalNotes({ ...clinicalNotes, diagnosis: e.target.value })} />
               </div>
             </div>
@@ -501,7 +501,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
                     <div className="bg-teal-100 p-1.5 rounded-md"><Pill size={14} className="text-teal-700" /></div>
                     <div className="truncate">
                       <div className="text-[12px] font-bold text-slate-800 truncate">{currentMed.name}</div>
-                      <div className="text-[12px] text-slate-500 uppercase tracking-wider font-bold">Selected Medicine</div>
+                      <div className="text-[12px] text-slate-600 uppercase tracking-wider font-bold">Selected Medicine</div>
                     </div>
                   </div>
                   <button type="button" onClick={() => { setIsMedSelected(false); setCurrentMed({ ...currentMed, name: '' }); }} className="text-[12px] font-bold text-slate-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50">Change</button>
@@ -529,7 +529,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
               {/* Row 2: Route & Toggle (30/70 Split) */}
               <div className="grid grid-cols-[3fr_7fr] gap-2 items-end">
                 <div>
-                  <label className="text-[12px] font-bold text-slate-500 mb-1 uppercase block">Route</label>
+                  <label className="text-[12px] font-bold text-slate-600 mb-1 uppercase block">Route</label>
                   <select className="w-full p-2 border border-slate-200 rounded-lg text-[12px] outline-none focus:border-teal-400 bg-white text-slate-700" value={currentMed.route} onChange={e => setCurrentMed({ ...currentMed, route: e.target.value })}>
                     {RX_ROUTES.map(route => <option key={route} value={route}>{route}</option>)}
                   </select>
@@ -558,11 +558,11 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
                   {/* Row 3: Quantity & Frequency (30/70 Split) */}
                   <div className="grid grid-cols-[3fr_7fr] gap-2">
                     <div>
-                      <label className="text-[12px] font-bold text-slate-500 mb-1 uppercase block truncate">Quantity</label>
+                      <label className="text-[12px] font-bold text-slate-600 mb-1 uppercase block truncate">Quantity</label>
                       <input type="text" placeholder="Qty" className="w-full p-2 border border-slate-200 rounded-lg text-[12px] outline-none text-center focus:border-teal-400 bg-white" value={currentMed.quantity} onChange={e => setCurrentMed({ ...currentMed, quantity: e.target.value })} />
                     </div>
                     <div>
-                      <label className="text-[12px] font-bold text-slate-500 mb-1 uppercase block">Frequency</label>
+                      <label className="text-[12px] font-bold text-slate-600 mb-1 uppercase block">Frequency</label>
                       <select className="w-full p-2 border border-slate-200 rounded-lg text-[12px] outline-none bg-white text-slate-700" value={currentMed.frequency} onChange={e => setCurrentMed({ ...currentMed, frequency: e.target.value })}>
                         {RX_FREQUENCIES.map(freq => <option key={freq} value={freq}>{freq}</option>)}
                       </select>
@@ -572,13 +572,13 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
                   {/* Row 4: Duration & Timing (30/70 Split) */}
                   <div className="grid grid-cols-[3fr_7fr] gap-2">
                     <div>
-                      <label className="text-[12px] font-bold text-slate-500 mb-1 uppercase block">Duration</label>
+                      <label className="text-[12px] font-bold text-slate-600 mb-1 uppercase block">Duration</label>
                       <select className="w-full p-2 border border-slate-200 rounded-lg text-[12px] outline-none bg-white text-slate-700" value={currentMed.duration} onChange={e => setCurrentMed({ ...currentMed, duration: e.target.value })}>
                         {RX_DURATIONS.map(dur => <option key={dur} value={dur}>{dur}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="text-[12px] font-bold text-slate-500 mb-1 uppercase block">Timing</label>
+                      <label className="text-[12px] font-bold text-slate-600 mb-1 uppercase block">Timing</label>
                       <select className="w-full p-2 border border-slate-200 rounded-lg text-[12px] outline-none bg-white text-slate-700" value={currentMed.timing} onChange={e => setCurrentMed({ ...currentMed, timing: e.target.value })}>
                         {RX_TIMINGS.map(time => <option key={time} value={time}>{time}</option>)}
                       </select>
@@ -589,7 +589,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
 
               {/* Row 5: Instructions */}
               <div className="pt-1">
-                <label className="text-[12px] font-bold text-slate-500 mb-1 uppercase block">Instructions</label>
+                <label className="text-[12px] font-bold text-slate-600 mb-1 uppercase block">Instructions</label>
                 <input type="text" placeholder="Notes (Optional)" className="w-full p-2 border border-slate-200 rounded-lg text-[12px] outline-none bg-white focus:border-teal-400" value={currentMed.instructions} onChange={e => setCurrentMed({ ...currentMed, instructions: e.target.value })} />
               </div>
 
@@ -621,7 +621,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
                       </div>
 
                       {/* Row 2: Duration & Notes */}
-                      <div className="text-[12px] text-slate-500 mt-1 flex flex-wrap gap-x-1.5 gap-y-1 items-center">
+                      <div className="text-[12px] text-slate-600 mt-1 flex flex-wrap gap-x-1.5 gap-y-1 items-center">
                         <span className="font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">{med.duration}</span>
                         {med.instructions && (
                           <>
@@ -739,7 +739,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
             <div className="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
               <div>
                 <h2 className="text-[14px] font-bold text-slate-800">Past Visit Records</h2>
-                <div className="text-[12px] text-slate-500 font-medium flex items-center gap-1.5 mt-0.5">
+                <div className="text-[12px] text-slate-600 font-medium flex items-center gap-1.5 mt-0.5">
                   {selectedPastVisit.date} 
                   {(String(selectedPastVisit.doctorId?._id || selectedPastVisit.doctorId) !== String(loggedInDoctorId) || getUiStatus(selectedPastVisit) === 'No Show' || getUiStatus(selectedPastVisit) === 'No-Show') && (
                     <> • Dr. {selectedPastVisit.doctorId?.name?.replace(/^Dr\.\s*/i, '') || 'Unknown'}</>
@@ -813,7 +813,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
                         </div>
 
                         {/* Row 2: Duration & Notes */}
-                        <div className="text-[12px] text-slate-500 mt-1 flex flex-wrap gap-x-1.5 gap-y-1 items-center">
+                        <div className="text-[12px] text-slate-600 mt-1 flex flex-wrap gap-x-1.5 gap-y-1 items-center">
                           <span className="font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">{med.duration}</span>
                           {med.instructions && (
                             <>

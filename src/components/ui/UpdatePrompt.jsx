@@ -175,7 +175,7 @@ function UpdatePrompt() {
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="text-[14px] font-bold text-slate-800 leading-tight">App Updated</h3>
-            <p className="text-[12px] text-slate-500 mt-0.5 leading-snug">You are now on the latest CareOPD version.</p>
+            <p className="text-[12px] text-slate-600 mt-0.5 leading-snug">You are now on the latest CareOPD version.</p>
           </div>
           <button
             type="button"
@@ -202,7 +202,7 @@ function UpdatePrompt() {
               <h3 className="text-[14px] font-bold text-slate-800 leading-tight">
                 {isUpdating ? 'Updating CareOPD' : 'Update Available'}
               </h3>
-              <p className="text-[12px] text-slate-500 mt-0.5 leading-snug">
+              <p className="text-[12px] text-slate-600 mt-0.5 leading-snug">
                 {isUpdating
                   ? 'Downloading the latest version and refreshing your app...'
                   : isMandatoryUpdate

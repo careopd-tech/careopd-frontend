@@ -120,7 +120,7 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, cl
             colorClass = 'bg-blue-50 border-blue-200 text-blue-700 opacity-80 cursor-not-allowed';
         } else if (slot.status === 'Passed') {
             // ISSUE 2 FIX: Darker Grey for Passed/Expired slots
-            colorClass = 'bg-slate-100 border-slate-300 text-slate-500 cursor-not-allowed shadow-inner';
+            colorClass = 'bg-slate-100 border-slate-300 text-slate-600 cursor-not-allowed shadow-inner';
         }
 
         return (

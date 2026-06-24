@@ -765,7 +765,7 @@ const Settings = ({ data, setData, onLogout }) => {
           {isClinicDetails && (
             <p className="type-label text-teal-700 truncate mt-0.5">{workspaceTypeLabel} ({workspaceStatusLabel})</p>
           )}
-          {subtitle && <p className="type-label text-slate-500 truncate mt-0.5">{subtitle}</p>}
+          {subtitle && <p className="type-label text-slate-600 truncate mt-0.5">{subtitle}</p>}
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
@@ -912,7 +912,7 @@ const Settings = ({ data, setData, onLogout }) => {
             <h4 className="type-card-title text-slate-800 truncate">{user.name}</h4>
             <span className={`type-utility px-1.5 py-0.5 rounded-full ${
               user.status === 'Inactive'
-                ? 'bg-slate-100 text-slate-500'
+                ? 'bg-slate-100 text-slate-600'
                 : user.status === 'Pending'
                   ? 'bg-amber-50 text-amber-700'
                   : 'bg-teal-50 text-teal-700'
@@ -920,7 +920,7 @@ const Settings = ({ data, setData, onLogout }) => {
               {user.status || 'Active'}
             </span>
           </div>
-          <p className="type-label text-slate-500 truncate mt-0.5">{user.email} • {user.phone}</p>
+          <p className="type-label text-slate-600 truncate mt-0.5">{user.email} • {user.phone}</p>
           <p className="type-label text-slate-400 truncate mt-0.5">
             {roleLabels[user.role] || user.role}
           </p>
@@ -1015,7 +1015,7 @@ const Settings = ({ data, setData, onLogout }) => {
                 className={`type-secondary relative px-2 py-2.5 rounded-t-lg transition-colors ${
                   isActive
                     ? 'bg-amber-50 text-amber-800 font-semibold after:absolute after:left-3 after:right-3 after:-bottom-px after:h-0.5 after:bg-amber-600'
-                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-700'
                 }`}
               >
                 {roleLabels[roleKey]}
@@ -1038,7 +1038,7 @@ const Settings = ({ data, setData, onLogout }) => {
           searchText: `clinic code join sign in secure code ${data.clinic?.clinicCode || ''}`,
           render: () => (
             <div className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm">
-              <p className="type-label text-slate-500 uppercase">Clinic Code</p>
+              <p className="type-label text-slate-600 uppercase">Clinic Code</p>
               <p className="type-page-title tracking-[0.18em] text-teal-600 mt-1">
                 {data.clinic?.clinicCode ? `${data.clinic.clinicCode.slice(0, 4)}-${data.clinic.clinicCode.slice(4)}` : 'Not Available'}
               </p>
@@ -1394,7 +1394,7 @@ const Settings = ({ data, setData, onLogout }) => {
           {canManageClinicSettings && renderAccordion('clinic', 'Clinic Settings', Building2, 'text-blue-600', 
             <>
               <div className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm">
-                <p className="type-label text-slate-500 uppercase">Clinic Code</p>
+                <p className="type-label text-slate-600 uppercase">Clinic Code</p>
                 <p className="type-page-title tracking-[0.18em] text-teal-600 mt-1">
                   {data.clinic?.clinicCode ? `${data.clinic.clinicCode.slice(0, 4)}-${data.clinic.clinicCode.slice(4)}` : 'Not Available'}
                 </p>
@@ -1494,7 +1494,7 @@ const Settings = ({ data, setData, onLogout }) => {
                           <h4 className="type-card-title text-slate-800 truncate">{user.name}</h4>
                           <span className={`type-utility px-1.5 py-0.5 rounded-full ${
                             user.status === 'Inactive'
-                              ? 'bg-slate-100 text-slate-500'
+                              ? 'bg-slate-100 text-slate-600'
                               : user.status === 'Pending'
                                 ? 'bg-amber-50 text-amber-700'
                                 : 'bg-teal-50 text-teal-700'
@@ -1502,7 +1502,7 @@ const Settings = ({ data, setData, onLogout }) => {
                             {user.status || 'Active'}
                           </span>
                         </div>
-                        <p className="text-[12px] text-slate-500 truncate mt-0.5">{user.email} • {user.phone}</p>
+                        <p className="text-[12px] text-slate-600 truncate mt-0.5">{user.email} • {user.phone}</p>
                         <p className="text-[12px] text-slate-400 truncate mt-0.5">
                           {roleLabels[user.role] || user.role}
                         </p>
@@ -1618,13 +1618,13 @@ const Settings = ({ data, setData, onLogout }) => {
            
            {editModal?.type === 'clinic_details' && (
              <>
-               <div><label className="type-label block text-slate-500 mb-1 uppercase">Clinic Name *</label><input type="text" className="type-body w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-500" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
-               <div><label className="type-label block text-slate-500 mb-1 uppercase">Address *</label><textarea className="type-body w-full p-2 border border-slate-200 rounded-lg h-20 outline-none focus:ring-1 focus:ring-teal-500" value={formData.address || ''} onChange={e => setFormData({...formData, address: e.target.value})} /></div>
+               <div><label className="type-label block text-slate-600 mb-1 uppercase">Clinic Name *</label><input type="text" className="type-body w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-500" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
+               <div><label className="type-label block text-slate-600 mb-1 uppercase">Address *</label><textarea className="type-body w-full p-2 border border-slate-200 rounded-lg h-20 outline-none focus:ring-1 focus:ring-teal-500" value={formData.address || ''} onChange={e => setFormData({...formData, address: e.target.value})} /></div>
              </>
            )}
 
            {editModal?.type === 'single_input' && (
-             <div><label className="type-label block text-slate-500 mb-1 uppercase">{editModal.inputLabel} *</label><input type="text" className="type-body w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-500" value={formData.value || ''} onChange={e => setFormData({...formData, value: e.target.value})} /></div>
+             <div><label className="type-label block text-slate-600 mb-1 uppercase">{editModal.inputLabel} *</label><input type="text" className="type-body w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-500" value={formData.value || ''} onChange={e => setFormData({...formData, value: e.target.value})} /></div>
            )}
 
            {editModal?.type === 'clinic_schedule' && (
@@ -1653,11 +1653,11 @@ const Settings = ({ data, setData, onLogout }) => {
                  <h4 className="type-utility uppercase text-slate-700 mb-1 border-b border-slate-100 pb-1">Morning Shift</h4>
                  <div className="grid grid-cols-2 gap-2">
                    <div>
-                     <label className="type-label block text-slate-500 mb-1 uppercase">Start Time *</label>
+                     <label className="type-label block text-slate-600 mb-1 uppercase">Start Time *</label>
                      <input type="time" disabled={formData.open24Hours === true} className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('morningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.open24Hours === true ? '' : (formData.morningStart || '')} onChange={e => setFormData({...formData, morningStart: e.target.value})} />
                    </div>
                    <div>
-                     <label className="type-label block text-slate-500 mb-1 uppercase">End Time *</label>
+                     <label className="type-label block text-slate-600 mb-1 uppercase">End Time *</label>
                      <input type="time" disabled={formData.open24Hours === true} className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('morningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.open24Hours === true ? '' : (formData.morningEnd || '')} onChange={e => setFormData({...formData, morningEnd: e.target.value})} />
                    </div>
                  </div>
@@ -1676,18 +1676,18 @@ const Settings = ({ data, setData, onLogout }) => {
                  </div>
                  <div className="grid grid-cols-2 gap-2">
                    <div>
-                     <label className="type-label block text-slate-500 mb-1 uppercase">Start Time</label>
+                     <label className="type-label block text-slate-600 mb-1 uppercase">Start Time</label>
                      <input type="time" disabled={formData.open24Hours === true} className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('eveningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.open24Hours === true ? '' : (formData.eveningStart || '')} onChange={e => setFormData({...formData, eveningStart: e.target.value})} />
                    </div>
                    <div>
-                     <label className="type-label block text-slate-500 mb-1 uppercase">End Time</label>
+                     <label className="type-label block text-slate-600 mb-1 uppercase">End Time</label>
                      <input type="time" disabled={formData.open24Hours === true} className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('eveningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.open24Hours === true ? '' : (formData.eveningEnd || '')} onChange={e => setFormData({...formData, eveningEnd: e.target.value})} />
                    </div>
                  </div>
                  <p className="type-label mt-1 text-slate-400">Optional. Leave this blank if the clinic follows a single continuous shift.</p>
                </div>
                <div>
-                 <label className="type-label block text-slate-500 mb-1 uppercase">Appointment Window *</label>
+                 <label className="type-label block text-slate-600 mb-1 uppercase">Appointment Window *</label>
                  <select className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('appointmentWindowMinutes') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={formData.appointmentWindowMinutes || clinicSchedule.appointmentWindowMinutes} onChange={e => setFormData({...formData, appointmentWindowMinutes: Number(e.target.value)})}>
                    {APPOINTMENT_WINDOW_OPTIONS.map((minutes) => (
                      <option key={minutes} value={minutes}>{minutes} minutes</option>
@@ -1707,7 +1707,7 @@ const Settings = ({ data, setData, onLogout }) => {
                />
                <div>
                  <p className="type-section-title text-slate-800">Vitals Required before Consultation</p>
-                 <p className="type-secondary text-slate-500 mt-1">Adds pre-consult vitals capture to the appointment workflow. Consultation is not blocked.</p>
+                 <p className="type-secondary text-slate-600 mt-1">Adds pre-consult vitals capture to the appointment workflow. Consultation is not blocked.</p>
                </div>
              </label>
            )}
@@ -1715,7 +1715,7 @@ const Settings = ({ data, setData, onLogout }) => {
            {editModal?.type === 'billing_services' && (
              <>
                <div>
-                 <label className="type-label block text-slate-500 mb-1 uppercase">Consultation Fee *</label>
+                 <label className="type-label block text-slate-600 mb-1 uppercase">Consultation Fee *</label>
                  <input
                    type="number"
                    min="0"
@@ -1733,7 +1733,7 @@ const Settings = ({ data, setData, onLogout }) => {
 
                <div className="space-y-2">
                  <div className="flex items-center justify-between">
-                   <label className="type-label text-slate-500 uppercase">Available Services</label>
+                   <label className="type-label text-slate-600 uppercase">Available Services</label>
                    <button
                      type="button"
                      onClick={() => setFormData({
@@ -1793,7 +1793,7 @@ const Settings = ({ data, setData, onLogout }) => {
                            ...formData,
                            billingServices: (formData.billingServices || []).filter((_, serviceIndex) => serviceIndex !== index)
                          })}
-                         className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50 flex items-center justify-center"
+                         className="h-9 w-9 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 flex items-center justify-center"
                          aria-label="Delete service"
                        >
                          <Trash2 size={14} />
@@ -1807,9 +1807,9 @@ const Settings = ({ data, setData, onLogout }) => {
 
            {(editModal?.type === 'template' || editModal?.type === 'policy') && (
              <>
-               <div><label className="type-label block text-slate-500 mb-1 uppercase">Title *</label><input type="text" className="type-body w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-500" value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} /></div>
+               <div><label className="type-label block text-slate-600 mb-1 uppercase">Title *</label><input type="text" className="type-body w-full p-2 border border-slate-200 rounded-lg outline-none focus:ring-1 focus:ring-teal-500" value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} /></div>
                <div>
-                  <label className="type-label block text-slate-500 mb-1 uppercase">Content *</label>
+                  <label className="type-label block text-slate-600 mb-1 uppercase">Content *</label>
                   <textarea className="type-body w-full p-2 border border-slate-200 rounded-lg h-32 outline-none focus:ring-1 focus:ring-teal-500 resize-none" value={formData.text || ''} onChange={e => setFormData({...formData, text: e.target.value})} />
                   {editModal.type === 'template' && <p className="type-label text-slate-400 mt-1">Variables: {'{patient_name}, {doctor_name}, {time}, {date}'}</p>}
                </div>
@@ -1835,22 +1835,22 @@ const Settings = ({ data, setData, onLogout }) => {
           <AlertMessage message={modalError} />
 
           <div>
-            <label className="type-label block text-slate-500 mb-1 uppercase">Clinic Name <span className="text-red-500">*</span></label>
+            <label className="type-label block text-slate-600 mb-1 uppercase">Clinic Name <span className="text-red-500">*</span></label>
             <input type="text" placeholder="CareOPD Medical Center" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('clinicName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.clinicName} onChange={e => setUpgradeData({...upgradeData, clinicName: e.target.value})} />
           </div>
 
           <div>
-            <label className="type-label block text-slate-500 mb-1 uppercase">Clinical Establishment (CE) Number <span className="text-red-500">*</span></label>
+            <label className="type-label block text-slate-600 mb-1 uppercase">Clinical Establishment (CE) Number <span className="text-red-500">*</span></label>
             <input type="text" placeholder="CE registration number" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('clinicalEstablishmentNo') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.clinicalEstablishmentNo} onChange={e => setUpgradeData({...upgradeData, clinicalEstablishmentNo: e.target.value})} />
           </div>
 
           <div>
-            <label className="type-label block text-slate-500 mb-1 uppercase">Registering State Authority <span className="text-red-500">*</span></label>
+            <label className="type-label block text-slate-600 mb-1 uppercase">Registering State Authority <span className="text-red-500">*</span></label>
             <input type="text" placeholder="e.g. Delhi Health Authority" className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('registeringAuthority') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.registeringAuthority} onChange={e => setUpgradeData({...upgradeData, registeringAuthority: e.target.value})} />
           </div>
 
           <div>
-            <label className="type-label block text-slate-500 mb-1 uppercase">Date of Issue <span className="text-red-500">*</span></label>
+            <label className="type-label block text-slate-600 mb-1 uppercase">Date of Issue <span className="text-red-500">*</span></label>
             <input type="date" max={todayStr} className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('ceIssueDate') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={upgradeData.ceIssueDate} onChange={e => setUpgradeData({...upgradeData, ceIssueDate: e.target.value})} />
           </div>
         </div>
@@ -1865,7 +1865,7 @@ const Settings = ({ data, setData, onLogout }) => {
           <AlertMessage message={modalError} />
 
           <div>
-            <label className="type-label block text-slate-500 mb-1 uppercase">Full Name <span className="text-red-500">*</span></label>
+            <label className="type-label block text-slate-600 mb-1 uppercase">Full Name <span className="text-red-500">*</span></label>
             <input
               type="text"
               placeholder="Full name"
@@ -1876,7 +1876,7 @@ const Settings = ({ data, setData, onLogout }) => {
           </div>
 
           <div>
-            <label className="type-label block text-slate-500 mb-1 uppercase">Email ID <span className="text-red-500">*</span></label>
+            <label className="type-label block text-slate-600 mb-1 uppercase">Email ID <span className="text-red-500">*</span></label>
             <input
               type="email"
               placeholder="user@clinic.com"
@@ -1887,7 +1887,7 @@ const Settings = ({ data, setData, onLogout }) => {
           </div>
 
           <div>
-            <label className="type-label block text-slate-500 mb-1 uppercase">Mobile Number <span className="text-red-500">*</span></label>
+            <label className="type-label block text-slate-600 mb-1 uppercase">Mobile Number <span className="text-red-500">*</span></label>
             <input
               type="tel"
               maxLength={10}
@@ -1936,7 +1936,7 @@ const Settings = ({ data, setData, onLogout }) => {
             This will make the selected user the new clinic owner and super admin. Your account will fall back to {savedUser.doctorId ? 'Doctor' : 'Clinic Admin'} access.
           </p>
           <div>
-            <label className="type-label block text-slate-500 mb-1 uppercase">Reason</label>
+            <label className="type-label block text-slate-600 mb-1 uppercase">Reason</label>
             <textarea
               value={transferRemark}
               onChange={e => setTransferRemark(e.target.value)}
@@ -1981,7 +1981,7 @@ const Settings = ({ data, setData, onLogout }) => {
           <AlertMessage message={modalError} />
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
             <p className="type-body text-slate-800">{statusConfirmUser?.name}</p>
-            <p className="type-label text-slate-500 mt-0.5">{statusConfirmUser?.email}</p>
+            <p className="type-label text-slate-600 mt-0.5">{statusConfirmUser?.email}</p>
           </div>
           <p className="type-body text-slate-600 leading-relaxed">
             {statusConfirmUser?.status === 'Inactive'
@@ -1991,7 +1991,7 @@ const Settings = ({ data, setData, onLogout }) => {
               : 'This will immediately block the selected user from signing in.'}
           </p>
           <div>
-            <label className="type-label block text-slate-500 mb-1 uppercase">Remark</label>
+            <label className="type-label block text-slate-600 mb-1 uppercase">Remark</label>
             <textarea
               value={statusRemark}
               onChange={e => setStatusRemark(e.target.value)}

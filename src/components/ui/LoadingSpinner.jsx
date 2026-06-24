@@ -10,7 +10,7 @@ const LoadingSpinner = ({ fullPage = false, size = 24, label = "Loading..." }) =
         className="text-teal-600 animate-spin" 
       />
       {label && (
-        <span className="text-[13px] font-bold text-slate-500 animate-pulse uppercase tracking-wider">
+        <span className="text-[13px] font-bold text-slate-600 animate-pulse uppercase tracking-wider">
           {label}
         </span>
       )}

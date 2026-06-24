@@ -85,11 +85,11 @@ const renderClinicalEntry = (entry, index, totalEntries, onRefillRx) => (
           {entry.entryType || (index === 0 ? 'Initial Consultation' : 'Clinical Update')}
         </div>
         {entry.resultStatus ? (
-          <div className="mt-1 text-[12px] text-slate-500">{entry.resultStatus}</div>
+          <div className="mt-1 text-[12px] text-slate-600">{entry.resultStatus}</div>
         ) : null}
       </div>
       {entry.consultationCompletedAt ? (
-        <div className="text-right text-[12px] text-slate-500">{formatTimelineTimestamp(entry.consultationCompletedAt)}</div>
+        <div className="text-right text-[12px] text-slate-600">{formatTimelineTimestamp(entry.consultationCompletedAt)}</div>
       ) : null}
     </div>
 
@@ -123,9 +123,9 @@ const renderClinicalEntry = (entry, index, totalEntries, onRefillRx) => (
               <div key={`${entry._id || index}-med-${medIndex}`} className="p-2 border-b border-slate-50 last:border-0">
                 <div className="text-[12px] font-bold text-slate-800">{medIndex + 1}. {med.name}</div>
                 <div className="text-[12px] text-teal-700 font-medium flex gap-1 items-center mt-0.5">
-                  <span>{med.route}</span><span>&bull;</span><span>{getFormattedUnit(med)}</span><span>&bull;</span><span>{med.frequency}</span><span>&bull;</span><span className="text-slate-500">{med.timing}</span>
+                  <span>{med.route}</span><span>&bull;</span><span>{getFormattedUnit(med)}</span><span>&bull;</span><span>{med.frequency}</span><span>&bull;</span><span className="text-slate-600">{med.timing}</span>
                 </div>
-                <div className="text-[12px] text-slate-500 mt-1 flex gap-1 items-center">
+                <div className="text-[12px] text-slate-600 mt-1 flex gap-1 items-center">
                   <span className="font-bold text-slate-600 bg-slate-100 px-1 rounded">{med.duration}</span>
                   {med.instructions && <span className="italic">| {med.instructions}</span>}
                 </div>
@@ -179,7 +179,7 @@ const PatientHistoryList = ({
     return (
       <div className="flex flex-col items-center justify-center py-12 text-slate-400">
         <History size={32} className="mb-2 opacity-20" />
-        <span className="text-[13px] font-medium text-slate-500">No past records found.</span>
+        <span className="text-[13px] font-medium text-slate-600">No past records found.</span>
       </div>
     );
   }
@@ -213,7 +213,7 @@ const PatientHistoryList = ({
             >
               <span className={`text-[12px] font-bold ${isLatest ? 'text-teal-800' : 'text-slate-700'}`}>{visit.date}</span>
               {!hideDoctorName && (
-                <span className="text-[12px] text-slate-500 truncate w-full text-left">Dr. {visit.doctorId?.name?.replace(/^Dr\.\s*/i, '') || 'Unknown'}</span>
+                <span className="text-[12px] text-slate-600 truncate w-full text-left">Dr. {visit.doctorId?.name?.replace(/^Dr\.\s*/i, '') || 'Unknown'}</span>
               )}
               <span className={`text-[12px] font-bold px-1.5 py-0.5 rounded tracking-wider uppercase mt-0.5 border ${styling.badge}`}>{uiStatus}</span>
               {followUpNoteCount > 0 && (
@@ -289,7 +289,7 @@ const PatientHistoryList = ({
                       <span className="w-1.5 h-1.5 bg-white rounded-full"></span>
                     </span>
                   )}
-                  <span className={`text-[13px] font-bold ${canExpand ? 'text-slate-800' : 'text-slate-500'}`}>
+                  <span className={`text-[13px] font-bold ${canExpand ? 'text-slate-800' : 'text-slate-600'}`}>
                     {visit.date} • {visit.time}
                   </span>
                   <span className={`ml-auto text-[12px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border whitespace-nowrap flex-shrink-0 ${styling.badge}`}>
@@ -298,7 +298,7 @@ const PatientHistoryList = ({
                 </div>
 
                 {!hideDoctorName && (
-                  <div className={`text-[12px] text-slate-500 w-full ${canExpand ? 'mb-2' : ''}`}>
+                  <div className={`text-[12px] text-slate-600 w-full ${canExpand ? 'mb-2' : ''}`}>
                     Consultation w/ <span className={`font-bold ${canExpand ? 'text-slate-700' : 'text-slate-400'}`}>Dr. {visit.doctorId?.name?.replace(/^Dr\.\s*/i, '') || 'Unknown'}</span>
                   </div>
                 )}
@@ -326,8 +326,8 @@ const PatientHistoryList = ({
                 <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-4 animate-slideDown cursor-default">
                   {hasMultipleClinicalEntries && (
                     <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                      <div className="text-[12px] font-bold uppercase tracking-wider text-slate-500">Clinical Timeline</div>
-                      <div className="mt-1 text-[12px] text-slate-500">
+                      <div className="text-[12px] font-bold uppercase tracking-wider text-slate-600">Clinical Timeline</div>
+                      <div className="mt-1 text-[12px] text-slate-600">
                         This visit contains the original consultation and {visit.followUpNoteCount || (clinicalTimeline.length - 1)} follow-up update{(visit.followUpNoteCount || (clinicalTimeline.length - 1)) > 1 ? 's' : ''}.
                       </div>
                     </div>

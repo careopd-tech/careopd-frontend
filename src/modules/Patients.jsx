@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import PatientHistoryList, { filterValidHistory, getUiStatus, getStatusStyling } from '../components/ui/PatientHistoryList';
 import { 
   Plus, ChevronDown, Edit2, Loader2, CheckCircle, AlertCircle, Users, X, History, Clock,
-  Activity, FileText, Pill, FlaskConical
+  Activity, FileText, Pill, FlaskConical, Phone, Mail, MapPin, Droplet, CalendarDays, Wallet, Save, MoreVertical, VenusAndMars
 } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import FAB from '../components/ui/FAB';
@@ -22,7 +22,7 @@ import { hasPermission } from '../utils/permissions';
   
 
 // Note: I included data & setData in the props so App.jsx stays perfectly happy
-const Patients = ({ data, setData, onLogout }) => {
+const Patients = ({ data, setData, onLogout, onBookAppointment }) => {
   const dateContext = useGlobalDate();
   const safeCurrentDate = dateContext?.currentDate || getLocalDateString();
   const clinicId = localStorage.getItem('clinicId');
@@ -30,6 +30,7 @@ const Patients = ({ data, setData, onLogout }) => {
   const doctorId = localStorage.getItem('doctorId') || '';
   const sessionUser = getSessionUser();
   const canManagePatients = hasPermission(sessionUser.permissions, 'patients.create_edit');
+  const canManageAppointments = hasPermission(sessionUser.permissions, 'appointments.manage');
 
   const rbacQuery = `&userRole=${userRole}&doctorId=${doctorId}`;
 
@@ -42,12 +43,20 @@ const Patients = ({ data, setData, onLogout }) => {
   const [loading, setLoading] = useState(() => !(data.cachedPatients && data.cachedPatients.length > 0));
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [openPatientMenuId, setOpenPatientMenuId] = useState('');
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [selectedPatientDetail, setSelectedPatientDetail] = useState(null);
+  const [activePatientTab, setActivePatientTab] = useState('profile');
+  const [editingProfileField, setEditingProfileField] = useState('');
+  const [profileDraftValue, setProfileDraftValue] = useState('');
+  const [profileNameDraft, setProfileNameDraft] = useState({ firstName: '', middleName: '', lastName: '' });
+  const [savingProfileField, setSavingProfileField] = useState('');
+  const [profileInlineError, setProfileInlineError] = useState('');
   const hasActiveFilters = typeFilter !== '' || dateRange.from || dateRange.to || searchQuery !== '';
   const statsConfig = [
     { key: 'all', label: 'All', val: stats?.total || 0, color: 'bg-blue-50 text-blue-700', filterKey: '', isToggle: false },
@@ -62,6 +71,27 @@ const Patients = ({ data, setData, onLogout }) => {
     try { const saved = localStorage.getItem('pat_notifications'); return saved ? JSON.parse(saved) : []; } catch (e) { return []; }
   });
   useEffect(() => { localStorage.setItem('pat_notifications', JSON.stringify(notificationStack)); }, [notificationStack]);
+
+  useEffect(() => {
+    if (!openPatientMenuId) return undefined;
+
+    const dismissMenu = (event) => {
+      if (!(event.target instanceof Element) || !event.target.closest('[data-patient-actions-menu]')) {
+        setOpenPatientMenuId('');
+      }
+    };
+
+    const dismissOnEscape = (event) => {
+      if (event.key === 'Escape') setOpenPatientMenuId('');
+    };
+
+    document.addEventListener('pointerdown', dismissMenu);
+    document.addEventListener('keydown', dismissOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', dismissMenu);
+      document.removeEventListener('keydown', dismissOnEscape);
+    };
+  }, [openPatientMenuId]);
 
   // --- ADD THIS STATE ---
   const [selectedPastVisit, setSelectedPastVisit] = useState(null);
@@ -107,6 +137,10 @@ const PatientSkeleton = () => (
   const [selectedHistoryPatient, setSelectedHistoryPatient] = useState(null);
   const [patientHistory, setPatientHistory] = useState([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [detailVisitHistory, setDetailVisitHistory] = useState([]);
+  const [isDetailVisitLoading, setIsDetailVisitLoading] = useState(false);
+  const [detailVisitError, setDetailVisitError] = useState('');
+  const [detailVisitPatientId, setDetailVisitPatientId] = useState('');
 
   const defaultPatientState = { 
     _id: null, firstName: '', middleName: '', lastName: '', name: '', 
@@ -317,17 +351,19 @@ const PatientSkeleton = () => (
     finally { setIsSubmitting(false); }
   };
 
+  const fetchPatientHistory = async (patientId) => {
+    const res = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=history&patientId=${patientId}${rbacQuery}`);
+    const data = await res.json().catch(() => ([]));
+    if (!res.ok) throw new Error(data?.error || 'Failed to fetch history');
+    return filterValidHistory(data);
+  };
+
   const openHistoryModal = async (p) => {
     setSelectedHistoryPatient(p);
     setIsHistoryModalOpen(true);
     setIsHistoryLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=history&patientId=${p._id}`);
-      if (res.ok) {
-        const data = await res.json();
-        // Filter out future/active visits
-        setPatientHistory(filterValidHistory(data)); 
-      }
+      setPatientHistory(await fetchPatientHistory(p._id));
     } catch (err) {
       console.error("Failed to fetch history", err);
     } finally {
@@ -340,27 +376,484 @@ const PatientSkeleton = () => (
       return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
+  const formatGender = (gender) => ({ M: 'Male', F: 'Female', O: 'Other' }[gender] || gender || '-');
+  const getPatientInitial = (patient) => (patient?.name || '?').trim().charAt(0).toUpperCase() || '?';
+  const getPatientNameParts = (patient = {}) => {
+    const parts = String(patient.name || '').trim().split(/\s+/).filter(Boolean);
+    return {
+      firstName: parts[0] || '',
+      middleName: parts.length > 2 ? parts.slice(1, -1).join(' ') : '',
+      lastName: parts.length > 1 ? parts[parts.length - 1] : ''
+    };
+  };
+
+  const openPatientDetail = (patient) => {
+    setSelectedPatientDetail(patient);
+    setActivePatientTab('profile');
+    setEditingProfileField('');
+    setProfileDraftValue('');
+    setProfileNameDraft({ firstName: '', middleName: '', lastName: '' });
+    setProfileInlineError('');
+    setDetailVisitHistory([]);
+    setDetailVisitError('');
+    setDetailVisitPatientId('');
+  };
+
+  const loadPatientDetailVisits = async (patient = selectedPatientDetail, force = false) => {
+    if (!patient?._id || isDetailVisitLoading) return;
+    if (!force && detailVisitPatientId === patient._id) return;
+
+    setIsDetailVisitLoading(true);
+    setDetailVisitError('');
+    setDetailVisitPatientId(patient._id);
+    try {
+      setDetailVisitHistory(await fetchPatientHistory(patient._id));
+    } catch (err) {
+      setDetailVisitHistory([]);
+      setDetailVisitError('Failed to load visit history.');
+    } finally {
+      setIsDetailVisitLoading(false);
+    }
+  };
+
+  const handlePatientDetailTabChange = (tabId) => {
+    setActivePatientTab(tabId);
+    if (tabId === 'visits') {
+      loadPatientDetailVisits();
+    }
+  };
+
+  const updatePatientLocally = (updatedPatient) => {
+    setSelectedPatientDetail(updatedPatient);
+    setPatients(prev => prev.map(patient => patient._id === updatedPatient._id ? { ...patient, ...updatedPatient } : patient));
+    if (setData) {
+      setData(prev => ({
+        ...prev,
+        patients: (prev.patients || []).map(patient => patient._id === updatedPatient._id ? { ...patient, ...updatedPatient } : patient),
+        cachedPatients: (prev.cachedPatients || []).map(patient => patient._id === updatedPatient._id ? { ...patient, ...updatedPatient } : patient)
+      }));
+    }
+  };
+
+  const normalizeNameDraft = (value) => {
+    const trimmed = String(value || '').trim();
+    const cleanVal = trimmed.replace(/[^a-zA-Z.]/g, '');
+    if (!cleanVal) return '';
+    return cleanVal.charAt(0).toUpperCase() + cleanVal.slice(1).toLowerCase();
+  };
+
+  const normalizeProfileDraft = (field, value) => {
+    const trimmed = String(value || '').trim();
+    if (['firstName', 'middleName', 'lastName'].includes(field)) {
+      return normalizeNameDraft(trimmed);
+    }
+    if (field === 'age') return trimmed.replace(/\D/g, '').slice(0, 3);
+    if (field === 'phone') return trimmed.replace(/\D/g, '').slice(0, 10);
+    return trimmed;
+  };
+
+  const openProfileNameEditor = () => {
+    setEditingProfileField('name');
+    setProfileNameDraft(getPatientNameParts(selectedPatientDetail));
+    setProfileDraftValue('');
+    setProfileInlineError('');
+  };
+
+  const openProfileFieldEditor = (field, value) => {
+    setEditingProfileField(field);
+    setProfileDraftValue(String(value || ''));
+    setProfileNameDraft({ firstName: '', middleName: '', lastName: '' });
+    setProfileInlineError('');
+  };
+
+  const cancelProfileFieldEdit = () => {
+    setEditingProfileField('');
+    setProfileDraftValue('');
+    setProfileNameDraft({ firstName: '', middleName: '', lastName: '' });
+    setProfileInlineError('');
+  };
+
+  const handleProfileDraftChange = (field, value) => {
+    setProfileDraftValue(normalizeProfileDraft(field, value));
+  };
+
+  const handleProfileNameDraftChange = (field, value) => {
+    setProfileNameDraft(prev => ({
+      ...prev,
+      [field]: normalizeNameDraft(value)
+    }));
+  };
+
+  const saveProfileField = async (field) => {
+    if (!selectedPatientDetail || savingProfileField) return;
+    const nextValue = normalizeProfileDraft(field, profileDraftValue);
+    const requiredFields = ['age', 'phone', 'address'];
+
+    if (requiredFields.includes(field) && !nextValue) {
+      return setProfileInlineError('This field is required.');
+    }
+    if (field === 'name' && !normalizeNameDraft(profileNameDraft.firstName)) {
+      return setProfileInlineError('First name is required.');
+    }
+    if (field === 'phone' && nextValue.length !== 10) {
+      return setProfileInlineError('Enter a valid 10-digit mobile number.');
+    }
+
+    const payload = {
+      ...selectedPatientDetail,
+      clinicId
+    };
+
+    if (field === 'name') {
+      const nextNameParts = {
+        firstName: normalizeNameDraft(profileNameDraft.firstName),
+        middleName: normalizeNameDraft(profileNameDraft.middleName),
+        lastName: normalizeNameDraft(profileNameDraft.lastName)
+      };
+      payload.name = [nextNameParts.firstName, nextNameParts.middleName, nextNameParts.lastName]
+        .filter(Boolean)
+        .join(' ');
+    } else {
+      payload[field] = nextValue;
+    }
+
+    try {
+      setSavingProfileField(field);
+      setProfileInlineError('');
+      const response = await fetch(`${API_BASE_URL}/api/patients/${selectedPatientDetail._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        return setProfileInlineError(errorData.error || 'Failed to update profile.');
+      }
+
+      const updatedPatient = await response.json();
+      updatePatientLocally(updatedPatient);
+      cancelProfileFieldEdit();
+      showNotification('Profile Updated', 'success', `${selectedPatientDetail.name || 'Patient'} profile updated.`);
+    } catch (err) {
+      setProfileInlineError('Server connection failed.');
+    } finally {
+      setSavingProfileField('');
+    }
+  };
+
+  const profileFieldConfigs = [
+    { field: 'age', label: 'Age', icon: CalendarDays, type: 'tel', display: (value) => value ? `${value} years` : '-' },
+    { field: 'gender', label: 'Gender', icon: VenusAndMars, type: 'select', options: [{ value: 'M', label: 'Male' }, { value: 'F', label: 'Female' }, { value: 'O', label: 'Other' }], display: formatGender },
+    { field: 'bloodGroup', label: 'Blood Group', icon: Droplet, type: 'select', options: ['', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(value => ({ value, label: value || 'Unknown' })), display: (value) => value || 'Unknown' },
+    { field: 'phone', label: 'Mobile Number', icon: Phone, type: 'tel' },
+    { field: 'email', label: 'Email', icon: Mail, type: 'email' },
+    { field: 'address', label: 'Address', icon: MapPin, type: 'text' }
+  ];
+
+  const renderInlineProfileNameGroup = () => {
+    const nameParts = getPatientNameParts(selectedPatientDetail);
+    const isEditing = editingProfileField === 'name';
+    const isSaving = savingProfileField === 'name';
+    const actionButtonClass = 'h-8 w-8 rounded-md transition-colors inline-flex items-center justify-center flex-shrink-0';
+    const profileLabelClass = 'type-label text-[12px] leading-none text-slate-600 uppercase inline-flex items-center gap-1.5';
+    const nameFields = [
+      { field: 'firstName', label: 'First Name', required: true },
+      { field: 'middleName', label: 'Middle' },
+      { field: 'lastName', label: 'Last' }
+    ];
+
+    return (
+      <div>
+        <div className="flex items-center gap-4 mb-0.5">
+          <label className={profileLabelClass}>
+            <Users size={14} className="shrink-0" />
+            Full Name
+          </label>
+          <div className="flex items-center gap-1">
+            {canManagePatients && (
+              <button
+                type="button"
+                onClick={() => (isEditing ? saveProfileField('name') : openProfileNameEditor())}
+                disabled={isSaving || Boolean(savingProfileField && savingProfileField !== 'name')}
+                aria-label={isEditing ? 'Save name' : 'Edit name'}
+                title={isEditing ? 'Save' : 'Edit'}
+                className={`${actionButtonClass} ${isEditing ? 'text-teal-700 hover:bg-teal-50' : 'text-blue-700 hover:bg-blue-50'} disabled:opacity-60`}
+              >
+                {isSaving ? <Loader2 size={13} className="animate-spin" /> : isEditing ? <Save size={13} /> : <Edit2 size={13} />}
+              </button>
+            )}
+
+            {canManagePatients && isEditing && (
+              <button
+                type="button"
+                onClick={cancelProfileFieldEdit}
+                disabled={isSaving}
+                aria-label="Cancel name edit"
+                title="Cancel"
+                className={`${actionButtonClass} text-slate-600 hover:bg-slate-100 disabled:opacity-60`}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {nameFields.map(item => (
+            <input
+              key={item.field}
+              type="text"
+              value={isEditing ? profileNameDraft[item.field] : nameParts[item.field] || ''}
+              placeholder={item.label}
+              onChange={(event) => handleProfileNameDraftChange(item.field, event.target.value)}
+              disabled={!isEditing || isSaving || !canManagePatients}
+              className={`type-body w-full min-w-0 p-2 border rounded-lg outline-none transition-colors disabled:opacity-100 ${
+                isEditing
+                  ? 'border-slate-200 bg-slate-50 text-slate-800 focus:ring-1 focus:ring-teal-500'
+                  : 'border-slate-200 bg-slate-50 text-slate-800 cursor-default'
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderInlineProfileField = (config) => {
+    const patient = selectedPatientDetail || {};
+    const Icon = config.icon;
+    const value = config.getValue ? config.getValue(patient) : patient[config.field] || '';
+    const isEditing = editingProfileField === config.field;
+    const isSaving = savingProfileField === config.field;
+    const displayValue = config.display ? config.display(value) : value || '-';
+    const actionButtonClass = 'h-8 w-8 rounded-md transition-colors inline-flex items-center justify-center flex-shrink-0';
+    const profileLabelClass = 'type-label text-[12px] leading-none text-slate-600 uppercase inline-flex items-center gap-1.5';
+
+    return (
+      <div key={config.field}>
+        <div className="flex items-center gap-4 mb-0.5">
+          <label className={config.field === 'gender' ? 'type-label text-[12px] leading-none text-slate-600 uppercase inline-flex items-center gap-1.5' : profileLabelClass}>
+            {Icon ? <Icon size={14} className="shrink-0" /> : <span className="w-3.5 shrink-0" />}
+            {config.label}
+          </label>
+          <div className="flex items-center gap-1">
+            {canManagePatients && (
+              <button
+                type="button"
+                onClick={() => (isEditing ? saveProfileField(config.field) : openProfileFieldEditor(config.field, value))}
+                disabled={isSaving || Boolean(savingProfileField && savingProfileField !== config.field)}
+                aria-label={isEditing ? `Save ${config.label}` : `Edit ${config.label}`}
+                title={isEditing ? 'Save' : 'Edit'}
+                className={`${actionButtonClass} ${isEditing ? 'text-teal-700 hover:bg-teal-50' : 'text-blue-700 hover:bg-blue-50'} disabled:opacity-60`}
+              >
+                {isSaving ? <Loader2 size={13} className="animate-spin" /> : isEditing ? <Save size={13} /> : <Edit2 size={13} />}
+              </button>
+            )}
+
+            {canManagePatients && isEditing && (
+              <button
+                type="button"
+                onClick={cancelProfileFieldEdit}
+                disabled={isSaving}
+                aria-label={`Cancel ${config.label} edit`}
+                title="Cancel"
+                className={`${actionButtonClass} text-slate-600 hover:bg-slate-100 disabled:opacity-60`}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+        </div>
+        {config.type === 'select' ? (
+          <select
+            value={isEditing ? profileDraftValue : value}
+            onChange={(event) => handleProfileDraftChange(config.field, event.target.value)}
+            disabled={!isEditing || isSaving || !canManagePatients}
+            className={`type-body w-full min-w-0 p-2 border rounded-lg outline-none transition-colors disabled:opacity-100 ${
+              isEditing
+                ? 'border-slate-200 bg-slate-50 text-slate-800 focus:ring-1 focus:ring-teal-500'
+                : 'border-slate-200 bg-slate-50 text-slate-800 cursor-default'
+            }`}
+          >
+            {config.options.map(option => (
+              <option key={option.value || 'blank'} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type={config.type || 'text'}
+            value={isEditing ? profileDraftValue : displayValue}
+            onChange={(event) => handleProfileDraftChange(config.field, event.target.value)}
+            disabled={!isEditing || isSaving || !canManagePatients}
+            className={`type-body w-full min-w-0 p-2 border rounded-lg outline-none transition-colors disabled:opacity-100 ${
+              isEditing
+                ? 'border-slate-200 bg-slate-50 text-slate-800 focus:ring-1 focus:ring-teal-500'
+                : 'border-slate-200 bg-slate-50 text-slate-800 cursor-default'
+            }`}
+          />
+        )}
+      </div>
+    );
+  };
+
+  const patientDetailTabs = [
+    { id: 'profile', label: 'Profile', icon: Users },
+    { id: 'visits', label: 'Visits', icon: History },
+    { id: 'billing', label: 'Billing', icon: Wallet },
+    { id: 'followUps', label: 'Follow-Ups', icon: CalendarDays }
+  ];
+
+  const renderPatientDetailTab = () => {
+    const patient = selectedPatientDetail;
+    if (!patient) return null;
+
+    if (activePatientTab === 'visits') {
+      return (
+        <div className="animate-fadeIn">
+          {detailVisitError ? (
+            <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-center">
+              <div className="type-section-title text-red-700">{detailVisitError}</div>
+              <button
+                type="button"
+                onClick={() => loadPatientDetailVisits(patient, true)}
+                className="type-label mt-3 rounded-lg border border-red-100 bg-white px-3 py-1.5 text-red-700 hover:bg-red-50"
+              >
+                Try Again
+              </button>
+            </div>
+          ) : (
+            <PatientHistoryList
+              historyData={detailVisitHistory}
+              isLoading={isDetailVisitLoading}
+              layout="vertical"
+              embeddedMarker
+            />
+          )}
+        </div>
+      );
+    }
+
+    if (activePatientTab !== 'profile') {
+      const tabLabel = patientDetailTabs.find(tab => tab.id === activePatientTab)?.label || 'This tab';
+      return (
+        <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center">
+          <div className="type-section-title text-slate-700">{tabLabel}</div>
+          <p className="type-secondary mt-1 text-slate-400">This section will be implemented next so we can test one tab at a time.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2.5 animate-fadeIn">
+        {profileInlineError && (
+          <div className="type-label rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-red-700">
+            {profileInlineError}
+          </div>
+        )}
+        <section className="space-y-2.5">
+          <h4 className="type-utility uppercase text-teal-700 border-b border-teal-100 pb-1">Demographics</h4>
+          {renderInlineProfileNameGroup()}
+          <div className="grid grid-cols-2 gap-2">
+            {renderInlineProfileField(profileFieldConfigs[0])}
+            {renderInlineProfileField(profileFieldConfigs[1])}
+          </div>
+          {renderInlineProfileField(profileFieldConfigs[2])}
+        </section>
+        <section className="space-y-2.5 pt-1">
+          <h4 className="type-utility uppercase text-teal-700 border-b border-teal-100 pb-1">Contact</h4>
+          {renderInlineProfileField(profileFieldConfigs[3])}
+          {renderInlineProfileField(profileFieldConfigs[4])}
+          {renderInlineProfileField(profileFieldConfigs[5])}
+        </section>
+      </div>
+    );
+  };
+
 const renderPatientCard = (p) => {
     if (!p) return null; // Failsafe
     const patientType = p.todayType || p.type || 'New';
+    const isMenuOpen = openPatientMenuId === p._id;
     return (
-      <div key={p._id} className="p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col md:flex-row gap-2 bg-white hover:border-teal-50 transition-colors">
-        <div className="flex-1 min-w-0">
-          <div className="flex justify-between items-start mb-1.5">
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <h3 className="type-card-title text-slate-800 leading-tight">{p.name || 'Unknown Name'}</h3>
+      <div
+        key={p._id}
+        role="button"
+        tabIndex={0}
+        onClick={() => openPatientDetail(p)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openPatientDetail(p);
+          }
+        }}
+        className="rounded-xl border border-slate-100 shadow-sm relative bg-white hover:border-teal-200 hover:shadow-md transition-colors cursor-pointer outline-none focus:ring-2 focus:ring-teal-500/20 overflow-visible"
+      >
+        <div className="relative p-3" data-patient-actions-menu>
+          <div className="flex items-center gap-2 mb-1.5">
+            <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+              <h3 className="type-card-title text-slate-800 leading-tight truncate">{p.name || 'Unknown Name'}</h3>
             </div>
-            <div className={`type-utility px-2 py-0.5 rounded flex items-center gap-1.5 uppercase ${patientType === 'New' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
-               <div className={`w-1.5 h-1.5 rounded-full ${patientType === 'New' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
-               {patientType}
+            <div className={`type-utility ml-auto px-2 py-0.5 rounded flex items-center gap-1.5 uppercase flex-shrink-0 ${patientType === 'New' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${patientType === 'New' ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
+              {patientType}
             </div>
           </div>
-          <p className="text-[12px] text-slate-500 leading-tight mt-0.5">{p.gender || '?'}, {p.age || '?'} Yrs • {p.phone || 'No Phone'}</p>
-          <p className="text-[12px] text-slate-400 mt-1.5">Last Visit: {formatDate(p.lastVisit)}</p>
+          <p className="text-[12px] text-slate-600 leading-tight mt-0.5">{p.gender || '?'}, {p.age || '?'} Yrs • {p.phone || 'No Phone'}</p>
+          <div className="mt-1.5 flex items-center gap-2">
+            <p className="text-[12px] text-teal-700 flex-1 min-w-0">Last Visit: {formatDate(p.lastVisit)}</p>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setOpenPatientMenuId(isMenuOpen ? '' : p._id);
+              }}
+              className="ml-auto h-7 w-7 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-700 inline-flex items-center justify-center transition-colors flex-shrink-0"
+              aria-label={`More actions for ${p.name || 'patient'}`}
+              aria-expanded={isMenuOpen}
+            >
+              <MoreVertical size={16} />
+            </button>
+          </div>
+
+          {isMenuOpen && (
+            <div
+              className="absolute right-3 bottom-12 z-30 w-44 overflow-hidden rounded-xl border border-slate-100 bg-white shadow-xl animate-scaleIn"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {canManageAppointments && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenPatientMenuId('');
+                    onBookAppointment?.(p);
+                  }}
+                  className="type-label flex w-full items-center gap-2 px-3 py-2 text-left text-teal-700 hover:bg-teal-50"
+                >
+                  <CalendarDays size={13} /> Book Appointment
+                </button>
+              )}
+              {canManagePatients && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpenPatientMenuId('');
+                    openEditModal(p, 'demographics');
+                  }}
+                  className="type-label flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+                >
+                  <Edit2 size={13} /> Edit Profile
+                </button>
+              )}
+            </div>
+          )}
         </div>
-        <div className="flex flex-row md:flex-col gap-1.5 border-t md:border-t-0 md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 justify-end flex-shrink-0 md:w-32">          
-          <button onClick={() => openEditModal(p, 'demographics')} className="type-label flex-1 md:flex-none w-full h-7 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-colors"><Edit2 size={12} /> Edit Profile</button>
-          <button onClick={() => openHistoryModal(p)} className="type-label flex-1 md:flex-none w-full h-7 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-colors"><Clock size={12} /> View History</button>
+        <div className="border-t border-slate-100 p-2">
+          <button
+            type="button"
+            onClick={(event) => { event.stopPropagation(); openHistoryModal(p); }}
+            className="type-label w-full h-8 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-colors"
+          >
+            <Clock size={12} /> View History
+          </button>
         </div>
       </div>
     );
@@ -376,17 +869,72 @@ const renderPatientCard = (p) => {
       )}
 
       <ModuleHeader 
-        title="Patients" 
-        searchVal={searchQuery} 
-        onSearch={handleSearchInput} 
-        onFilterClick={() => setIsFilterModalOpen(true)} 
-        hasFilter={hasActiveFilters} 
+        title={selectedPatientDetail ? "Patient Details" : "Patients"} 
+        searchVal={selectedPatientDetail ? '' : searchQuery} 
+        onSearch={selectedPatientDetail ? undefined : handleSearchInput} 
+        onFilterClick={selectedPatientDetail ? undefined : () => setIsFilterModalOpen(true)} 
+        hasFilter={!selectedPatientDetail && hasActiveFilters} 
         notifications={notificationStack} 
         onClearAll={handleClearNotifications} 
         onDismiss={handleDismissNotification} 
         onLogout={onLogout}
       />
 
+      {selectedPatientDetail ? (
+        <div className="fixed inset-0 z-40 flex flex-col bg-slate-50 p-2 md:p-3 animate-fadeIn">
+          <div className="flex-1 min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col">
+            <div className="relative p-3 border-b border-slate-100 bg-white flex-none">
+              <button
+                type="button"
+                onClick={() => setSelectedPatientDetail(null)}
+                className="absolute right-3 top-3 h-8 w-8 rounded-full border border-slate-200 bg-white text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors flex items-center justify-center"
+                aria-label="Close patient details"
+              >
+                <X size={16} />
+              </button>
+
+              <div className="flex items-start gap-3 pr-10">
+                <div className="type-page-title h-12 w-12 rounded-full bg-teal-50 text-teal-700 border border-teal-100 flex items-center justify-center flex-shrink-0">
+                  {getPatientInitial(selectedPatientDetail)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2 className="type-page-title text-slate-800 truncate">{selectedPatientDetail.name || 'Unknown Patient'}</h2>
+                  <p className="type-secondary text-slate-600 mt-0.5">
+                    {formatGender(selectedPatientDetail.gender)} • {selectedPatientDetail.age || '?'} yrs • {selectedPatientDetail.phone || 'No phone'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-none overflow-x-auto border-b border-slate-100 bg-white scrollbar-hide">
+              <div className="flex min-w-max px-2">
+                {patientDetailTabs.map(tab => {
+                  const Icon = tab.icon;
+                  const isActive = activePatientTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => handlePatientDetailTabChange(tab.id)}
+                      className={`type-utility flex items-center gap-1.5 px-3 py-2.5 uppercase border-b-2 transition-colors ${
+                        isActive
+                          ? 'border-teal-600 text-teal-700'
+                          : 'border-transparent text-slate-600 hover:text-slate-700'
+                      }`}
+                    >
+                      <Icon size={13} /> {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto bg-slate-50/50 p-2 scrollbar-hide">
+              {renderPatientDetailTab()}
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="flex-1 flex flex-col min-h-0 p-2 gap-2">
         <StatFilterStrip
           items={statsConfig}
@@ -439,7 +987,7 @@ const renderPatientCard = (p) => {
                       <button 
                         onClick={handleLoadMore} 
                         disabled={isFetchingMore} 
-                        className="type-label w-full py-2 mt-2 text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5"
+                        className="type-label w-full py-2 mt-2 text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5"
                       >
                          {isFetchingMore ? <Loader2 size={12} className="animate-spin" /> : <ChevronDown size={12} />}
                          {isFetchingMore ? 'Loading...' : 'Load More Results'}
@@ -456,8 +1004,9 @@ const renderPatientCard = (p) => {
             </div>
         </div>
       </div>
+      )}
 
-      {canManagePatients && (
+      {canManagePatients && !selectedPatientDetail && (
         <FAB icon={Plus} onClick={() => { setNewPatient(defaultPatientState); setAddPatientTab('demographics'); setIsAddPatientModalOpen(true); }} />
       )}
 
@@ -484,7 +1033,7 @@ const renderPatientCard = (p) => {
             {addPatientTab === 'demographics' && (
               <div className="space-y-2.5 animate-fadeIn">
                 <div>
-                  <label className="type-label block text-slate-500 mb-0.5 uppercase">Full Name <span className="text-red-500">*</span></label>
+                  <label className="type-label block text-slate-600 mb-0.5 uppercase">Full Name <span className="text-red-500">*</span></label>
                   <div className="grid grid-cols-3 gap-2">
                     <input type="text" placeholder="First Name *" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('firstName') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.firstName} onChange={(e) => handlePatientNameInput('firstName', e.target.value)} />
                     <input type="text" placeholder="Middle" className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 focus:ring-1 focus:ring-teal-500 outline-none" value={newPatient.middleName} onChange={(e) => handlePatientNameInput('middleName', e.target.value)} />
@@ -492,17 +1041,17 @@ const renderPatientCard = (p) => {
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <div><label className="type-label block text-slate-500 mb-0.5 uppercase">Age <span className="text-red-500">*</span></label><input type="tel" placeholder="Years" maxLength={3} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('age') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.age} onChange={e => setNewPatient({...newPatient, age: e.target.value.replace(/\D/g, '')})} /></div>
-                  <div><label className="type-label block text-slate-500 mb-0.5 uppercase">Gender <span className="text-red-500">*</span></label><select className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none" value={newPatient.gender} onChange={e => setNewPatient({...newPatient, gender: e.target.value})}><option value="M">Male</option><option value="F">Female</option><option value="O">Other</option></select></div>
+                  <div><label className="type-label block text-slate-600 mb-0.5 uppercase">Age <span className="text-red-500">*</span></label><input type="tel" placeholder="Years" maxLength={3} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('age') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.age} onChange={e => setNewPatient({...newPatient, age: e.target.value.replace(/\D/g, '')})} /></div>
+                  <div><label className="type-label block text-slate-600 mb-0.5 uppercase">Gender <span className="text-red-500">*</span></label><select className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none" value={newPatient.gender} onChange={e => setNewPatient({...newPatient, gender: e.target.value})}><option value="M">Male</option><option value="F">Female</option><option value="O">Other</option></select></div>
                 </div>
-                <div><label className="type-label block text-slate-500 mb-0.5 uppercase">Blood Group</label><select className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none" value={newPatient.bloodGroup} onChange={e => setNewPatient({...newPatient, bloodGroup: e.target.value})}><option value="">Unknown</option>{['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => <option key={bg} value={bg}>{bg}</option>)}</select></div>
+                <div><label className="type-label block text-slate-600 mb-0.5 uppercase">Blood Group</label><select className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none" value={newPatient.bloodGroup} onChange={e => setNewPatient({...newPatient, bloodGroup: e.target.value})}><option value="">Unknown</option>{['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => <option key={bg} value={bg}>{bg}</option>)}</select></div>
               </div>
             )}
             {addPatientTab === 'contact' && (
               <div className="space-y-2.5 animate-fadeIn">
-                <div><label className="type-label block text-slate-500 mb-0.5 uppercase">Phone <span className="text-red-500">*</span></label><input type="tel" maxLength={10} placeholder="Mobile number" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('phone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.phone} onChange={e => setNewPatient({...newPatient, phone: e.target.value.replace(/\D/g, '')})} /></div>
-                <div><label className="type-label block text-slate-500 mb-0.5 uppercase">Email</label><input type="email" placeholder="Email address" className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none" value={newPatient.email} onChange={e => setNewPatient({...newPatient, email: e.target.value})} /></div>
-                <div><label className="type-label block text-slate-500 mb-0.5 uppercase">Address <span className="text-red-500">*</span></label><input type="text" placeholder="Full residential address" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('address') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.address} onChange={e => setNewPatient({...newPatient, address: e.target.value})} /></div>
+                <div><label className="type-label block text-slate-600 mb-0.5 uppercase">Phone <span className="text-red-500">*</span></label><input type="tel" maxLength={10} placeholder="Mobile number" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('phone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.phone} onChange={e => setNewPatient({...newPatient, phone: e.target.value.replace(/\D/g, '')})} /></div>
+                <div><label className="type-label block text-slate-600 mb-0.5 uppercase">Email</label><input type="email" placeholder="Email address" className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none" value={newPatient.email} onChange={e => setNewPatient({...newPatient, email: e.target.value})} /></div>
+                <div><label className="type-label block text-slate-600 mb-0.5 uppercase">Address <span className="text-red-500">*</span></label><input type="text" placeholder="Full residential address" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('address') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newPatient.address} onChange={e => setNewPatient({...newPatient, address: e.target.value})} /></div>
               </div>
             )}
           </div>

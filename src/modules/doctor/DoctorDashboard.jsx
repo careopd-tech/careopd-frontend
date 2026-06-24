@@ -148,7 +148,7 @@ const [consultationSubmitAction, setConsultationSubmitAction] = useState('');
           </div>
           <div>
             <h1 className="text-[13px] md:text-[14px] font-bold text-slate-800 leading-tight">CareOPD Clinical</h1>
-            <p className="text-[12px] md:text-[12px] font-medium text-slate-500 uppercase tracking-wide">Dr. {doctorName}</p>
+            <p className="text-[12px] md:text-[12px] font-medium text-slate-600 uppercase tracking-wide">Dr. {doctorName}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 md:gap-4">
@@ -157,7 +157,7 @@ const [consultationSubmitAction, setConsultationSubmitAction] = useState('');
             <div className="text-[12px] text-slate-400">Live Workspace</div>
           </div>
           <div className="hidden md:block h-8 w-px bg-slate-200 mx-1"></div>
-          <button onClick={onLogout} className="flex items-center gap-1.5 p-2 text-[12px] font-bold text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+          <button onClick={onLogout} className="flex items-center gap-1.5 p-2 text-[12px] font-bold text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
             <LogOut size={16} className="md:w-3.5 md:h-3.5" /> <span className="hidden md:inline">Exit</span>
           </button>
         </div>
@@ -174,7 +174,7 @@ const [consultationSubmitAction, setConsultationSubmitAction] = useState('');
             <h2 className="text-[12px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
               <Users size={14} className="text-teal-600"/> Live Queue
             </h2>
-            <span className={`text-[12px] font-bold px-2 py-0.5 rounded-full ${waitingCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+            <span className={`text-[12px] font-bold px-2 py-0.5 rounded-full ${waitingCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
               {waitingCount} Waiting
             </span>
           </div>
@@ -217,7 +217,7 @@ const [consultationSubmitAction, setConsultationSubmitAction] = useState('');
                       {/* Mobile Back Button - Hidden on Desktop/Landscape */}
                       <button 
                          onClick={() => setActiveAppt(null)}
-                         className="p-1.5 -ml-1.5 bg-white border border-slate-200 rounded-lg shadow-sm text-slate-500 md:hidden landscape:hidden"
+                         className="p-1.5 -ml-1.5 bg-white border border-slate-200 rounded-lg shadow-sm text-slate-600 md:hidden landscape:hidden"
                       >
                          <ChevronLeft size={18} />
                       </button>
@@ -226,7 +226,7 @@ const [consultationSubmitAction, setConsultationSubmitAction] = useState('');
                         <h2 className="text-[15px] md:text-lg font-bold text-slate-800 leading-tight truncate max-w-[180px] md:max-w-none">
                             {activeAppt.patientId?.name || 'Unknown Patient'}
                         </h2>
-                        <p className="text-[12px] md:text-[12px] text-slate-500 mt-0.5 font-medium">
+                        <p className="text-[12px] md:text-[12px] text-slate-600 mt-0.5 font-medium">
                             {activeAppt.patientId?.gender || 'U'} • {activeAppt.patientId?.age ? `${activeAppt.patientId.age} Yrs` : 'Age Unknown'}
                         </p>
                       </div>

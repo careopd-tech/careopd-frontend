@@ -59,7 +59,7 @@ const QueueCard = ({ appt, isActive, onClick }) => {
       
       <div className="pl-1 pr-6">
         <h4 className="font-bold text-[13px] text-slate-800 truncate">{patient.name || 'Unknown Patient'}</h4>
-        <p className="text-[12px] text-slate-500 mt-0.5">
+        <p className="text-[12px] text-slate-600 mt-0.5">
           {patient.gender || 'U'}, {patient.age ? `${patient.age} Yrs` : 'Age Unknown'}
         </p>
         {visitIdentifier ? (

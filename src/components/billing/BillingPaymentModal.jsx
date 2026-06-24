@@ -234,7 +234,7 @@ const BillingPaymentModal = ({
       <div className="space-y-4">
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <div className="type-label text-slate-500 uppercase">Services & Charges</div>
+            <div className="type-label text-slate-600 uppercase">Services & Charges</div>
             <button
               type="button"
               onClick={() => setIsServicePickerOpen((prev) => !prev)}
@@ -256,7 +256,7 @@ const BillingPaymentModal = ({
                   <button
                     type="button"
                     onClick={() => handleRemoveService(index)}
-                    className="h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50 flex items-center justify-center"
+                    className="h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 flex items-center justify-center"
                     aria-label="Remove service"
                   >
                     <Trash2 size={14} />
@@ -302,7 +302,7 @@ const BillingPaymentModal = ({
                   </button>
                 </>
               ) : (
-                <div className="text-[13px] text-slate-500 text-center py-2">
+                <div className="text-[13px] text-slate-600 text-center py-2">
                   No additional clinic services are configured.
                 </div>
               )}

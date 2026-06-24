@@ -26,7 +26,7 @@ import ConsultationPad from '../components/doctor/ConsultationPad';
 import PatientHistoryList, { filterValidHistory } from '../components/ui/PatientHistoryList';
 import BillingPaymentModal from '../components/billing/BillingPaymentModal';
 
-const Appointments = ({ data, setData, onLogout }) => {
+const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, onBookingRequestConsumed }) => {
   // --- 1. CONTEXT & BASICS ---
   const dateContext = useGlobalDate();
   const safeCurrentDate = dateContext?.currentDate || getLocalDateString();
@@ -182,6 +182,28 @@ const Appointments = ({ data, setData, onLogout }) => {
       setExpandedSection('today');
     }
   }, [searchQuery]);
+
+  useEffect(() => {
+    if (!bookingPatientRequest?._id) return;
+
+    setNewAppt({
+      patientId: bookingPatientRequest._id,
+      department: '',
+      doctorId: '',
+      time: '',
+      date: safeCurrentDate
+    });
+    setRebookingApptId(null);
+    setIsFollowUpBooking(false);
+    setFollowUpSourceApptId('');
+    setPatientSearchQuery('');
+    setIsPatientDropdownOpen(false);
+    setModalError('');
+    setInvalidFields([]);
+    setNewPatientDetails(defaultNewPatientDetails);
+    setIsAddModalOpen(true);
+    onBookingRequestConsumed?.();
+  }, [bookingPatientRequest, safeCurrentDate, onBookingRequestConsumed]);
 
   // Reset the snap flag when the user leaves the 'previous' section
   useEffect(() => {
@@ -1748,7 +1770,7 @@ const Appointments = ({ data, setData, onLogout }) => {
           <button
             type="button"
             onClick={toggleMenu}
-            className="h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 flex items-center justify-center"
+            className="h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 flex items-center justify-center"
             aria-label="More appointment actions"
           >
             <MoreVertical size={15} />
@@ -1781,7 +1803,7 @@ const Appointments = ({ data, setData, onLogout }) => {
             <div className="flex items-center gap-1.5 flex-wrap justify-end">
               {isNoShow ? <span className="type-utility bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase">No Show</span> : <StatusBadge status={cardStatus} />}
               {visitIdentifier ? (
-                <span className="type-utility uppercase text-slate-500">
+                <span className="type-utility uppercase text-slate-600">
                   ({visitIdentifier})
                 </span>
               ) : null}
@@ -1793,7 +1815,7 @@ const Appointments = ({ data, setData, onLogout }) => {
               {renderOverflowMenu(cardOverflowActions)}
             </div>
             <div className="col-start-1 row-start-2 min-w-0 mt-0.5">
-              <p className="type-label text-slate-500 leading-tight min-w-0">with <span className="text-teal-600 font-medium">{getDoctorName(appt.doctorId)}</span></p>
+              <p className="type-label text-slate-600 leading-tight min-w-0">with <span className="text-teal-600 font-medium">{getDoctorName(appt.doctorId)}</span></p>
             </div>
           </div>
         </div>
@@ -1850,7 +1872,7 @@ const Appointments = ({ data, setData, onLogout }) => {
             )}
 
             {id === 'previous' && items.length > 0 && items.length < metaCounts.previous && (
-              <button onClick={() => fetchBatch(id)} disabled={isSectionLoading} className="type-label w-full py-1.5 mb-2 text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5 flex-shrink-0">
+              <button onClick={() => fetchBatch(id)} disabled={isSectionLoading} className="type-label w-full py-1.5 mb-2 text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5 flex-shrink-0">
                 {isSectionLoading ? <Loader2 size={12} className="animate-spin" /> : <ChevronDown className="rotate-180" size={12} />}
                 {isSectionLoading ? 'Loading...' : 'Load Older'}
               </button>
@@ -1861,7 +1883,7 @@ const Appointments = ({ data, setData, onLogout }) => {
             {!isSectionLoading && visibleItems.length === 0 && <div className="type-secondary text-center py-6 text-slate-400 italic">No appointments</div>}
 
             {id !== 'previous' && id !== 'today' && items.length > 0 && items.length < metaCounts.upcoming && (
-              <button onClick={() => fetchBatch(id)} disabled={isSectionLoading} className="type-label w-full py-1.5 mt-2 text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5 flex-shrink-0">
+              <button onClick={() => fetchBatch(id)} disabled={isSectionLoading} className="type-label w-full py-1.5 mt-2 text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5 flex-shrink-0">
                 {isSectionLoading ? <Loader2 size={12} className="animate-spin" /> : <ChevronDown size={12} />}
                 {isSectionLoading ? 'Loading...' : 'Load More'}
               </button>
@@ -1937,7 +1959,7 @@ const Appointments = ({ data, setData, onLogout }) => {
                       <button
                         onClick={fetchSearchMore}
                         disabled={isSearchLoadingMore}
-                        className="type-label w-full py-2 mt-2 text-slate-500 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5"
+                        className="type-label w-full py-2 mt-2 text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5"
                       >
                         {isSearchLoadingMore ? <Loader2 size={12} className="animate-spin" /> : <ChevronDown size={12} />}
                         {isSearchLoadingMore ? 'Loading...' : 'Load More Results'}
@@ -1977,7 +1999,7 @@ const Appointments = ({ data, setData, onLogout }) => {
                       <h2 className="type-section-title text-slate-800 leading-tight">
                          {activeConsultationAppt.patientId?.name || 'Unknown Patient'}
                       </h2>
-                      <p className="type-label text-slate-500">
+                      <p className="type-label text-slate-600">
                          {activeConsultationAppt.patientId?.gender || 'U'} • {activeConsultationAppt.patientId?.age ? `${activeConsultationAppt.patientId.age} Yrs` : 'Age Unknown'} 
                          <span className="mx-2 text-slate-300">|</span> 
                          {activeConsultationAppt.time}
@@ -2029,7 +2051,7 @@ const Appointments = ({ data, setData, onLogout }) => {
             <div className="p-4 space-y-3">
               <AlertMessage message={modalError} />
               <p className="type-body text-slate-700">Save as draft to easily resume this consultation later, or discard the progress and return the patient to the waiting room.</p>
-              <p className="type-secondary text-slate-500"></p>
+              <p className="type-secondary text-slate-600"></p>
             </div>
             <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex gap-2">
               <button
@@ -2059,7 +2081,7 @@ const Appointments = ({ data, setData, onLogout }) => {
         <div className="space-y-4">
           <div><h4 className="type-utility text-slate-400 uppercase mb-2">Date Range</h4><div className="grid grid-cols-2 gap-2"><div><span className="type-utility text-teal-700 uppercase block mb-1">From</span><input type="date" className="type-body w-full p-2 bg-slate-50 border border-slate-200 rounded-lg" value={tempFilters.dateFrom} onChange={(e) => setTempFilters({ ...tempFilters, dateFrom: e.target.value })} /></div><div><span className="type-utility text-teal-700 uppercase block mb-1">To</span><input type="date" className="type-body w-full p-2 bg-slate-50 border border-slate-200 rounded-lg" value={tempFilters.dateTo} onChange={(e) => setTempFilters({ ...tempFilters, dateTo: e.target.value })} /></div></div></div>
           <div><h4 className="type-utility text-slate-400 uppercase mb-2">Doctor</h4><select className="type-body w-full p-2 bg-slate-50 border border-slate-200 rounded-lg" value={tempFilters.doctorId} onChange={(e) => setTempFilters({ ...tempFilters, doctorId: e.target.value })}><option value="">All Doctors</option>{data.doctors.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}</select></div>
-          {/* <div><h4 className="text-[12px] font-bold text-slate-400 uppercase mb-2">Status</h4><div className="flex flex-wrap gap-2">{['Scheduled', 'Completed', 'Cancelled', 'No-Show'].map(status => { const isSelected = tempFilters.status.includes(status); return (<button key={status} onClick={() => { let newStatus = isSelected ? tempFilters.status.filter(s => s !== status) : [...tempFilters.status, status]; if (['Scheduled', 'Completed', 'Cancelled', 'No-Show'].every(s => newStatus.includes(s))) { newStatus = []; } setTempFilters({...tempFilters, status: newStatus}); }} className={`px-3 py-1.5 rounded-full text-[12px] font-bold border transition-colors ${isSelected ? 'bg-teal-100 text-teal-800 border-teal-200' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>{status}</button>); })}</div></div> */}
+          {/* <div><h4 className="text-[12px] font-bold text-slate-400 uppercase mb-2">Status</h4><div className="flex flex-wrap gap-2">{['Scheduled', 'Completed', 'Cancelled', 'No-Show'].map(status => { const isSelected = tempFilters.status.includes(status); return (<button key={status} onClick={() => { let newStatus = isSelected ? tempFilters.status.filter(s => s !== status) : [...tempFilters.status, status]; if (['Scheduled', 'Completed', 'Cancelled', 'No-Show'].every(s => newStatus.includes(s))) { newStatus = []; } setTempFilters({...tempFilters, status: newStatus}); }} className={`px-3 py-1.5 rounded-full text-[12px] font-bold border transition-colors ${isSelected ? 'bg-teal-100 text-teal-800 border-teal-200' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}>{status}</button>); })}</div></div> */}
         </div>
       </Modal>
 
@@ -2076,7 +2098,7 @@ const Appointments = ({ data, setData, onLogout }) => {
         <div className="space-y-3">
           <AlertMessage message={modalError} />
           <div>
-            <label className="type-label block text-slate-500 mb-1 uppercase">Patient <span className="text-red-500">*</span></label>
+            <label className="type-label block text-slate-600 mb-1 uppercase">Patient <span className="text-red-500">*</span></label>
             {newAppt.patientId ? (
                <div className={`flex items-center justify-between p-2.5 border rounded-lg bg-slate-50 shadow-inner ${invalidFields.includes('patientId') ? 'border-red-500' : 'border-slate-200'}`}>
                   {/* --- SELECTED PATIENT BADGE --- */}
@@ -2086,7 +2108,7 @@ const Appointments = ({ data, setData, onLogout }) => {
                      ) : (
                         <div>
                           <div className="type-card-title text-slate-800">{getPatientName(newAppt.patientId)}</div>
-                          <div className="type-label text-slate-500">Selected Patient</div>
+                          <div className="type-label text-slate-600">Selected Patient</div>
                         </div>
                      )}
                   </div>
@@ -2236,11 +2258,11 @@ const Appointments = ({ data, setData, onLogout }) => {
           )}
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase">Department</label>
+              <label className="type-label block text-slate-600 mb-1 uppercase">Department</label>
               <select className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50" value={newAppt.department} onChange={(e) => setNewAppt({ ...newAppt, department: e.target.value, doctorId: '', time: '' })}><option value="">All</option>{departments.map(d => <option key={d} value={d}>{d}</option>)}</select>
             </div>
             <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase">Doctor <span className="text-red-500">*</span></label>
+              <label className="type-label block text-slate-600 mb-1 uppercase">Doctor <span className="text-red-500">*</span></label>
               <select className={`type-body w-full p-2 border rounded-lg bg-slate-50 outline-none ${invalidFields.includes('doctorId') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.doctorId} onChange={(e) => { const doc = getDoctorById(e.target.value); setNewAppt({ ...newAppt, doctorId: e.target.value, department: doc ? doc.department : newAppt.department, time: '' }); }}>
                 <option value="">Select</option>
                 {/* FIX: Filter Doctors - Must be 'Available' AND match department */}
@@ -2251,9 +2273,9 @@ const Appointments = ({ data, setData, onLogout }) => {
               </select>
             </div>
           </div>
-          <div><label className="type-label block text-slate-500 mb-1 uppercase">Select Date <span className="text-red-500">*</span></label><input type="date" min={safeCurrentDate} max={maxDateStr} className={`type-body w-full p-2 border rounded-lg bg-slate-50 outline-none ${invalidFields.includes('date') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.date} onChange={(e) => setNewAppt({ ...newAppt, date: e.target.value, time: '' })} /></div>
+          <div><label className="type-label block text-slate-600 mb-1 uppercase">Select Date <span className="text-red-500">*</span></label><input type="date" min={safeCurrentDate} max={maxDateStr} className={`type-body w-full p-2 border rounded-lg bg-slate-50 outline-none ${invalidFields.includes('date') ? 'border-red-500' : 'border-slate-200'}`} value={newAppt.date} onChange={(e) => setNewAppt({ ...newAppt, date: e.target.value, time: '' })} /></div>
           <div>
-            <label className="type-label block text-slate-500 mb-1 uppercase">Available Slots <span className="text-red-500">*</span></label>
+            <label className="type-label block text-slate-600 mb-1 uppercase">Available Slots <span className="text-red-500">*</span></label>
             <div className={`rounded-lg ${invalidFields.includes('time') ? 'border border-red-500 p-1' : ''}`}>
               <TimeSlotPicker selectedTime={newAppt.time} onSelect={(t) => setNewAppt({ ...newAppt, time: t })} doctor={getDoctorById(newAppt.doctorId)} date={newAppt.date} appointments={data.calendar30 || []} clinic={data.clinic} currentDate={safeCurrentDate} />
             </div>
@@ -2271,9 +2293,9 @@ const Appointments = ({ data, setData, onLogout }) => {
         </button>
       }>
         <div className="space-y-3">
-          {actionAppt && (<div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex items-center justify-between mb-2"><span className="type-utility text-slate-500 uppercase">Currently Scheduled:</span><span className="type-body text-slate-700">{actionAppt.date} at {actionAppt.time}</span></div>)}
+          {actionAppt && (<div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex items-center justify-between mb-2"><span className="type-utility text-slate-600 uppercase">Currently Scheduled:</span><span className="type-body text-slate-700">{actionAppt.date} at {actionAppt.time}</span></div>)}
           <AlertMessage message={modalError} />
-          <div><label className="type-label block text-slate-500 mb-1 uppercase">New Date</label><input type="date" min={safeCurrentDate} max={maxDateStr} className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50" value={rescheduleData.date} onChange={(e) => setRescheduleData({ ...rescheduleData, date: e.target.value, time: '' })} /></div><div><label className="type-label block text-slate-500 mb-1 uppercase">Available Slots</label><TimeSlotPicker selectedTime={rescheduleData.time} onSelect={(t) => setRescheduleData({ ...rescheduleData, time: t })} doctor={getDoctorById(actionAppt?.doctorId)} date={rescheduleData.date} appointments={data.calendar30 || []} clinic={data.clinic} currentDate={safeCurrentDate} /></div>
+          <div><label className="type-label block text-slate-600 mb-1 uppercase">New Date</label><input type="date" min={safeCurrentDate} max={maxDateStr} className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50" value={rescheduleData.date} onChange={(e) => setRescheduleData({ ...rescheduleData, date: e.target.value, time: '' })} /></div><div><label className="type-label block text-slate-600 mb-1 uppercase">Available Slots</label><TimeSlotPicker selectedTime={rescheduleData.time} onSelect={(t) => setRescheduleData({ ...rescheduleData, time: t })} doctor={getDoctorById(actionAppt?.doctorId)} date={rescheduleData.date} appointments={data.calendar30 || []} clinic={data.clinic} currentDate={safeCurrentDate} /></div>
         </div>
       </Modal>
 
@@ -2322,11 +2344,11 @@ const Appointments = ({ data, setData, onLogout }) => {
             <p className="type-body text-slate-600 mt-1">{contactPhone || 'No mobile number available'}</p>
           </div>
           {dialableContactPhone ? (
-            <p className="type-secondary text-slate-500">
+            <p className="type-secondary text-slate-600">
               If calling is unavailable, use reminder option
             </p>
           ) : (
-            <p className="type-secondary text-slate-500">
+            <p className="type-secondary text-slate-600">
               Add a mobile number in the patient profile before calling or sending a reminder.
             </p>
           )}
@@ -2352,22 +2374,22 @@ const Appointments = ({ data, setData, onLogout }) => {
           {actionAppt && (
             <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
               <p className="type-card-title text-slate-800">{vitalsPatient?.name || 'Unknown Patient'}</p>
-              <p className="type-secondary text-slate-500">
+              <p className="type-secondary text-slate-600">
                 {vitalsPatient?.age ? `${vitalsPatient.age} Yrs` : 'Age Unknown'} | {vitalsPatientGender}
               </p>
             </div>
           )}
           <div className="grid grid-cols-3 gap-2">
             <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase">BP</label>
+              <label className="type-label block text-slate-600 mb-1 uppercase">BP</label>
               <input type="text" placeholder="120/80" value={vitalsData.bp} onChange={e => setVitalsData({ ...vitalsData, bp: e.target.value })} className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none focus:ring-1 focus:ring-teal-500" />
             </div>
             <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase">Temp</label>
+              <label className="type-label block text-slate-600 mb-1 uppercase">Temp</label>
               <input type="text" placeholder="98.6" value={vitalsData.temp} onChange={e => setVitalsData({ ...vitalsData, temp: e.target.value })} className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none focus:ring-1 focus:ring-teal-500" />
             </div>
             <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase">Weight</label>
+              <label className="type-label block text-slate-600 mb-1 uppercase">Weight</label>
               <input type="text" placeholder="70" value={vitalsData.weight} onChange={e => setVitalsData({ ...vitalsData, weight: e.target.value })} className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 outline-none focus:ring-1 focus:ring-teal-500" />
             </div>
           </div>
@@ -2394,7 +2416,7 @@ const Appointments = ({ data, setData, onLogout }) => {
           <div className="space-y-3">
             <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
               <p className="type-card-title text-slate-800">{getPatientName(previewAppt.patientId)}</p>
-              <p className="type-secondary text-slate-500">Recorded before consultation</p>
+              <p className="type-secondary text-slate-600">Recorded before consultation</p>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div className="rounded-lg border border-slate-100 bg-slate-50 p-2"><p className="type-label uppercase text-slate-400">BP</p><p className="type-body text-slate-800">{previewAppt.vitals?.bp || '-'}</p></div>
@@ -2403,7 +2425,7 @@ const Appointments = ({ data, setData, onLogout }) => {
             </div>
           </div>
         ) : (
-          <div className="type-body text-slate-500 text-center py-6">No vitals recorded for this appointment yet.</div>
+          <div className="type-body text-slate-600 text-center py-6">No vitals recorded for this appointment yet.</div>
         )}
       </Modal>
 
@@ -2431,7 +2453,7 @@ const Appointments = ({ data, setData, onLogout }) => {
             Patient checked in but left before consultation.
           </p>
           <div>
-            <label className="type-label block text-slate-500 mb-1 uppercase">Reason (Optional)</label>
+            <label className="type-label block text-slate-600 mb-1 uppercase">Reason (Optional)</label>
             <select
               value={leftEarlyReason}
               onChange={(event) => setLeftEarlyReason(event.target.value)}

@@ -175,14 +175,14 @@ const PostConsultActionsModal = ({
     >
       <div className="space-y-4">
         {isLoading && (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] text-slate-500 flex items-center gap-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-[13px] text-slate-600 flex items-center gap-2">
             <Loader2 size={16} className="animate-spin text-teal-600" />
             Loading latest visit details...
           </div>
         )}
 
         <div className="rounded-xl border border-slate-200 bg-white p-3">
-          <div className="type-label text-slate-500 uppercase">Patient</div>
+          <div className="type-label text-slate-600 uppercase">Patient</div>
           <div className="text-[16px] font-bold text-slate-900 mt-1">{patient?.name || 'Unknown Patient'}</div>
           <div className="type-secondary text-slate-600 mt-1">
             {patient?.gender || 'U'}{patient?.age ? ` | ${patient.age} Yrs` : ''}{patient?.phone ? ` | ${patient.phone}` : ''}
@@ -199,8 +199,8 @@ const PostConsultActionsModal = ({
 
         <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
           <div className="flex items-center gap-2">
-            <Printer size={16} className="text-slate-500" />
-            <div className="type-label text-slate-500 uppercase">Documents</div>
+            <Printer size={16} className="text-slate-600" />
+            <div className="type-label text-slate-600 uppercase">Documents</div>
           </div>
 
           {hasPrescription || hasLabOrder ? (
@@ -225,7 +225,7 @@ const PostConsultActionsModal = ({
               )}
             </div>
           ) : (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-4 text-[13px] text-slate-500">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-4 text-[13px] text-slate-600">
               No prescription or lab order was added in this consultation.
             </div>
           )}
@@ -233,8 +233,8 @@ const PostConsultActionsModal = ({
 
         <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
           <div className="flex items-center gap-2">
-            <Wallet size={16} className="text-slate-500" />
-            <div className="type-label text-slate-500 uppercase">Billing & Payment</div>
+            <Wallet size={16} className="text-slate-600" />
+            <div className="type-label text-slate-600 uppercase">Billing & Payment</div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -264,7 +264,7 @@ const PostConsultActionsModal = ({
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase">Consultation Fee</label>
+              <label className="type-label block text-slate-600 mb-1 uppercase">Consultation Fee</label>
               <input
                 type="number"
                 min="0"
@@ -276,7 +276,7 @@ const PostConsultActionsModal = ({
               />
             </div>
             <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase">Payment Amount</label>
+              <label className="type-label block text-slate-600 mb-1 uppercase">Payment Amount</label>
               <input
                 type="number"
                 min="0"
@@ -291,7 +291,7 @@ const PostConsultActionsModal = ({
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase">Payment Mode</label>
+              <label className="type-label block text-slate-600 mb-1 uppercase">Payment Mode</label>
               <select
                 value={paymentMode}
                 onChange={(event) => setPaymentMode(event.target.value)}
@@ -303,7 +303,7 @@ const PostConsultActionsModal = ({
               </select>
             </div>
             <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase">Payment Note</label>
+              <label className="type-label block text-slate-600 mb-1 uppercase">Payment Note</label>
               <input
                 type="text"
                 value={paymentNote}

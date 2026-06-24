@@ -663,7 +663,7 @@ const Doctors = ({ data, setData, onLogout }) => {
     { key: 'all', label: 'All', val: stats.total, color: 'bg-blue-50 text-blue-700', filterKey: '', isToggle: false },
     { key: 'available', label: 'Available', val: stats.available, color: 'bg-green-50 text-green-700', filterKey: 'Available', isToggle: true },
     { key: 'on-leave', label: 'On Leave', val: stats.onLeave, color: 'bg-amber-50 text-amber-700', filterKey: 'On Leave', isToggle: true },
-    { key: 'inactive', label: 'Inactive', val: stats.inactive, color: 'bg-slate-50 text-slate-500', filterKey: 'Inactive', isToggle: true }
+    { key: 'inactive', label: 'Inactive', val: stats.inactive, color: 'bg-slate-50 text-slate-600', filterKey: 'Inactive', isToggle: true }
   ];
   
   const departments = [...new Set((data.doctors || []).map(d => d.department))];
@@ -679,12 +679,12 @@ const Doctors = ({ data, setData, onLogout }) => {
         <div className={`flex-1 min-w-0 flex flex-col ${isInactive ? 'opacity-70' : ''}`}>
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2.5 mt-0.5">
-              <div className="type-card-title w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 flex-shrink-0 overflow-hidden">
+              <div className="type-card-title w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 flex-shrink-0 overflow-hidden">
                 {typeof doc.photo === 'string' && doc.photo.length > 50 ? <img src={doc.photo} alt="Doc" className="w-full h-full object-cover"/> : <Building2 size={16} className="text-slate-400" />}
               </div>
               <div>
                 <h4 className="type-card-title text-slate-800 leading-tight">{doc.name}</h4>
-                <p className="type-utility uppercase text-slate-500 leading-tight mt-0.5">{doc.department}</p>
+                <p className="type-utility uppercase text-slate-600 leading-tight mt-0.5">{doc.department}</p>
                 <p className="type-label text-slate-400 leading-tight mt-1">Mobile: {doc.phone || 'Not Added'}</p>
               </div>
             </div>
@@ -697,7 +697,7 @@ const Doctors = ({ data, setData, onLogout }) => {
                     event.stopPropagation();
                     setOpenStatusMenuId(prev => prev === doc._id ? '' : doc._id);
                   }}
-                  className="h-7 w-7 rounded-lg border border-slate-200 bg-white text-slate-500 hover:text-teal-600 hover:bg-teal-50 flex items-center justify-center"
+                  className="h-7 w-7 rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-teal-600 hover:bg-teal-50 flex items-center justify-center"
                   aria-label="Doctor status actions"
                 >
                   <MoreVertical size={14} />
@@ -840,7 +840,7 @@ const Doctors = ({ data, setData, onLogout }) => {
         <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
           {renderAccordionSection('available', 'Available', CheckCircle, 'text-green-600', sections.available)}
           {renderAccordionSection('onLeave', 'On Leave', CalendarDays, 'text-amber-600', sections.onLeave)}
-          {renderAccordionSection('inactive', 'Inactive', XCircle, 'text-slate-500', sections.inactive)}
+          {renderAccordionSection('inactive', 'Inactive', XCircle, 'text-slate-600', sections.inactive)}
         </div>
       </div>
 
@@ -957,7 +957,7 @@ const Doctors = ({ data, setData, onLogout }) => {
                 <div>
                   {/* NEW: Split Name Inputs */}
                 <div>
-                  <label className="type-label block text-slate-500 mb-0.5 uppercase">Full Name <span className="text-red-500">*</span></label>
+                  <label className="type-label block text-slate-600 mb-0.5 uppercase">Full Name <span className="text-red-500">*</span></label>
                   <div className="grid grid-cols-3 gap-2">
                     <input 
                       type="text" 
@@ -985,22 +985,22 @@ const Doctors = ({ data, setData, onLogout }) => {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="type-label block text-slate-500 mb-0.5 uppercase">Phone <span className="text-red-500">*</span></label>
+                    <label className="type-label block text-slate-600 mb-0.5 uppercase">Phone <span className="text-red-500">*</span></label>
                     <input type="tel" maxLength={10} placeholder="Mobile number" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('phone') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.phone} onChange={handlePhoneInput} />
                   </div>
                   <div>
-                    <label className="type-label block text-slate-500 mb-0.5 uppercase">Gender <span className="text-red-500">*</span></label>
+                    <label className="type-label block text-slate-600 mb-0.5 uppercase">Gender <span className="text-red-500">*</span></label>
                     <select className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 focus:ring-1 focus:ring-teal-500 outline-none" value={newDoctor.gender} onChange={e => setNewDoctor({...newDoctor, gender: e.target.value})}>
                       <option value="M">Male</option><option value="F">Female</option><option value="O">Other</option>
                     </select>
                   </div>
                 </div>
                 <div>
-                  <label className="type-label block text-slate-500 mb-0.5 uppercase">Email <span className="text-red-500">*</span></label>
+                  <label className="type-label block text-slate-600 mb-0.5 uppercase">Email <span className="text-red-500">*</span></label>
                   <input type="email" placeholder="Email address" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('email') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.email} onChange={e => setNewDoctor({...newDoctor, email: e.target.value})} />
                 </div>
                 <div>
-                  <label className="type-label block text-slate-500 mb-0.5 uppercase">Address <span className="text-red-500">*</span></label>
+                  <label className="type-label block text-slate-600 mb-0.5 uppercase">Address <span className="text-red-500">*</span></label>
                   <input type="text" placeholder="Full residential address" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('address') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.address} onChange={e => setNewDoctor({...newDoctor, address: e.target.value})} />
                 </div>
               </div>
@@ -1009,7 +1009,7 @@ const Doctors = ({ data, setData, onLogout }) => {
             {addDoctorTab === 'professional' && (
               <div className="space-y-2.5 animate-fadeIn">
                 <div>
-                  <label className="type-label block text-slate-500 mb-0.5 uppercase">Specialization <span className="text-red-500">*</span></label>
+                  <label className="type-label block text-slate-600 mb-0.5 uppercase">Specialization <span className="text-red-500">*</span></label>
                   <select 
                     className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('department') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
                     value={isNewDept ? 'add_new' : newDoctor.department} 
@@ -1038,16 +1038,16 @@ const Doctors = ({ data, setData, onLogout }) => {
                   )}
                 </div>
                 <div>
-                  <label className="type-label block text-slate-500 mb-0.5 uppercase">Qualifications <span className="text-red-500">*</span></label>
+                  <label className="type-label block text-slate-600 mb-0.5 uppercase">Qualifications <span className="text-red-500">*</span></label>
                   <input type="text" placeholder="e.g. MBBS, MD" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('qualification') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.qualification} onChange={handleQualificationInput} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="type-label block text-slate-500 mb-0.5 uppercase">Experience (Months) <span className="text-red-500">*</span></label>
+                    <label className="type-label block text-slate-600 mb-0.5 uppercase">Experience (Months) <span className="text-red-500">*</span></label>
                     <input type="number" placeholder="Months" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('experience') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.experience} onChange={handleExperienceInput} />
                   </div>
                   <div>
-                    <label className="type-label block text-slate-500 mb-0.5 uppercase">Reg. Number <span className="text-red-500">*</span></label>
+                    <label className="type-label block text-slate-600 mb-0.5 uppercase">Reg. Number <span className="text-red-500">*</span></label>
                     <input type="text" maxLength={20} placeholder="Medical Reg No." className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('regNo') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.regNo} onChange={e => setNewDoctor({...newDoctor, regNo: e.target.value})} />
                   </div>
                 </div>
@@ -1082,11 +1082,11 @@ const Doctors = ({ data, setData, onLogout }) => {
                   <h4 className="type-utility uppercase text-slate-700 mb-1 border-b border-slate-100 pb-1">Morning Shift</h4>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="type-label block text-slate-500 mb-0.5 uppercase">Start Time <span className="text-red-500">*</span></label>
+                      <label className="type-label block text-slate-600 mb-0.5 uppercase">Start Time <span className="text-red-500">*</span></label>
                       <input type="time" disabled={newDoctor.followsClinicSchedule === true} min={editableClinicHoursFallback.morningStart} max={editableClinicHoursFallback.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('morningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningStart} onChange={e => setNewDoctor({...newDoctor, morningStart: e.target.value})} />
                     </div>
                     <div>
-                      <label className="type-label block text-slate-500 mb-0.5 uppercase">End Time <span className="text-red-500">*</span></label>
+                      <label className="type-label block text-slate-600 mb-0.5 uppercase">End Time <span className="text-red-500">*</span></label>
                       <input type="time" disabled={newDoctor.followsClinicSchedule === true} min={editableClinicHoursFallback.morningStart} max={editableClinicHoursFallback.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('morningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.morningEnd} onChange={e => setNewDoctor({...newDoctor, morningEnd: e.target.value})} />
                     </div>
                   </div>
@@ -1106,11 +1106,11 @@ const Doctors = ({ data, setData, onLogout }) => {
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="type-label block text-slate-500 mb-0.5 uppercase">Start Time</label>
+                      <label className="type-label block text-slate-600 mb-0.5 uppercase">Start Time</label>
                       <input type="time" disabled={newDoctor.followsClinicSchedule === true} min={editableClinicHoursFallback.eveningStart || editableClinicHoursFallback.morningStart} max={editableClinicHoursFallback.eveningEnd || editableClinicHoursFallback.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('eveningStart') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningStart} onChange={e => setNewDoctor({...newDoctor, eveningStart: e.target.value})} />
                     </div>
                     <div>
-                      <label className="type-label block text-slate-500 mb-0.5 uppercase">End Time</label>
+                      <label className="type-label block text-slate-600 mb-0.5 uppercase">End Time</label>
                       <input type="time" disabled={newDoctor.followsClinicSchedule === true} min={editableClinicHoursFallback.eveningStart || editableClinicHoursFallback.morningStart} max={editableClinicHoursFallback.eveningEnd || editableClinicHoursFallback.morningEnd} className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed ${invalidFields.includes('eveningEnd') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.eveningEnd} onChange={e => setNewDoctor({...newDoctor, eveningEnd: e.target.value})} />
                     </div>
                   </div>
@@ -1118,7 +1118,7 @@ const Doctors = ({ data, setData, onLogout }) => {
                 </div>
                 
                 <div>
-                  <label className="type-label block text-slate-500 mb-1.5 uppercase">Working Days <span className="text-red-500">*</span></label>
+                  <label className="type-label block text-slate-600 mb-1.5 uppercase">Working Days <span className="text-red-500">*</span></label>
                   <div className="flex gap-1 flex-wrap">
                     {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
                       <label key={day} className="type-label flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded cursor-pointer hover:bg-slate-100">
@@ -1222,12 +1222,12 @@ const Doctors = ({ data, setData, onLogout }) => {
            <input type="date" min={todayStr} max={maxDateStr} className="type-body p-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500" value={calendarDate} onChange={(e) => setCalendarDate(e.target.value)} />
           </div>
           <div>
-            <h4 className="type-utility uppercase text-slate-500 mb-2">Available & Booked Slots</h4>
+            <h4 className="type-utility uppercase text-slate-600 mb-2">Available & Booked Slots</h4>
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
               {selectedDoctor && generateSlots(selectedDoctor, calendarDate).map((slot, idx) => (
                 <div key={idx} className={`p-2 rounded-lg border text-center flex flex-col items-center justify-center ${
                   slot.status === 'Available' ? 'bg-green-50 border-green-200 text-green-700' :
-                  slot.status === 'Completed' ? 'bg-slate-50 border-slate-200 text-slate-500' :
+                  slot.status === 'Completed' ? 'bg-slate-50 border-slate-200 text-slate-600' :
                   slot.status === 'Off-Duty' ? 'bg-slate-50 border-slate-200 text-slate-400 opacity-60' :
                   'bg-blue-50 border-blue-200 text-blue-700'
                 }`}>

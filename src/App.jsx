@@ -53,6 +53,7 @@ const App = () => {
   const [activeTab, setActiveTab] = useState(() => {
     return sessionStorage.getItem('careopd_active_tab') || 'appointments';
   });
+  const [appointmentBookingPatient, setAppointmentBookingPatient] = useState(null);
   
   const [data, setData] = useState(() => ({
     appointments: [],
@@ -228,11 +229,29 @@ const App = () => {
   const effectiveActiveTab = availableTabs.includes(activeTab) ? activeTab : fallbackTab;
 
   if (effectiveActiveTab === 'appointments') {
-    content = <Appointments data={data} setData={setData} onLogout={handleLogout}/>;
+    content = (
+      <Appointments
+        data={data}
+        setData={setData}
+        onLogout={handleLogout}
+        bookingPatientRequest={appointmentBookingPatient}
+        onBookingRequestConsumed={() => setAppointmentBookingPatient(null)}
+      />
+    );
   } else if (effectiveActiveTab === 'doctors') {
     content = <Doctors data={data} setData={setData} onLogout={handleLogout}/>;
   } else if (effectiveActiveTab === 'patients') {
-    content = <Patients data={data} setData={setData} onLogout={handleLogout} />;
+    content = (
+      <Patients
+        data={data}
+        setData={setData}
+        onLogout={handleLogout}
+        onBookAppointment={(patient) => {
+          setAppointmentBookingPatient(patient);
+          setActiveTab('appointments');
+        }}
+      />
+    );
   } else if (effectiveActiveTab === 'settings') {
     content = <Settings data={data} setData={setData} onLogout={handleLogout} />;
   } else {

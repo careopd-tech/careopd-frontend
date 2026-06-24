@@ -205,19 +205,19 @@ const ContactChangeInfoModal = ({ type = 'email', isOpen, onClose }) => {
         </div>
 
         <div>
-          <label className="block text-[12px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+          <label className="block text-[12px] font-bold text-slate-600 mb-1 uppercase tracking-wide">
             Current {type === 'mobile' ? 'Mobile Number' : 'Email Address'}
           </label>
           <input
             type="text"
             value={currentValue}
             disabled
-            className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-100 text-slate-500 cursor-not-allowed"
+            className="w-full p-2 border border-slate-200 rounded-lg text-[13px] bg-slate-100 text-slate-600 cursor-not-allowed"
           />
         </div>
 
         <div>
-          <label className="block text-[12px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+          <label className="block text-[12px] font-bold text-slate-600 mb-1 uppercase tracking-wide">
             {content.fieldLabel} <span className="text-red-500">*</span>
           </label>
           <input
@@ -232,7 +232,7 @@ const ContactChangeInfoModal = ({ type = 'email', isOpen, onClose }) => {
 
         {step === 'verify' && (
           <div>
-            <label className="block text-[12px] font-bold text-slate-500 mb-1 uppercase tracking-wide">
+            <label className="block text-[12px] font-bold text-slate-600 mb-1 uppercase tracking-wide">
               6-Digit OTP <span className="text-red-500">*</span>
             </label>
             <input

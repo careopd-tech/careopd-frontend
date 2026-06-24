@@ -33,7 +33,7 @@ const Layout = ({ activeTab, setActiveTab, userRole, clinicType, hasLinkedDoctor
              <button 
                 key={item.id} 
                 onClick={() => setActiveTab(item.id)} 
-                className={`type-section-title w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${activeTab === item.id ? 'bg-teal-50 text-teal-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                className={`type-section-title w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${activeTab === item.id ? 'bg-teal-50 text-teal-700 shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}
              >
                <item.icon size={18} /> {item.label}
              </button>

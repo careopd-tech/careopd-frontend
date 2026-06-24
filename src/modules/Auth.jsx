@@ -342,7 +342,7 @@ const Auth = ({ authState, setAuthState, setUserRole, sessionMessage = '' }) => 
             {authState === 'reset' && 'Verify OTP & Reset'}
             {authState === 'activate' && (isLinkReset ? 'Reset Your Password' : 'Activate Your Account')}
           </h2>
-          <p className="text-slate-500 text-sm mt-1.5 text-center">
+          <p className="text-slate-600 text-sm mt-1.5 text-center">
             {authState === 'login' && 'Please sign in to manage your clinic'}
             {authState === 'forgot' && 'We will send a 6-digit OTP to your registered contact.'}
             {authState === 'reset' && 'Enter the OTP and set a new password.'}
@@ -444,7 +444,7 @@ const Auth = ({ authState, setAuthState, setUserRole, sessionMessage = '' }) => 
           )}
 
           {activationChecking && authState === 'activate' && (
-            <div className="bg-slate-50 text-slate-500 p-2.5 rounded-lg flex items-center gap-2 text-[12px] font-medium border border-slate-200">
+            <div className="bg-slate-50 text-slate-600 p-2.5 rounded-lg flex items-center gap-2 text-[12px] font-medium border border-slate-200">
               <Loader2 size={14} className="animate-spin" />
               <span>Checking account access...</span>
             </div>
@@ -543,14 +543,14 @@ const Auth = ({ authState, setAuthState, setUserRole, sessionMessage = '' }) => 
             type="button"
             disabled={isLoading}
             onClick={closeAuthFlow}
-            className="w-full flex justify-center items-center gap-2 mt-6 text-[13px] font-bold text-slate-500 hover:text-slate-800 transition-colors disabled:opacity-50"
+            className="w-full flex justify-center items-center gap-2 mt-6 text-[13px] font-bold text-slate-600 hover:text-slate-800 transition-colors disabled:opacity-50"
           >
             <ArrowLeft size={14} /> Back to Login
           </button>
         )}
 
         {authState === 'login' && (
-          <div className="mt-6 text-center text-[13px] text-slate-500 font-medium">
+          <div className="mt-6 text-center text-[13px] text-slate-600 font-medium">
             Don't have an account?{' '}
             <button type="button" onClick={() => { setAuthState('onboarding'); setError(''); setSuccess(''); setInvalidFields([]); }} className="text-teal-600 font-bold hover:text-teal-700 transition-colors">
               Register

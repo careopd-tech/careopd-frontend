@@ -122,7 +122,7 @@ const ModuleHeader = ({
             </div>
             <button 
               onClick={onFilterClick}
-              className={`relative p-1.5 rounded-lg border transition-colors ${hasFilter ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-slate-200 text-slate-500'}`}
+              className={`relative p-1.5 rounded-lg border transition-colors ${hasFilter ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-slate-200 text-slate-600'}`}
             >
               <SlidersHorizontal size={16} />
               {hasFilter && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>}

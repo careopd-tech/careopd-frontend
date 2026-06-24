@@ -13,7 +13,7 @@ const StatusBadge = ({ status }) => {
     'Test Recommended': 'text-emerald-700',
     'Cancelled': 'text-red-600',
     'On Leave': 'text-amber-600',
-    'Inactive': 'text-slate-500',
+    'Inactive': 'text-slate-600',
   };
   
   const dotStyles = {

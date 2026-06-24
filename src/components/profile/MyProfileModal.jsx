@@ -373,7 +373,7 @@ const MyProfileModal = ({ isOpen, onClose }) => {
 
         <form onSubmit={handleUpdate} className="space-y-4">
           <div>
-            <label className="type-label block text-slate-500 mb-1 uppercase">
+            <label className="type-label block text-slate-600 mb-1 uppercase">
               Full Name <span className="text-red-500">*</span>
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -406,32 +406,32 @@ const MyProfileModal = ({ isOpen, onClose }) => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase flex items-center gap-1.5">
+              <label className="type-label block text-slate-600 mb-1 uppercase flex items-center gap-1.5">
                 <Mail size={12} /> Email Address
               </label>
               <input
                 type="email"
                 value={userData.email}
                 disabled
-                className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-100 text-slate-500 cursor-not-allowed"
+                className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-100 text-slate-600 cursor-not-allowed"
               />
             </div>
             <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase flex items-center gap-1.5">
+              <label className="type-label block text-slate-600 mb-1 uppercase flex items-center gap-1.5">
                 <Phone size={12} /> Mobile Number
               </label>
               <input
                 type="tel"
                 value={userData.phone}
                 disabled
-                className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-100 text-slate-500 cursor-not-allowed"
+                className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-100 text-slate-600 cursor-not-allowed"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase flex items-center gap-1.5">
+              <label className="type-label block text-slate-600 mb-1 uppercase flex items-center gap-1.5">
                 <Shield size={12} /> Role
               </label>
               <div className="type-body w-full p-2 border border-indigo-100 bg-indigo-50 rounded-lg text-indigo-700 font-bold truncate">
@@ -440,7 +440,7 @@ const MyProfileModal = ({ isOpen, onClose }) => {
             </div>
 
             <div>
-              <label className="type-label block text-slate-500 mb-1 uppercase">
+              <label className="type-label block text-slate-600 mb-1 uppercase">
                 Gender
               </label>
               <select
@@ -460,7 +460,7 @@ const MyProfileModal = ({ isOpen, onClose }) => {
           {userData.isDoctorProfile && (
             <>
               <div>
-                <label className="type-label block text-slate-500 mb-1 uppercase">
+                <label className="type-label block text-slate-600 mb-1 uppercase">
                   Address <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -475,7 +475,7 @@ const MyProfileModal = ({ isOpen, onClose }) => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="type-label block text-slate-500 mb-1 uppercase flex items-center gap-1.5">
+                  <label className="type-label block text-slate-600 mb-1 uppercase flex items-center gap-1.5">
                     <Stethoscope size={12} /> Specialization <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -492,7 +492,7 @@ const MyProfileModal = ({ isOpen, onClose }) => {
                 </div>
 
                 <div>
-                  <label className="type-label block text-slate-500 mb-1 uppercase">
+                  <label className="type-label block text-slate-600 mb-1 uppercase">
                     Qualification <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -508,7 +508,7 @@ const MyProfileModal = ({ isOpen, onClose }) => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="type-label block text-slate-500 mb-1 uppercase">
+                  <label className="type-label block text-slate-600 mb-1 uppercase">
                     Experience in Months <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -522,7 +522,7 @@ const MyProfileModal = ({ isOpen, onClose }) => {
                 </div>
 
                 <div>
-                  <label className="type-label block text-slate-500 mb-1 uppercase">
+                  <label className="type-label block text-slate-600 mb-1 uppercase">
                     Registration Number <span className="text-red-500">*</span>
                   </label>
                   <input
