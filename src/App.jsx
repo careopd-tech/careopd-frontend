@@ -54,6 +54,7 @@ const App = () => {
     return sessionStorage.getItem('careopd_active_tab') || 'appointments';
   });
   const [appointmentBookingPatient, setAppointmentBookingPatient] = useState(null);
+  const [patientBookingNotification, setPatientBookingNotification] = useState(null);
   
   const [data, setData] = useState(() => ({
     appointments: [],
@@ -242,15 +243,29 @@ const App = () => {
     content = <Doctors data={data} setData={setData} onLogout={handleLogout}/>;
   } else if (effectiveActiveTab === 'patients') {
     content = (
-      <Patients
-        data={data}
-        setData={setData}
-        onLogout={handleLogout}
-        onBookAppointment={(patient) => {
-          setAppointmentBookingPatient(patient);
-          setActiveTab('appointments');
-        }}
-      />
+      <>
+        <Patients
+          data={data}
+          setData={setData}
+          onLogout={handleLogout}
+          onBookAppointment={(patient) => {
+            setAppointmentBookingPatient(patient);
+          }}
+          bookingNotification={patientBookingNotification}
+          onBookingNotificationConsumed={() => setPatientBookingNotification(null)}
+        />
+        {appointmentBookingPatient && (
+          <Appointments
+            data={data}
+            setData={setData}
+            onLogout={handleLogout}
+            bookingPatientRequest={appointmentBookingPatient}
+            modalOnly
+            onBookingModalClose={() => setAppointmentBookingPatient(null)}
+            onBookingSuccess={(notification) => setPatientBookingNotification(notification)}
+          />
+        )}
+      </>
     );
   } else if (effectiveActiveTab === 'settings') {
     content = <Settings data={data} setData={setData} onLogout={handleLogout} />;

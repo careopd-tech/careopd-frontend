@@ -5,7 +5,6 @@ import {
   ChevronDown, CalendarDays, CheckCircle, AlertCircle, Loader2, X, Search, Activity, FlaskConical,
   MoreVertical, UserCheck, Bell, XCircle, Phone, Printer, ReceiptText, Wallet
 } from 'lucide-react';
-import StatusBadge from '../components/ui/StatusBadge';
 import Modal from '../components/ui/Modal';
 import FAB from '../components/ui/FAB';
 import AlertMessage from '../components/ui/AlertMessage';
@@ -26,7 +25,16 @@ import ConsultationPad from '../components/doctor/ConsultationPad';
 import PatientHistoryList, { filterValidHistory } from '../components/ui/PatientHistoryList';
 import BillingPaymentModal from '../components/billing/BillingPaymentModal';
 
-const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, onBookingRequestConsumed }) => {
+const Appointments = ({
+  data,
+  setData,
+  onLogout,
+  bookingPatientRequest = null,
+  onBookingRequestConsumed,
+  modalOnly = false,
+  onBookingModalClose,
+  onBookingSuccess
+}) => {
   // --- 1. CONTEXT & BASICS ---
   const dateContext = useGlobalDate();
   const safeCurrentDate = dateContext?.currentDate || getLocalDateString();
@@ -164,6 +172,7 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
   const consultationDraftSaveTimeoutRef = useRef(null);
   const initialConsultationDraftSnapshotRef = useRef('');
   const initialConsultationHadDraftRef = useRef(false);
+  const bookingSupportRequestKeysRef = useRef(new Set());
 
   useEffect(() => { sectionsRef.current = sections; }, [sections]);
   useEffect(() => { metaCountsRef.current = metaCounts; }, [metaCounts]);
@@ -186,6 +195,15 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
   useEffect(() => {
     if (!bookingPatientRequest?._id) return;
 
+    setData(prev => {
+      const patients = Array.isArray(prev.patients) ? prev.patients : [];
+      const patientIndex = patients.findIndex(p => getEntityId(p) === getEntityId(bookingPatientRequest));
+      const nextPatients = patientIndex === -1
+        ? [bookingPatientRequest, ...patients]
+        : patients.map((patient, index) => index === patientIndex ? { ...patient, ...bookingPatientRequest } : patient);
+      return { ...prev, patients: nextPatients };
+    });
+
     setNewAppt({
       patientId: bookingPatientRequest._id,
       department: '',
@@ -204,6 +222,70 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
     setIsAddModalOpen(true);
     onBookingRequestConsumed?.();
   }, [bookingPatientRequest, safeCurrentDate, onBookingRequestConsumed]);
+
+  useEffect(() => {
+    if (!modalOnly || !isAddModalOpen || !clinicId) return undefined;
+
+    const shouldLoadDoctors = !(data.doctors || []).length;
+    const shouldLoadCalendar = Boolean(newAppt.doctorId) && !(data.calendar30 || []).length;
+    const shouldLoadClinic = !data.clinic || !Object.keys(data.clinic).length;
+    if (!shouldLoadDoctors && !shouldLoadCalendar && !shouldLoadClinic) return undefined;
+
+    const requestParts = [
+      shouldLoadDoctors ? 'doctors' : '',
+      shouldLoadCalendar ? `calendar:${newAppt.doctorId}` : '',
+      shouldLoadClinic ? 'clinic' : ''
+    ].filter(Boolean);
+    const requestKey = `${clinicId}:${safeCurrentDate}:${requestParts.join('|')}`;
+    if (bookingSupportRequestKeysRef.current.has(requestKey)) return undefined;
+    bookingSupportRequestKeysRef.current.add(requestKey);
+
+    let isMounted = true;
+
+    const loadBookingSupportData = async () => {
+      try {
+        const [doctors, calendar30, clinic] = await Promise.all([
+          shouldLoadDoctors
+            ? fetch(`${API_BASE_URL}/api/doctors/${clinicId}`).then(res => (res.ok ? res.json() : []))
+            : Promise.resolve(null),
+          shouldLoadCalendar
+            ? fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments&date=${safeCurrentDate}${rbacQuery}`).then(res => (res.ok ? res.json() : []))
+            : Promise.resolve(null),
+          shouldLoadClinic
+            ? fetch(`${API_BASE_URL}/api/clinics/${clinicId}`).then(res => (res.ok ? res.json() : null))
+            : Promise.resolve(null)
+        ]);
+
+        if (!isMounted) return;
+        setData(prev => {
+          const nextData = { ...prev };
+          if (doctors !== null) nextData.doctors = Array.isArray(doctors) ? doctors : prev.doctors;
+          if (calendar30 !== null) nextData.calendar30 = Array.isArray(calendar30) ? calendar30 : prev.calendar30;
+          if (clinic !== null) nextData.clinic = clinic || prev.clinic;
+          return nextData;
+        });
+      } catch (err) {
+        if (isMounted) setModalError('Failed to load booking details.');
+      }
+    };
+
+    loadBookingSupportData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    modalOnly,
+    isAddModalOpen,
+    clinicId,
+    safeCurrentDate,
+    rbacQuery,
+    data.doctors,
+    data.calendar30,
+    data.clinic,
+    newAppt.doctorId,
+    setData
+  ]);
 
   // Reset the snap flag when the user leaves the 'previous' section
   useEffect(() => {
@@ -255,6 +337,12 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
     if (!value) return '';
     if (typeof value === 'object') return String(value._id || value.id || '');
     return String(value);
+  };
+
+  const getShortEntityId = (prefix, value) => {
+    const rawId = getEntityId(value);
+    if (!rawId) return '';
+    return `${prefix}-${rawId.slice(-6).toUpperCase()}`;
   };
 
   const getPatientDetails = (patientRef) => {
@@ -553,19 +641,22 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
   };
 
   useEffect(() => {
+    if (modalOnly) return undefined;
+
     // Refresh today's cards and section counts, but leave historical/future
     // card data lazy-loaded only when the user opens those accordions.
     setExpandedSection('today');
     fetchAllData(true, undefined, true);
     const intervalId = setInterval(() => fetchAllData(true), 60000);
     return () => clearInterval(intervalId);
-  }, [safeCurrentDate]);
+  }, [safeCurrentDate, modalOnly]);
 
   useEffect(() => {
+    if (modalOnly) return;
     if (expandedSection === 'previous' || expandedSection === 'upcoming') {
       fetchAllData(true);
     }
-  }, [expandedSection]);
+  }, [expandedSection, modalOnly]);
 
   // --- SCROLL MANAGEMENT ---
   useLayoutEffect(() => {
@@ -799,6 +890,22 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
     );
   };
 
+  const closeAddAppointmentModal = () => {
+    if (modalOnly) {
+      bookingSupportRequestKeysRef.current.clear();
+    }
+    setIsAddModalOpen(false);
+    setRebookingApptId(null);
+    setIsFollowUpBooking(false);
+    setFollowUpSourceApptId('');
+    setModalError('');
+    setInvalidFields([]);
+    setPatientSearchQuery('');
+    setNewAppt({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate });
+    setNewPatientDetails(defaultNewPatientDetails);
+    onBookingModalClose?.();
+  };
+
   // --- ACTIONS ---
   const handleAddAppointment = async () => {
     setModalError('');
@@ -847,16 +954,17 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
 
       if (res.ok) {
         await fetchAllData(true);
-        setIsAddModalOpen(false); setRebookingApptId(null); setIsFollowUpBooking(false); setFollowUpSourceApptId('');
-        setNewAppt({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate });
-        setNewPatientDetails(defaultNewPatientDetails);
 
         const pName = newAppt.patientId === 'add_new' ? fullName : getPatientName(newAppt.patientId);
+        const shortMessage = isRebookFlow ? 'Appointment Rebooked' : 'Appointment Booked';
+        const detailedMessage = `Appointment ${isRebookFlow ? 'Rebooked' : 'Booked'} for ${pName} on ${newAppt.date} at ${newAppt.time}`;
         showNotification(
-          isRebookFlow ? 'Appointment Rebooked' : 'Appointment Booked',
+          shortMessage,
           'success',
-          `Appointment ${isRebookFlow ? 'Rebooked' : 'Booked'} for ${pName} on ${newAppt.date}  at ${newAppt.time}`
+          detailedMessage
         );
+        onBookingSuccess?.({ shortMessage, detailedMessage, type: 'success' });
+        closeAddAppointmentModal();
       } else {
         if (result.errorCode === 'ERR_APPOINTMENT_CONFLICT') {
           return setModalError('Selected Patient has an existing appointment at the same time.');
@@ -1566,6 +1674,36 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
     const canConsultWithoutCheckIn = data.clinic?.type === 'Solo' && isTreatingPhysician;
     const todayPhase = getTodayAppointmentPhase(appt);
     const cardStatus = getCardStatus(appt);
+    const cardStatusTextClass = {
+      'Scheduled': 'text-amber-600',
+      'Checked In': 'text-teal-600',
+      'Draft': 'text-violet-700',
+      'In Consultation': 'text-blue-600',
+      'Awaiting Reports': 'text-cyan-700',
+      'Delayed': 'text-orange-600',
+      'Walked Out': 'text-slate-600',
+      'Completed': 'text-green-600',
+      'Test Recommended': 'text-emerald-700',
+      'Tests Recommended': 'text-emerald-700',
+      'Cancelled': 'text-red-600',
+      'No Show': 'text-slate-600',
+      'No-Show': 'text-slate-600'
+    }[cardStatus] || 'text-slate-600';
+    const cardStatusDotClass = {
+      'Scheduled': 'bg-amber-500',
+      'Checked In': 'bg-teal-500',
+      'Draft': 'bg-violet-500',
+      'In Consultation': 'bg-blue-500',
+      'Awaiting Reports': 'bg-cyan-500',
+      'Delayed': 'bg-orange-500',
+      'Walked Out': 'bg-slate-500',
+      'Completed': 'bg-green-500',
+      'Test Recommended': 'bg-emerald-500',
+      'Tests Recommended': 'bg-emerald-500',
+      'Cancelled': 'bg-red-500',
+      'No Show': 'bg-slate-400',
+      'No-Show': 'bg-slate-400'
+    }[cardStatus] || 'bg-slate-400';
     const isProcessing = processingAppointmentId === appt._id;
     const latestClinicalResultStatus = appt.latestClinicalResultStatus || '';
     const hasRecommendedTests = latestClinicalResultStatus === 'Tests Recommended';
@@ -1601,6 +1739,7 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
     const visitIdentifier = uiStatus === 'Checked In'
       ? (isFollowUpVisit ? 'Follow-Up' : 'New')
       : '';
+    const appointmentDisplayId = getShortEntityId('APT', appt);
 
     const actions = {
       cancel: {
@@ -1730,7 +1869,7 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
           disabled={isProcessing || action.disabled}
           className={`type-label h-8 rounded-lg flex items-center gap-1.5 whitespace-nowrap transition-colors disabled:opacity-70 ${
             isPrimary
-              ? 'justify-center px-3 text-white bg-teal-600 hover:bg-teal-700 shadow-sm'
+              ? 'justify-center min-w-[10rem] px-3 text-white bg-teal-600 hover:bg-teal-700 shadow-sm'
               : 'justify-start w-full px-3 text-slate-700 hover:bg-slate-50'
           }`}
           title={action.disabled ? 'Print prescription first to unlock invoice.' : undefined}
@@ -1792,18 +1931,23 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
     };
 
     return (
-      <div key={appt._id} className={`p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col md:flex-row gap-2 ${isCancelled || isNoShow || isWalkedOut ? 'bg-slate-50 opacity-90' : 'bg-white'}`}>
-        <div className={`flex-1 min-w-0 ${(isCancelled || isNoShow || isWalkedOut) ? 'grayscale opacity-75' : ''}`}>
-          <div className="flex justify-between items-start mb-1.5">
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <Clock size={12} className="text-slate-400" />
-              <span className="type-body text-slate-700">{appt.time}</span>
-              <span className="type-label text-slate-400">| {appt.date}</span>
+      <div key={appt._id} className="p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col gap-2 bg-white">
+        <div className="flex-1 min-w-0">
+          <div className="grid h-5 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 mb-1.5">
+            <div className="flex h-5 items-center gap-1.5 min-w-0 overflow-hidden whitespace-nowrap">
+              <span className="flex h-5 w-4 flex-shrink-0 items-center justify-center">
+                <Clock size={13} strokeWidth={2.2} className="block text-slate-400" />
+              </span>
+              <span className="flex h-5 items-center text-[14px] font-medium leading-[20px] text-slate-700">{appt.time}</span>
+              <span className="flex h-5 items-center text-[12px] font-semibold leading-[20px] tracking-[0.01em] text-slate-400">| {appt.date}</span>
             </div>
-            <div className="flex items-center gap-1.5 flex-wrap justify-end">
-              {isNoShow ? <span className="type-utility bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase">No Show</span> : <StatusBadge status={cardStatus} />}
+            <div className="flex h-5 items-center gap-1.5 justify-end whitespace-nowrap">
+              <span className={`flex h-5 items-center gap-1.5 text-[12px] font-semibold leading-[20px] tracking-[0.04em] uppercase ${cardStatusTextClass}`}>
+                <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${cardStatusDotClass}`} />
+                <span className="flex h-5 items-center leading-[20px]">{cardStatus}</span>
+              </span>
               {visitIdentifier ? (
-                <span className="type-utility uppercase text-slate-600">
+                <span className="flex h-5 items-center text-[12px] font-semibold leading-[20px] tracking-[0.04em] uppercase text-slate-600 whitespace-nowrap">
                   ({visitIdentifier})
                 </span>
               ) : null}
@@ -1819,15 +1963,25 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
             </div>
           </div>
         </div>
-        {hasPrimaryInlineAction && (
-          <div className="flex items-center justify-end gap-1.5 border-t md:border-t-0 md:border-l border-slate-100 pt-2 md:pt-0 md:pl-3 flex-shrink-0">
+        {!hasArchivedInlineAction && (appointmentDisplayId || hasPrimaryInlineAction) && (
+          <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
+            {appointmentDisplayId ? (
+              <span className="type-utility text-slate-500 bg-slate-50 border border-slate-200 rounded px-2 py-1 uppercase whitespace-nowrap">
+                {appointmentDisplayId}
+              </span>
+            ) : <span />}
             {renderActionButton(primaryAction, true)}
           </div>
         )}
         {hasArchivedInlineAction && (
-          <div className="flex flex-row md:flex-col gap-1.5 border-t md:border-l border-slate-100 pt-1.5 md:pt-0 md:pl-3 justify-end flex-shrink-0 md:w-32">
+          <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
+            {appointmentDisplayId ? (
+              <span className="type-utility text-slate-500 bg-slate-50 border border-slate-200 rounded px-2 py-1 uppercase whitespace-nowrap">
+                {appointmentDisplayId}
+              </span>
+            ) : <span />}
             {isAdmin && (
-              <button onClick={() => handleRebook(appt)} className="type-label flex-1 md:flex-none w-full h-7 text-white bg-blue-600 hover:bg-blue-700 shadow-sm rounded-lg flex items-center justify-center gap-1 whitespace-nowrap"><RefreshCw size={12} /> ReBook</button>
+              <button onClick={() => handleRebook(appt)} className="type-label h-8 min-w-[10rem] text-white bg-blue-600 hover:bg-blue-700 shadow-sm rounded-lg flex items-center justify-center gap-1 whitespace-nowrap px-3"><RefreshCw size={12} /> ReBook</button>
             )}
           </div>
         )}
@@ -1900,9 +2054,10 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
   const dialableContactPhone = String(contactPhone || '').replace(/[^\d+]/g, '');
   const vitalsPatient = getPatientDetails(actionAppt?.patientId);
   const vitalsPatientGender = { M: 'Male', F: 'Female', O: 'Other' }[vitalsPatient?.gender] || vitalsPatient?.gender || 'Gender Unknown';
+  const isPatientLockedForBooking = modalOnly && Boolean(newAppt.patientId) && newAppt.patientId !== 'add_new';
 
   return (
-    <div className="h-full flex flex-col relative">
+    <div className={modalOnly ? "contents" : "h-full flex flex-col relative"}>
       {notification && (
         <div className={`fixed top-6 right-6 z-[100] px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 bg-white border-l-4 ${notification.type === 'success' ? 'border-teal-500 text-teal-800' : 'border-red-500 text-red-800'}`}>
           {notification.type === 'success' ? <CheckCircle size={20} className="text-teal-500" /> : <AlertCircle size={20} className="text-red-500" />}
@@ -1910,82 +2065,86 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
         </div>
       )}
 
-      {/* ADDED: DYNAMIC TITLE BASED ON ROLE */}
-      <ModuleHeader
-        title={canViewAllAppointments ? "Appointments" : "Queue & Schedule"}
-        shortTitle={canViewAllAppointments ? "Appts" : "Queue"}
-        searchVal={searchQuery}
-        onSearch={handleSearchInput}
-        onFilterClick={openFilterModal}
-        hasFilter={hasActiveFilters}
-        notifications={notificationStack}
-        onClearAll={handleClearNotifications}
-        onDismiss={handleDismissNotification}
-        onLogout={onLogout}
-      />
-      {loadError && (
-        <div className="px-2 pt-2">
-          <AlertMessage message={loadError} />
-        </div>
-      )}
-
-      <div className="flex-1 flex flex-col min-h-0 p-2 gap-2">
-        <StatFilterStrip
-          items={statsConfig}
-          isActive={(item) => activeFilters.status.includes(item.key)}
-          onSelect={(item) => handleStatsClick(item.key)}
-        />
-        <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-          {searchQuery ? (
-            <div className="flex-1 flex flex-col min-h-0 animate-fadeIn bg-white">
-              <div className="flex items-center justify-between px-3 py-2.5 bg-white border-b border-slate-100 shadow-sm flex-none">
-                <div className="flex items-center gap-1.5">
-                  <Clock size={14} className="text-teal-700" />
-                  <h3 className="type-section-title text-teal-700">Search Results {hasActiveFilters && <span className="type-label text-red-500 ml-1.5">(Filtered)</span>}</h3>
-                  <span className="type-label ml-1.5 text-slate-400 font-normal">
-                    Showing {visibleSearchResults.length} of {searchTotal}
-                  </span>
-                </div>
-                <button onClick={() => handleSearchInput('')} className="p-0 bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-full transition-colors"><X size={14} /></button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-2 space-y-1.5 bg-slate-50/50 scrollbar-hide">
-                {isSearching ? (
-                  <div className="py-10 text-center text-slate-400 flex flex-col items-center gap-2"><Loader2 className="animate-spin text-teal-600" /><span className="type-secondary">Searching database...</span></div>
-                ) : visibleSearchResults.length > 0 ? (
-                  <>
-                    {visibleSearchResults.map(renderAppointmentCard)}
-
-                    {searchResults.length < searchTotal && (
-                      <button
-                        onClick={fetchSearchMore}
-                        disabled={isSearchLoadingMore}
-                        className="type-label w-full py-2 mt-2 text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5"
-                      >
-                        {isSearchLoadingMore ? <Loader2 size={12} className="animate-spin" /> : <ChevronDown size={12} />}
-                        {isSearchLoadingMore ? 'Loading...' : 'Load More Results'}
-                      </button>
-                    )}
-                  </>
-                ) : (<div className="type-secondary py-10 text-center text-slate-400">{searchResults.length > 0 ? "No results match your active filters." : `No records found for "${searchQuery}"`}</div>)}
-              </div>
+      {!modalOnly && (
+        <>
+          {/* ADDED: DYNAMIC TITLE BASED ON ROLE */}
+          <ModuleHeader
+            title={canViewAllAppointments ? "Appointments" : "Queue & Schedule"}
+            shortTitle={canViewAllAppointments ? "Appts" : "Queue"}
+            searchVal={searchQuery}
+            onSearch={handleSearchInput}
+            onFilterClick={openFilterModal}
+            hasFilter={hasActiveFilters}
+            notifications={notificationStack}
+            onClearAll={handleClearNotifications}
+            onDismiss={handleDismissNotification}
+            onLogout={onLogout}
+          />
+          {loadError && (
+            <div className="px-2 pt-2">
+              <AlertMessage message={loadError} />
             </div>
-          ) : (
-            <>
-              {renderAccordionSection('previous', 'Previous', History, 'text-slate-400', sections.previous)}
-              {renderAccordionSection('today', "Today's", CalendarCheck, 'text-teal-700', sections.today)}
-              {renderAccordionSection('upcoming', 'Upcoming', Calendar, 'text-blue-600', sections.upcoming)}
-            </>
           )}
-        </div>
-      </div>
 
-      {/* ADDED: ADMIN SECURITY LOCK FOR CREATING APPOINTMENTS */}
-      {isAdmin && (
-        <FAB icon={Plus} onClick={() => { setRebookingApptId(null); setIsFollowUpBooking(false); setIsAddModalOpen(true); }} />
+          <div className="flex-1 flex flex-col min-h-0 p-2 gap-2">
+            <StatFilterStrip
+              items={statsConfig}
+              isActive={(item) => activeFilters.status.includes(item.key)}
+              onSelect={(item) => handleStatsClick(item.key)}
+            />
+            <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+              {searchQuery ? (
+                <div className="flex-1 flex flex-col min-h-0 animate-fadeIn bg-white">
+                  <div className="flex items-center justify-between px-3 py-2.5 bg-white border-b border-slate-100 shadow-sm flex-none">
+                    <div className="flex items-center gap-1.5">
+                      <Clock size={14} className="text-teal-700" />
+                      <h3 className="type-section-title text-teal-700">Search Results {hasActiveFilters && <span className="type-label text-red-500 ml-1.5">(Filtered)</span>}</h3>
+                      <span className="type-label ml-1.5 text-slate-400 font-normal">
+                        Showing {visibleSearchResults.length} of {searchTotal}
+                      </span>
+                    </div>
+                    <button onClick={() => handleSearchInput('')} className="p-0 bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-full transition-colors"><X size={14} /></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-2 space-y-1.5 bg-slate-50/50 scrollbar-hide">
+                    {isSearching ? (
+                      <div className="py-10 text-center text-slate-400 flex flex-col items-center gap-2"><Loader2 className="animate-spin text-teal-600" /><span className="type-secondary">Searching database...</span></div>
+                    ) : visibleSearchResults.length > 0 ? (
+                      <>
+                        {visibleSearchResults.map(renderAppointmentCard)}
+
+                        {searchResults.length < searchTotal && (
+                          <button
+                            onClick={fetchSearchMore}
+                            disabled={isSearchLoadingMore}
+                            className="type-label w-full py-2 mt-2 text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex justify-center items-center gap-1.5"
+                          >
+                            {isSearchLoadingMore ? <Loader2 size={12} className="animate-spin" /> : <ChevronDown size={12} />}
+                            {isSearchLoadingMore ? 'Loading...' : 'Load More Results'}
+                          </button>
+                        )}
+                      </>
+                    ) : (<div className="type-secondary py-10 text-center text-slate-400">{searchResults.length > 0 ? "No results match your active filters." : `No records found for "${searchQuery}"`}</div>)}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {renderAccordionSection('previous', 'Previous', History, 'text-slate-400', sections.previous)}
+                  {renderAccordionSection('today', "Today's", CalendarCheck, 'text-teal-700', sections.today)}
+                  {renderAccordionSection('upcoming', 'Upcoming', Calendar, 'text-blue-600', sections.upcoming)}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* ADDED: ADMIN SECURITY LOCK FOR CREATING APPOINTMENTS */}
+          {isAdmin && (
+            <FAB icon={Plus} onClick={() => { setRebookingApptId(null); setIsFollowUpBooking(false); setIsAddModalOpen(true); }} />
+          )}
+        </>
       )}
 
       {/* --- ADDED: EMR FULL-SCREEN OVERLAY --- */}
-      {isConsultationPadOpen && activeConsultationAppt && (
+      {!modalOnly && isConsultationPadOpen && activeConsultationAppt && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 flex items-center justify-center md:p-6 backdrop-blur-sm animate-fadeIn">
           <div className="bg-slate-50 w-full h-full md:rounded-2xl shadow-2xl flex flex-col overflow-hidden max-w-6xl mx-auto border border-slate-200">
              
@@ -2085,7 +2244,7 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
         </div>
       </Modal>
 
-      <Modal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setRebookingApptId(null); setIsFollowUpBooking(false); setFollowUpSourceApptId(''); setModalError(''); setInvalidFields([]); setPatientSearchQuery(''); setNewAppt({ patientId: '', department: '', doctorId: '', time: '', date: safeCurrentDate }); setNewPatientDetails(defaultNewPatientDetails); }} title={rebookingApptId ? "ReBook Appointment" : (isFollowUpBooking ? "Follow-Up Appointment" : "New Appointment")}
+      <Modal isOpen={isAddModalOpen} onClose={closeAddAppointmentModal} title={rebookingApptId ? "ReBook Appointment" : (isFollowUpBooking ? "Follow-Up Appointment" : "New Appointment")}
         footer={
           <button
             onClick={handleAddAppointment}
@@ -2112,8 +2271,8 @@ const Appointments = ({ data, setData, onLogout, bookingPatientRequest = null, o
                         </div>
                      )}
                   </div>
-                  {/* Hide the change button if we are strictly Rebooking */}
-                  {!rebookingApptId && (
+                  {/* Hide the change button for rebooking or patient-specific booking. */}
+                  {!rebookingApptId && !isPatientLockedForBooking && (
                     <button 
                       type="button" 
                       onClick={() => { setNewAppt({...newAppt, patientId: ''}); setPatientSearchQuery(''); setIsPatientDropdownOpen(false); }} 

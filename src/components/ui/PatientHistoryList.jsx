@@ -255,6 +255,7 @@ const PatientHistoryList = ({
         const isFetching = fetchingId === visit._id;
         const clinicalTimeline = getClinicalTimeline(visit);
         const hasMultipleClinicalEntries = clinicalTimeline.length > 1;
+        const followUpVisitCount = Number(visit.followUpNoteCount || (clinicalTimeline.length - 1));
 
         const visitDocId = String(visit.doctorId?._id || visit.doctorId);
         const isOwnConsultation = loggedInDoctorId ? (visitDocId === String(loggedInDoctorId)) : false;
@@ -325,11 +326,8 @@ const PatientHistoryList = ({
               {isExpanded && !isFetching && (
                 <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-4 animate-slideDown cursor-default">
                   {hasMultipleClinicalEntries && (
-                    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-                      <div className="text-[12px] font-bold uppercase tracking-wider text-slate-600">Clinical Timeline</div>
-                      <div className="mt-1 text-[12px] text-slate-600">
-                        This visit contains the original consultation and {visit.followUpNoteCount || (clinicalTimeline.length - 1)} follow-up update{(visit.followUpNoteCount || (clinicalTimeline.length - 1)) > 1 ? 's' : ''}.
-                      </div>
+                    <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-[12px] font-medium text-teal-800">
+                      This appointment contains the initial visit and {followUpVisitCount} follow-up visit{followUpVisitCount > 1 ? 's' : ''}.
                     </div>
                   )}
 

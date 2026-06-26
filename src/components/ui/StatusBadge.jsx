@@ -12,6 +12,8 @@ const StatusBadge = ({ status }) => {
     'Completed': 'text-green-600',
     'Test Recommended': 'text-emerald-700',
     'Cancelled': 'text-red-600',
+    'No Show': 'text-slate-600',
+    'No-Show': 'text-slate-600',
     'On Leave': 'text-amber-600',
     'Inactive': 'text-slate-600',
   };
@@ -27,13 +29,15 @@ const StatusBadge = ({ status }) => {
     'Completed': 'bg-green-500',
     'Test Recommended': 'bg-emerald-500',
     'Cancelled': 'bg-red-500',
+    'No Show': 'bg-slate-400',
+    'No-Show': 'bg-slate-400',
     'On Leave': 'bg-amber-500',
     'Inactive': 'bg-slate-400',
   };
 
   return (
-    <div className={`type-utility flex items-center gap-1.5 uppercase ${styles[status] || 'text-slate-600'}`}>
-      <div className={`w-1.5 h-1.5 rounded-full ${dotStyles[status] || 'bg-slate-400'}`}></div>
+    <div className={`inline-flex h-6 items-center gap-1.5 whitespace-nowrap text-[12px] font-semibold leading-6 tracking-[0.04em] uppercase ${styles[status] || 'text-slate-600'}`}>
+      <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotStyles[status] || 'bg-slate-400'}`}></div>
       {status}
     </div>
   );

@@ -22,7 +22,7 @@ import { hasPermission } from '../utils/permissions';
   
 
 // Note: I included data & setData in the props so App.jsx stays perfectly happy
-const Patients = ({ data, setData, onLogout, onBookAppointment }) => {
+const Patients = ({ data, setData, onLogout, onBookAppointment, bookingNotification, onBookingNotificationConsumed }) => {
   const dateContext = useGlobalDate();
   const safeCurrentDate = dateContext?.currentDate || getLocalDateString();
   const clinicId = localStorage.getItem('clinicId');
@@ -168,6 +168,16 @@ const PatientSkeleton = () => (
 
   const handleClearNotifications = () => setNotificationStack([]);
   const handleDismissNotification = (id) => setNotificationStack(prev => prev.filter(n => n.id !== id));
+
+  useEffect(() => {
+    if (!bookingNotification) return;
+    showNotification(
+      bookingNotification.shortMessage || 'Appointment Booked',
+      bookingNotification.type || 'success',
+      bookingNotification.detailedMessage
+    );
+    onBookingNotificationConsumed?.();
+  }, [bookingNotification, onBookingNotificationConsumed]);
 
   // --- DATA FETCHING ---
   const fetchPatientData = async (targetPage = 1, isBackgroundSync = false) => {
@@ -499,10 +509,7 @@ const PatientSkeleton = () => (
       return setProfileInlineError('Enter a valid 10-digit mobile number.');
     }
 
-    const payload = {
-      ...selectedPatientDetail,
-      clinicId
-    };
+    const payload = { clinicId };
 
     if (field === 'name') {
       const nextNameParts = {
