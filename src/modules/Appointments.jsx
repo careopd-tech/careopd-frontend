@@ -1522,17 +1522,21 @@ const Appointments = ({
 
   const openBillingPayment = async (appt) => {
     setOpenActionMenuId('');
-    setIsBillingPaymentModalOpen(true);
-    setBillingPaymentContext({
-      appointment: appt,
-      patient: appt.patientId,
-      doctor: appt.doctorId
-    });
-
+    setProcessingAppointmentId(appt._id);
     try {
       const context = await loadPostConsultContext(appt);
       setBillingPaymentContext(context);
-    } catch (err) {}
+      setIsBillingPaymentModalOpen(true);
+    } catch (err) {
+      setBillingPaymentContext({
+        appointment: appt,
+        patient: appt.patientId,
+        doctor: appt.doctorId
+      });
+      setIsBillingPaymentModalOpen(true);
+    } finally {
+      setProcessingAppointmentId('');
+    }
   };
 
   const handleCheckIn = async (appt) => {

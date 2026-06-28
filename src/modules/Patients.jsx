@@ -1,18 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
-import PatientHistoryList, { filterValidHistory, getUiStatus, getStatusStyling } from '../components/ui/PatientHistoryList';
+import PatientHistoryList, { filterValidHistory } from '../components/ui/PatientHistoryList';
 import { 
   Plus, ChevronDown, Edit2, Loader2, CheckCircle, AlertCircle, Users, X, History, Clock,
-  Activity, FileText, Pill, FlaskConical, Phone, Mail, MapPin, Droplet, CalendarDays, Wallet, Save, MoreVertical, VenusAndMars
+  Activity, FileText, Pill, FlaskConical, Phone, Mail, MapPin, Droplet, CalendarDays, Wallet, Save, MoreVertical, VenusAndMars, ReceiptText
 } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import FAB from '../components/ui/FAB';
 import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import StatFilterStrip from '../components/ui/StatFilterStrip';
+import BillingPaymentModal from '../components/billing/BillingPaymentModal';
 import { useGlobalDate } from '../context/DateContext';
 import { getLocalDateString } from '../utils/dateUtils';
+import { printReceiptDocument } from '../utils/postConsultPrint';
+import {
+  formatBillingCurrency,
+  getAppointmentBillingAmounts,
+  getBillingStatus,
+  getBillingStatusClass,
+  hasBillingRecord
+} from '../utils/billingUtils';
 import API_BASE_URL from '../config';
-import { getSessionUser } from '../utils/auth';
+import { authFetch, getSessionUser } from '../utils/auth';
 import { hasPermission } from '../utils/permissions';
 
 
@@ -141,6 +150,9 @@ const PatientSkeleton = () => (
   const [isDetailVisitLoading, setIsDetailVisitLoading] = useState(false);
   const [detailVisitError, setDetailVisitError] = useState('');
   const [detailVisitPatientId, setDetailVisitPatientId] = useState('');
+  const [isBillingPaymentModalOpen, setIsBillingPaymentModalOpen] = useState(false);
+  const [billingPaymentContext, setBillingPaymentContext] = useState(null);
+  const [openingBillingAppointmentId, setOpeningBillingAppointmentId] = useState('');
 
   const defaultPatientState = { 
     _id: null, firstName: '', middleName: '', lastName: '', name: '', 
@@ -388,6 +400,31 @@ const PatientSkeleton = () => (
 
   const formatGender = (gender) => ({ M: 'Male', F: 'Female', O: 'Other' }[gender] || gender || '-');
   const getPatientInitial = (patient) => (patient?.name || '?').trim().charAt(0).toUpperCase() || '?';
+  const getShortEntityId = (prefix, entity) => {
+    const id = typeof entity === 'string' ? entity : entity?._id;
+    return id ? `${prefix}-${String(id).slice(-6).toUpperCase()}` : '';
+  };
+  const isBillingAvailableForAppointment = (appt) => (
+    ['Checked In', 'In Consultation', 'Draft', 'Completed', 'Awaiting Reports', 'Walked Out'].includes(appt?.status)
+  );
+  const getPatientAppointmentBillingAmounts = (appt) => (
+    isBillingAvailableForAppointment(appt) || hasBillingRecord(appt)
+      ? getAppointmentBillingAmounts(appt, data.clinic)
+      : { total: 0, paid: 0, balance: 0 }
+  );
+  const getPatientAppointmentBillingStatus = (appt) => (
+    isBillingAvailableForAppointment(appt) || hasBillingRecord(appt)
+      ? getBillingStatus(appt, data.clinic)
+      : 'Unbilled'
+  );
+  const getBillingTotals = (appointments = []) => appointments.reduce((totals, appt) => {
+    const { total, paid, balance } = getPatientAppointmentBillingAmounts(appt);
+    totals.total += total;
+    totals.paid += paid;
+    totals.balance += balance;
+    if (hasBillingRecord(appt)) totals.receipts += 1;
+    return totals;
+  }, { total: 0, paid: 0, balance: 0, receipts: 0 });
   const getPatientNameParts = (patient = {}) => {
     const parts = String(patient.name || '').trim().split(/\s+/).filter(Boolean);
     return {
@@ -428,9 +465,72 @@ const PatientSkeleton = () => (
 
   const handlePatientDetailTabChange = (tabId) => {
     setActivePatientTab(tabId);
-    if (tabId === 'visits') {
+    if (tabId === 'visits' || tabId === 'billing') {
       loadPatientDetailVisits();
     }
+  };
+
+  const loadBillingContext = async (appt) => {
+    const fallbackContext = {
+      appointment: appt,
+      patient: appt?.patientId || selectedPatientDetail || {},
+      doctor: appt?.doctorId || {}
+    };
+
+    if (!appt?._id || !clinicId) return fallbackContext;
+
+    try {
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/visit/${appt._id}/post-consult?clinicId=${clinicId}`);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) return fallbackContext;
+      return {
+        appointment: result.appointment || fallbackContext.appointment,
+        patient: result.patient || fallbackContext.patient,
+        doctor: result.doctor || fallbackContext.doctor
+      };
+    } catch (err) {
+      return fallbackContext;
+    }
+  };
+
+  const openBillingPayment = async (appt) => {
+    if (!appt?._id || openingBillingAppointmentId) return;
+    setOpeningBillingAppointmentId(appt._id);
+    try {
+      const context = await loadBillingContext(appt);
+      if (context.appointment?._id) {
+        setDetailVisitHistory(prev => prev.map(item => item._id === context.appointment._id ? { ...item, ...context.appointment } : item));
+      }
+      setBillingPaymentContext(context);
+      setIsBillingPaymentModalOpen(true);
+    } finally {
+      setOpeningBillingAppointmentId('');
+    }
+  };
+
+  const handlePrintReceipt = async (appt) => {
+    try {
+      const context = await loadBillingContext(appt);
+      const didPrint = printReceiptDocument({
+        clinic: data.clinic,
+        appointment: context.appointment,
+        patient: context.patient,
+        doctor: context.doctor
+      });
+
+      if (!didPrint) {
+        showNotification('No billing receipt found for this visit.', 'error');
+      }
+    } catch (err) {
+      showNotification('Failed to print receipt.', 'error');
+    }
+  };
+
+  const handleBillingSaved = (updatedAppointment) => {
+    if (updatedAppointment?._id) {
+      setDetailVisitHistory(prev => prev.map(appt => appt._id === updatedAppointment._id ? { ...appt, ...updatedAppointment } : appt));
+    }
+    showNotification('Billing Updated', 'success', 'Payment details have been saved and receipt generated.');
   };
 
   const updatePatientLocally = (updatedPatient) => {
@@ -710,6 +810,137 @@ const PatientSkeleton = () => (
     { id: 'followUps', label: 'Follow-Ups', icon: CalendarDays }
   ];
 
+  const renderPatientBillingTab = (patient) => {
+    const billingTotals = getBillingTotals(detailVisitHistory);
+    const summaryCards = [
+      { label: 'Billed', value: formatBillingCurrency(billingTotals.total), className: 'bg-blue-50 text-blue-700 border-blue-100' },
+      { label: 'Paid', value: formatBillingCurrency(billingTotals.paid), className: 'bg-teal-50 text-teal-700 border-teal-100' },
+      { label: 'Balance', value: formatBillingCurrency(billingTotals.balance), className: billingTotals.balance > 0 ? 'bg-red-50 text-red-700 border-red-100' : 'bg-slate-50 text-slate-600 border-slate-200' }
+    ];
+
+    if (detailVisitError) {
+      return (
+        <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-center">
+          <div className="type-section-title text-red-700">{detailVisitError}</div>
+          <button
+            type="button"
+            onClick={() => loadPatientDetailVisits(patient, true)}
+            className="type-label mt-3 rounded-lg border border-red-100 bg-white px-3 py-1.5 text-red-700 hover:bg-red-50"
+          >
+            Try Again
+          </button>
+        </div>
+      );
+    }
+
+    if (isDetailVisitLoading) {
+      return (
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-100 bg-white p-6 text-slate-500">
+          <Loader2 size={18} className="animate-spin text-teal-600" />
+          <span className="type-secondary">Loading billing history...</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2.5 animate-fadeIn">
+        <div className="grid grid-cols-3 gap-2">
+          {summaryCards.map(card => (
+            <div key={card.label} className={`rounded-xl border p-3 ${card.className}`}>
+              <div className="type-utility uppercase">{card.label}</div>
+              <div className="type-section-title mt-1">{card.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {detailVisitHistory.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center">
+            <div className="type-section-title text-slate-700">No Billing Records</div>
+            <p className="type-secondary mt-1 text-slate-400">Billing will appear here after appointments are created for this patient.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {detailVisitHistory.map(appt => {
+              const appointmentDisplayId = getShortEntityId('APT', appt);
+              const billingStatus = getPatientAppointmentBillingStatus(appt);
+              const billingStatusClass = getBillingStatusClass(billingStatus);
+              const { total, paid, balance } = getPatientAppointmentBillingAmounts(appt);
+              const billing = appt.billing || {};
+              const hasReceipt = hasBillingRecord(appt);
+              const doctorName = appt.doctorId?.name || appt.doctorName || 'Doctor not assigned';
+              const paymentLabel = paid > 0 && balance > 0 ? 'Collect Balance' : 'Collect Payment';
+              const canOpenBilling = canManageAppointments && isBillingAvailableForAppointment(appt);
+              const hasPendingPayment = canOpenBilling && balance > 0 && billingStatus !== 'Fully Paid';
+              const isOpeningBilling = openingBillingAppointmentId === appt._id;
+
+              return (
+                <div key={appt._id || `${appt.date}-${appt.time}`} className="rounded-xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+                  <div className="p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="type-utility text-slate-500 uppercase">{appointmentDisplayId || 'APT ID'}</div>
+                        <div className="type-card-title mt-1 text-slate-800 truncate">{appt.time || '--'} | {appt.date || '--'}</div>
+                      </div>
+                      <span className={`type-utility rounded border px-2 py-1 uppercase whitespace-nowrap ${billingStatusClass}`}>
+                        {billingStatus}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {billing.receiptNumber && (
+                        <span className="type-utility rounded border border-slate-200 bg-slate-50 px-2 py-1 uppercase text-slate-500">
+                          {billing.receiptNumber}
+                        </span>
+                      )}
+                      <span className="type-secondary min-w-0 truncate text-slate-500">with {doctorName}</span>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <div className="type-utility uppercase text-slate-500">Total</div>
+                        <div className="type-label mt-1 text-slate-800">{formatBillingCurrency(total)}</div>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <div className="type-utility uppercase text-slate-500">Paid</div>
+                        <div className="type-label mt-1 text-teal-700">{formatBillingCurrency(paid)}</div>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <div className="type-utility uppercase text-slate-500">Balance</div>
+                        <div className={`type-label mt-1 ${balance > 0 ? 'text-red-700' : 'text-slate-800'}`}>{formatBillingCurrency(balance)}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-100 p-2 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handlePrintReceipt(appt)}
+                      disabled={!hasReceipt}
+                      className="type-label h-8 min-w-[10rem] rounded-lg border border-slate-200 bg-white px-3 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:hover:bg-white flex items-center justify-center gap-1.5"
+                    >
+                      <ReceiptText size={13} /> Print Receipt
+                    </button>
+                    {canManageAppointments && hasPendingPayment && (
+                      <button
+                        type="button"
+                        onClick={() => openBillingPayment(appt)}
+                        disabled={isOpeningBilling}
+                        className="type-label h-8 min-w-[10rem] rounded-lg bg-teal-600 px-3 text-white hover:bg-teal-700 disabled:opacity-70 flex items-center justify-center gap-1.5"
+                      >
+                        {isOpeningBilling ? <Loader2 size={13} className="animate-spin" /> : <Wallet size={13} />}
+                        {isOpeningBilling ? 'Loading...' : paymentLabel}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderPatientDetailTab = () => {
     const patient = selectedPatientDetail;
     if (!patient) return null;
@@ -738,6 +969,10 @@ const PatientSkeleton = () => (
           )}
         </div>
       );
+    }
+
+    if (activePatientTab === 'billing') {
+      return renderPatientBillingTab(patient);
     }
 
     if (activePatientTab !== 'profile') {
@@ -780,6 +1015,7 @@ const renderPatientCard = (p) => {
     if (!p) return null; // Failsafe
     const patientType = p.todayType || p.type || 'New';
     const isMenuOpen = openPatientMenuId === p._id;
+    const patientDisplayId = p._id ? `PAT-${String(p._id).slice(-6).toUpperCase()}` : '';
     return (
       <div
         key={p._id}
@@ -794,7 +1030,7 @@ const renderPatientCard = (p) => {
         }}
         className="rounded-xl border border-slate-100 shadow-sm relative bg-white hover:border-teal-200 hover:shadow-md transition-colors cursor-pointer outline-none focus:ring-2 focus:ring-teal-500/20 overflow-visible"
       >
-        <div className="relative p-3" data-patient-actions-menu>
+        <div className="relative px-3 pt-3 pb-2">
           <div className="flex items-center gap-2 mb-1.5">
             <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
               <h3 className="type-card-title text-slate-800 leading-tight truncate">{p.name || 'Unknown Name'}</h3>
@@ -804,60 +1040,70 @@ const renderPatientCard = (p) => {
               {patientType}
             </div>
           </div>
-          <p className="text-[12px] text-slate-600 leading-tight mt-0.5">{p.gender || '?'}, {p.age || '?'} Yrs • {p.phone || 'No Phone'}</p>
-          <div className="mt-1.5 flex items-center gap-2">
-            <p className="text-[12px] text-teal-700 flex-1 min-w-0">Last Visit: {formatDate(p.lastVisit)}</p>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setOpenPatientMenuId(isMenuOpen ? '' : p._id);
-              }}
-              className="ml-auto h-7 w-7 rounded-lg bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-700 inline-flex items-center justify-center transition-colors flex-shrink-0"
-              aria-label={`More actions for ${p.name || 'patient'}`}
-              aria-expanded={isMenuOpen}
-            >
-              <MoreVertical size={16} />
-            </button>
-          </div>
 
-          {isMenuOpen && (
-            <div
-              className="absolute right-3 bottom-12 z-30 w-44 overflow-hidden rounded-xl border border-slate-100 bg-white shadow-xl animate-scaleIn"
-              onClick={(event) => event.stopPropagation()}
-            >
-              {canManageAppointments && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpenPatientMenuId('');
-                    onBookAppointment?.(p);
-                  }}
-                  className="type-label flex w-full items-center gap-2 px-3 py-2 text-left text-teal-700 hover:bg-teal-50"
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2">
+            <div className="min-w-0 space-y-1">
+              <p className="mt-1.5 text-[12px] leading-4 text-slate-600 truncate">{p.gender || '?'}, {p.age || '?'} Yrs &bull; {p.phone || 'No Phone'}</p>
+              <p className="text-[12px] leading-4 text-teal-700 truncate">Last Visit: {formatDate(p.lastVisit)}</p>
+            </div>
+            <div className="relative self-end" data-patient-actions-menu>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setOpenPatientMenuId(isMenuOpen ? '' : p._id);
+                }}
+                className="h-8 w-8 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 inline-flex items-center justify-center transition-colors flex-shrink-0"
+                aria-label={`More actions for ${p.name || 'patient'}`}
+                aria-expanded={isMenuOpen}
+              >
+                <MoreVertical size={15} />
+              </button>
+
+              {isMenuOpen && (
+                <div
+                  className="absolute right-0 top-9 z-30 w-44 overflow-hidden rounded-xl border border-slate-100 bg-white shadow-xl animate-scaleIn"
+                  onClick={(event) => event.stopPropagation()}
                 >
-                  <CalendarDays size={13} /> Book Appointment
-                </button>
-              )}
-              {canManagePatients && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpenPatientMenuId('');
-                    openEditModal(p, 'demographics');
-                  }}
-                  className="type-label flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
-                >
-                  <Edit2 size={13} /> Edit Profile
-                </button>
+                  {canManageAppointments && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenPatientMenuId('');
+                        onBookAppointment?.(p);
+                      }}
+                      className="type-label flex w-full items-center gap-2 px-3 py-2 text-left text-teal-700 hover:bg-teal-50"
+                    >
+                      <CalendarDays size={13} /> Book Appointment
+                    </button>
+                  )}
+                  {canManagePatients && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenPatientMenuId('');
+                        openEditModal(p, 'demographics');
+                      }}
+                      className="type-label flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
+                    >
+                      <Edit2 size={13} /> Edit Profile
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-          )}
+          </div>
         </div>
-        <div className="border-t border-slate-100 p-2">
+        <div className="border-t border-slate-100 p-2 flex items-center justify-between gap-2">
+          {patientDisplayId ? (
+            <span className="type-utility text-slate-500 bg-slate-50 border border-slate-200 rounded px-2 py-1 uppercase whitespace-nowrap">
+              {patientDisplayId}
+            </span>
+          ) : <span />}
           <button
             type="button"
             onClick={(event) => { event.stopPropagation(); openHistoryModal(p); }}
-            className="type-label w-full h-8 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-colors"
+            className="type-label h-8 min-w-[10rem] text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg flex items-center justify-center gap-1 whitespace-nowrap transition-colors px-3"
           >
             <Clock size={12} /> View History
           </button>
@@ -909,6 +1155,11 @@ const renderPatientCard = (p) => {
                   <p className="type-secondary text-slate-600 mt-0.5">
                     {formatGender(selectedPatientDetail.gender)} • {selectedPatientDetail.age || '?'} yrs • {selectedPatientDetail.phone || 'No phone'}
                   </p>
+                  {selectedPatientDetail._id && (
+                    <p className="type-utility text-slate-500 mt-1">
+                      PAT-{String(selectedPatientDetail._id).slice(-6).toUpperCase()}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1078,6 +1329,16 @@ const renderPatientCard = (p) => {
           embeddedMarker
         />
       </Modal>
+      <BillingPaymentModal
+        isOpen={isBillingPaymentModalOpen}
+        onClose={() => {
+          setIsBillingPaymentModalOpen(false);
+          setBillingPaymentContext(null);
+        }}
+        clinic={data.clinic}
+        context={billingPaymentContext}
+        onSaved={handleBillingSaved}
+      />
     </div>
   );
 };

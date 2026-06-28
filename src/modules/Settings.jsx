@@ -1608,12 +1608,18 @@ const Settings = ({ data, setData, onLogout }) => {
       </div>
 
       {/* EDIT MODAL */}
-      <Modal isOpen={!!editModal} onClose={() => { setEditModal(null); setModalError(''); setInvalidFields([]); }} title={editModal?.title} footer={
+      <Modal
+        isOpen={!!editModal}
+        onClose={() => { setEditModal(null); setModalError(''); setInvalidFields([]); }}
+        title={editModal?.title}
+        bodyClassName={editModal?.type === 'billing_services' ? 'p-4 flex-1 min-h-0 overflow-hidden overscroll-contain' : undefined}
+        footer={
           <button onClick={handleSaveSetting} disabled={loading} className="type-section-title w-full bg-teal-600 text-white py-1.5 rounded-lg disabled:opacity-70 hover:bg-teal-700 transition-colors">
              {loading ? 'Saving...' : 'Save Changes'}
           </button>
-        }>
-        <div className="space-y-3">
+        }
+      >
+        <div className={editModal?.type === 'billing_services' ? 'flex h-full min-h-0 flex-col gap-3' : 'space-y-3'}>
            <AlertMessage message={modalError} />
            
            {editModal?.type === 'clinic_details' && (
@@ -1731,14 +1737,14 @@ const Settings = ({ data, setData, onLogout }) => {
                  />
                </div>
 
-               <div className="space-y-2">
+               <div className="flex min-h-0 flex-1 flex-col gap-2">
                  <div className="flex items-center justify-between">
                    <label className="type-label text-slate-600 uppercase">Available Services</label>
                    <button
                      type="button"
                      onClick={() => setFormData({
                        ...formData,
-                       billingServices: [...(formData.billingServices || []), { name: '', price: '', active: true }]
+                       billingServices: [{ name: '', price: '', active: true }, ...(formData.billingServices || [])]
                      })}
                      className="type-label text-teal-600 bg-teal-50 border border-teal-100 px-2 py-1 rounded-lg flex items-center gap-1"
                    >
@@ -1746,7 +1752,7 @@ const Settings = ({ data, setData, onLogout }) => {
                    </button>
                  </div>
 
-                 <div className="space-y-2">
+                 <div className="min-h-0 max-h-[min(18rem,38vh)] flex-1 space-y-2 overflow-y-auto pr-1">
                    {(formData.billingServices || []).length === 0 && (
                      <div className="type-secondary text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded-lg">
                        No services configured yet.

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { History, Loader2, Activity, FileText, Pill, FlaskConical, RotateCw } from 'lucide-react';
+import { History, Loader2, Activity, FileText, Pill, FlaskConical, RotateCw, ChevronDown } from 'lucide-react';
 import { getLocalDateString } from '../../utils/dateUtils';
 import { getAppointmentUiStatus, hasClinicalRecordStatus } from '../../utils/appointmentStatus';
 
@@ -75,6 +75,11 @@ const formatTimelineTimestamp = (value) => {
     hour: 'numeric',
     minute: '2-digit'
   });
+};
+
+const getAppointmentDisplayId = (visit = {}) => {
+  const rawId = visit._id || visit.id;
+  return rawId ? `APT-${String(rawId).slice(-6).toUpperCase()}` : '';
 };
 
 const renderClinicalEntry = (entry, index, totalEntries, onRefillRx) => (
@@ -193,6 +198,7 @@ const PatientHistoryList = ({
           const styling = getStatusStyling(uiStatus);
           const canOpenVisit = hasClinicalRecord(uiStatus);
           const followUpNoteCount = Number(visit.followUpNoteCount || 0);
+          const appointmentDisplayId = getAppointmentDisplayId(visit);
 
           const visitDocId = String(visit.doctorId?._id || visit.doctorId);
           let hasPermission = false;
@@ -212,6 +218,9 @@ const PatientHistoryList = ({
               title={!hasPermission ? 'HIPAA Restriction: You are not the attending doctor for this visit.' : (!canOpenVisit ? 'No clinical record exists for missed or cancelled visits.' : 'View details')}
             >
               <span className={`text-[12px] font-bold ${isLatest ? 'text-teal-800' : 'text-slate-700'}`}>{visit.date}</span>
+              {appointmentDisplayId && (
+                <span className="text-[12px] font-bold text-slate-500 truncate w-full text-left">{appointmentDisplayId}</span>
+              )}
               {!hideDoctorName && (
                 <span className="text-[12px] text-slate-600 truncate w-full text-left">Dr. {visit.doctorId?.name?.replace(/^Dr\.\s*/i, '') || 'Unknown'}</span>
               )}
@@ -256,6 +265,7 @@ const PatientHistoryList = ({
         const clinicalTimeline = getClinicalTimeline(visit);
         const hasMultipleClinicalEntries = clinicalTimeline.length > 1;
         const followUpVisitCount = Number(visit.followUpNoteCount || (clinicalTimeline.length - 1));
+        const appointmentDisplayId = getAppointmentDisplayId(visit);
 
         const visitDocId = String(visit.doctorId?._id || visit.doctorId);
         const isOwnConsultation = loggedInDoctorId ? (visitDocId === String(loggedInDoctorId)) : false;
@@ -266,7 +276,7 @@ const PatientHistoryList = ({
         else if (loggedInDoctorId) hasPermission = isOwnConsultation;
 
         const hasValidStatus = hasClinicalRecord(uiStatus);
-        const canExpand = hasPermission && hasValidStatus;
+        const canExpand = hasPermission;
 
         return (
           <div key={visit._id || idx} className={embeddedMarker ? 'group' : 'relative flex flex-col md:flex-row items-start justify-between md:justify-normal md:odd:flex-row-reverse group'}>
@@ -276,62 +286,45 @@ const PatientHistoryList = ({
               </div>
             )}
 
-            <div className={`${embeddedMarker ? 'w-full' : 'w-[calc(100%-2.5rem)] ml-auto md:ml-0 md:w-[calc(50%-1.5rem)]'} rounded-xl border transition-all shadow-sm overflow-hidden flex flex-col ${canExpand ? (isExpanded ? 'border-teal-300 ring-2 ring-teal-50 shadow-md bg-white' : 'border-slate-200 bg-white hover:border-slate-300') : 'border-slate-100 bg-white/60'}`}>
+            <div className={`${embeddedMarker ? 'w-full' : 'w-[calc(100%-2.5rem)] ml-auto md:ml-0 md:w-[calc(50%-1.5rem)]'} rounded-xl border transition-all shadow-sm overflow-hidden flex flex-col ${canExpand ? (isExpanded ? 'border-teal-300 ring-2 ring-teal-50 shadow-md bg-white' : 'border-slate-200 bg-white hover:border-slate-300') : 'border-slate-100 bg-white'}`}>
               <button
                 type="button"
                 onClick={() => handleAccordionClick(visit, hasPermission)}
                 disabled={!canExpand || isFetching}
-                className={`w-full p-3 text-left focus:outline-none flex flex-col ${canExpand ? 'cursor-pointer hover:bg-slate-50' : 'cursor-default'}`}
-                title={!hasPermission ? 'HIPAA Restriction: You are not the attending doctor.' : (!hasValidStatus ? 'No clinical notes for missed or cancelled visits.' : 'Click to view clinical notes')}
+                className={`w-full px-3 py-2.5 text-left focus:outline-none flex items-center justify-between gap-3 ${canExpand ? 'cursor-pointer hover:bg-slate-50' : 'cursor-default'}`}
+                title={!hasPermission ? 'HIPAA Restriction: You are not the attending doctor.' : (!hasValidStatus ? 'No clinical record for this appointment.' : 'Click to view clinical notes')}
               >
-                <div className={`flex items-center gap-2 w-full ${hideDoctorName && canExpand ? 'mb-2' : (!hideDoctorName ? 'mb-1' : '')}`}>
-                  {embeddedMarker && (
-                    <span className={`flex-shrink-0 flex items-center justify-center w-4 h-4 rounded-full ${styling.dot}`}>
-                      <span className="w-1.5 h-1.5 bg-white rounded-full"></span>
-                    </span>
-                  )}
-                  <span className={`text-[13px] font-bold ${canExpand ? 'text-slate-800' : 'text-slate-600'}`}>
-                    {visit.date} • {visit.time}
-                  </span>
-                  <span className={`ml-auto text-[12px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border whitespace-nowrap flex-shrink-0 ${styling.badge}`}>
+                <span className={`text-[13px] font-bold truncate ${canExpand ? 'text-slate-800' : 'text-slate-600'}`}>
+                  {visit.time} | {visit.date}
+                </span>
+                <span className="flex items-center gap-2 flex-shrink-0">
+                  <span className={`text-[12px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border whitespace-nowrap ${styling.badge}`}>
                     {uiStatus}
                   </span>
-                </div>
-
-                {!hideDoctorName && (
-                  <div className={`text-[12px] text-slate-600 w-full ${canExpand ? 'mb-2' : ''}`}>
-                    Consultation w/ <span className={`font-bold ${canExpand ? 'text-slate-700' : 'text-slate-400'}`}>Dr. {visit.doctorId?.name?.replace(/^Dr\.\s*/i, '') || 'Unknown'}</span>
-                  </div>
-                )}
-
-                {visit.followUpNoteCount > 0 && (
-                  <div className="w-full mb-2">
-                    <span className="inline-flex items-center gap-1 rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[12px] font-bold text-teal-700">
-                      {visit.followUpNoteCount} Follow-Up Note{visit.followUpNoteCount > 1 ? 's' : ''}
-                    </span>
-                  </div>
-                )}
-
-                {canExpand && (
-                  <div className={`w-full h-7 text-[12px] font-bold rounded-lg flex items-center justify-center gap-1 transition-colors ${isExpanded ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}>
+                  <span className="h-7 w-7 rounded-lg bg-slate-50 text-slate-500 flex items-center justify-center">
                     {isFetching ? (
-                      <><Loader2 size={12} className="animate-spin" /> Loading...</>
+                      <Loader2 size={14} className="animate-spin" />
                     ) : (
-                      <>{isExpanded ? 'Hide Details' : 'View Details'}</>
+                      <ChevronDown size={15} className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     )}
-                  </div>
-                )}
+                  </span>
+                </span>
               </button>
 
               {isExpanded && !isFetching && (
                 <div className="p-3 border-t border-slate-100 bg-slate-50/50 space-y-4 animate-slideDown cursor-default">
-                  {hasMultipleClinicalEntries && (
+                  {appointmentDisplayId && (
+                    <div className="type-utility text-slate-500 bg-white border border-slate-200 rounded px-2 py-1 uppercase w-fit">
+                      {appointmentDisplayId}
+                    </div>
+                  )}
+                  {hasValidStatus && hasMultipleClinicalEntries && (
                     <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-[12px] font-medium text-teal-800">
                       This appointment contains the initial visit and {followUpVisitCount} follow-up visit{followUpVisitCount > 1 ? 's' : ''}.
                     </div>
                   )}
 
-                  {clinicalTimeline.map((entry, entryIndex) => renderClinicalEntry(entry, entryIndex, clinicalTimeline.length, onRefillRx))}
+                  {hasValidStatus && clinicalTimeline.map((entry, entryIndex) => renderClinicalEntry(entry, entryIndex, clinicalTimeline.length, onRefillRx))}
                 </div>
               )}
             </div>
