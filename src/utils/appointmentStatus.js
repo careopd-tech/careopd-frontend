@@ -29,7 +29,7 @@ export const getAppointmentUiStatus = (appt = {}, todayStr = getLocalDateString(
 
   const isPast = appt.date < todayStr;
   if (isPast && (appt.status === 'Scheduled' || appt.status === 'Pending') && !hasVisitProgress(appt)) {
-    return 'No-Show';
+    return 'No Show';
   }
 
   return appt.status || 'Scheduled';

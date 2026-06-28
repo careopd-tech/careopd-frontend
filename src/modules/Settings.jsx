@@ -190,6 +190,8 @@ const Settings = ({ data, setData, onLogout }) => {
              ...clinicData,
              consultationFee: Number(clinicData.consultationFee || 0),
              billingServices: Array.isArray(clinicData.billingServices) ? clinicData.billingServices : [],
+             collectConsultationPaymentAtCheckIn: clinicData.collectConsultationPaymentAtCheckIn === true,
+             requireFullPaymentBeforeConsultation: clinicData.requireFullPaymentBeforeConsultation === true,
              templates: (clinicData.templates && clinicData.templates.length > 0) ? clinicData.templates : DEFAULT_TEMPLATES,
              policies: (clinicData.policies && clinicData.policies.length > 0) ? clinicData.policies : DEFAULT_POLICIES
           };
@@ -418,8 +420,11 @@ const Settings = ({ data, setData, onLogout }) => {
         appointmentWindowMinutes: normalizeAppointmentWindow(formData.appointmentWindowMinutes)
       };
     } else if (editModal.type === 'consultation_workflow') {
+      const collectConsultationPaymentAtCheckIn = formData.collectConsultationPaymentAtCheckIn === true;
       updatePayload = {
-        preConsultVitalsEnabled: formData.preConsultVitalsEnabled === true
+        preConsultVitalsEnabled: formData.preConsultVitalsEnabled === true,
+        collectConsultationPaymentAtCheckIn,
+        requireFullPaymentBeforeConsultation: collectConsultationPaymentAtCheckIn && formData.requireFullPaymentBeforeConsultation === true
       };
     } else if (editModal.type === 'billing_services') {
       updatePayload = {
@@ -1099,27 +1104,32 @@ const Settings = ({ data, setData, onLogout }) => {
         }
       );
 
-      if (canConfigureVitalsWorkflow) {
-        clinicItems.push({
-          key: 'consultation-workflow',
-          searchText: 'consultation workflow vitals required before consultation triage',
-          render: () => (
+      clinicItems.push({
+        key: 'consultation-workflow',
+        searchText: 'consultation workflow vitals payment check-in full payment required before consultation triage',
+        render: () => {
+          const paymentAtCheckIn = data.clinic?.collectConsultationPaymentAtCheckIn === true;
+          const fullPaymentRequired = data.clinic?.requireFullPaymentBeforeConsultation === true;
+          return (
             <SettingItem
               title="Consultation Workflow"
-              subtitle={data.clinic?.preConsultVitalsEnabled
-                ? 'Vitals capture enabled before consultation.'
-                : 'Vitals can be captured during consultation.'}
+              subtitle={[
+                canConfigureVitalsWorkflow && data.clinic?.preConsultVitalsEnabled ? 'Vitals before consultation' : '',
+                paymentAtCheckIn ? (fullPaymentRequired ? 'Full payment before consult' : 'Payment step before consult') : 'Direct consult after check-in'
+              ].filter(Boolean).join(' - ')}
               onEdit={() => openEdit({
                 title: 'Consultation Workflow',
                 type: 'consultation_workflow',
                 initialData: {
-                  preConsultVitalsEnabled: data.clinic?.preConsultVitalsEnabled === true
+                  preConsultVitalsEnabled: data.clinic?.preConsultVitalsEnabled === true,
+                  collectConsultationPaymentAtCheckIn: paymentAtCheckIn,
+                  requireFullPaymentBeforeConsultation: fullPaymentRequired
                 }
               })}
             />
-          )
-        });
-      }
+          );
+        }
+      });
 
       if (canUpgradeSolo) {
         clinicItems.push({
@@ -1433,21 +1443,24 @@ const Settings = ({ data, setData, onLogout }) => {
                   }
                 })}
               />
-              {canConfigureVitalsWorkflow && (
-                <SettingItem
-                  title="Consultation Workflow"
-                  subtitle={data.clinic?.preConsultVitalsEnabled
-                    ? 'Vitals capture enabled before consultation.'
-                    : 'Vitals can be captured during consultation.'}
-                  onEdit={() => openEdit({
-                    title: 'Consultation Workflow',
-                    type: 'consultation_workflow',
-                    initialData: {
-                      preConsultVitalsEnabled: data.clinic?.preConsultVitalsEnabled === true
-                    }
-                  })}
-                />
-              )}
+              <SettingItem
+                title="Consultation Workflow"
+                subtitle={[
+                  canConfigureVitalsWorkflow && data.clinic?.preConsultVitalsEnabled ? 'Vitals before consultation' : '',
+                  data.clinic?.collectConsultationPaymentAtCheckIn === true
+                    ? (data.clinic?.requireFullPaymentBeforeConsultation === true ? 'Full payment before consult' : 'Payment step before consult')
+                    : 'Direct consult after check-in'
+                ].filter(Boolean).join(' - ')}
+                onEdit={() => openEdit({
+                  title: 'Consultation Workflow',
+                  type: 'consultation_workflow',
+                  initialData: {
+                    preConsultVitalsEnabled: data.clinic?.preConsultVitalsEnabled === true,
+                    collectConsultationPaymentAtCheckIn: data.clinic?.collectConsultationPaymentAtCheckIn === true,
+                    requireFullPaymentBeforeConsultation: data.clinic?.requireFullPaymentBeforeConsultation === true
+                  }
+                })}
+              />
               {canUpgradeSolo && (
                 <SettingItem
                   title="Register Your Clinic"
@@ -1704,18 +1717,55 @@ const Settings = ({ data, setData, onLogout }) => {
            )}
 
            {editModal?.type === 'consultation_workflow' && (
-             <label className="flex items-start gap-3 p-3 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
-               <input
-                 type="checkbox"
-                 checked={formData.preConsultVitalsEnabled === true}
-                 onChange={e => setFormData({ ...formData, preConsultVitalsEnabled: e.target.checked })}
-                 className="mt-0.5 h-4 w-4 accent-teal-600"
-               />
-               <div>
-                 <p className="type-section-title text-slate-800">Vitals Required before Consultation</p>
-                 <p className="type-secondary text-slate-600 mt-1">Adds pre-consult vitals capture to the appointment workflow. Consultation is not blocked.</p>
+             <div className="space-y-3">
+               {canConfigureVitalsWorkflow && (
+                 <label className="flex items-start gap-3 p-3 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
+                   <input
+                     type="checkbox"
+                     checked={formData.preConsultVitalsEnabled === true}
+                     onChange={e => setFormData({ ...formData, preConsultVitalsEnabled: e.target.checked })}
+                     className="mt-0.5 h-4 w-4 accent-teal-600"
+                   />
+                   <div>
+                     <p className="type-section-title text-slate-800">Capture vitals at check-in</p>
+                     <p className="type-secondary text-slate-600 mt-1">Prompts to record vitals before consultation can start.</p>
+                   </div>
+                 </label>
+               )}
+
+               <div className="p-3 border border-slate-200 rounded-lg bg-slate-50">
+                 <label className="flex items-start gap-3 cursor-pointer">
+                   <input
+                     type="checkbox"
+                     checked={formData.collectConsultationPaymentAtCheckIn === true}
+                     onChange={e => setFormData({
+                       ...formData,
+                       collectConsultationPaymentAtCheckIn: e.target.checked,
+                       requireFullPaymentBeforeConsultation: e.target.checked ? formData.requireFullPaymentBeforeConsultation === true : false
+                     })}
+                     className="mt-0.5 h-4 w-4 accent-teal-600"
+                   />
+                   <div>
+                     <p className="type-section-title text-slate-800">Collect fees at check-in</p>
+                     <p className="type-secondary text-slate-600 mt-1">Prompts to collect the fees before consultation can start.</p>
+                   </div>
+                 </label>
+
+                 {formData.collectConsultationPaymentAtCheckIn === true && (
+                   <label className="mt-3 ml-7 flex items-start gap-3 rounded-md border border-teal-100 bg-white/60 p-2.5 cursor-pointer">
+                     <input
+                       type="checkbox"
+                       checked={formData.requireFullPaymentBeforeConsultation === true}
+                       onChange={e => setFormData({ ...formData, requireFullPaymentBeforeConsultation: e.target.checked })}
+                       className="mt-0.5 h-4 w-4 accent-teal-600"
+                     />
+                     <div>
+                       <p className="type-section-title text-slate-800">Require full payment</p>
+                     </div>
+                   </label>
+                 )}
                </div>
-             </label>
+             </div>
            )}
 
            {editModal?.type === 'billing_services' && (

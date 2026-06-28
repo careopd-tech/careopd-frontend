@@ -41,31 +41,191 @@ const buildPrintableHtml = (title, content) => `<!doctype html>
   </head>
   <body>
     <div class="page">${content}</div>
-    <script>
-      window.onload = () => {
-        window.print();
-        window.onafterprint = () => window.close();
-      };
-    </script>
   </body>
 </html>`;
 
-const openPrintWindow = (title, content) => {
-  const printableHtml = buildPrintableHtml(title, content);
-  const printableBlob = new Blob([printableHtml], { type: 'text/html' });
-  const printableUrl = URL.createObjectURL(printableBlob);
-  const printWindow = window.open(printableUrl, '_blank', 'noopener,noreferrer');
+const addPdfObject = (objects, body) => {
+  objects.push(body);
+  return objects.length;
+};
 
-  if (!printWindow) {
-    const link = document.createElement('a');
-    link.href = printableUrl;
-    link.download = `${title.toLowerCase().replace(/\s+/g, '-')}.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+const escapePdfText = (value) => String(value || '')
+  .replace(/[^\x20-\x7E]/g, '?')
+  .replace(/\\/g, '\\\\')
+  .replace(/\(/g, '\\(')
+  .replace(/\)/g, '\\)');
+
+const wrapPdfLine = (line, maxLength = 88) => {
+  const words = String(line || '').trim().split(/\s+/).filter(Boolean);
+  const lines = [];
+  let current = '';
+
+  words.forEach((word) => {
+    if (!current) {
+      current = word;
+    } else if (`${current} ${word}`.length <= maxLength) {
+      current = `${current} ${word}`;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  });
+
+  if (current) lines.push(current);
+  return lines.length > 0 ? lines : [''];
+};
+
+const htmlToPdfLines = (title, content) => {
+  const container = document.createElement('div');
+  container.innerHTML = content;
+  const lines = [title, ''];
+
+  const visit = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent.replace(/\s+/g, ' ').trim();
+      if (text) lines.push(text);
+      return;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+    const tagName = node.tagName.toLowerCase();
+    if (tagName === 'script' || tagName === 'style') return;
+
+    if (tagName === 'tr') {
+      const cells = Array.from(node.children)
+        .filter((child) => ['td', 'th'].includes(child.tagName.toLowerCase()))
+        .map((child) => child.textContent.replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+      if (cells.length > 0) lines.push(cells.join(' | '));
+      return;
+    }
+
+    if (tagName === 'h2') lines.push('');
+    Array.from(node.childNodes).forEach(visit);
+    if (['h2', 'table', 'div'].includes(tagName)) lines.push('');
+  };
+
+  Array.from(container.childNodes).forEach(visit);
+
+  return lines
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line, index, allLines) => line || allLines[index - 1]);
+};
+
+const buildPdfBlob = (title, content) => {
+  const objects = [];
+  const pages = [];
+  const rawLines = htmlToPdfLines(title, content);
+  const wrappedLines = rawLines.flatMap((line) => line ? wrapPdfLine(line) : ['']);
+  const linesPerPage = 46;
+
+  const catalogId = addPdfObject(objects, '<< /Type /Catalog /Pages 2 0 R >>');
+  const pagesId = addPdfObject(objects, '');
+  const fontId = addPdfObject(objects, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+
+  for (let index = 0; index < wrappedLines.length; index += linesPerPage) {
+    const pageLines = wrappedLines.slice(index, index + linesPerPage);
+    const streamLines = [
+      'BT',
+      '/F1 11 Tf',
+      '50 790 Td',
+      '14 TL',
+      ...pageLines.map((line, lineIndex) => `${lineIndex === 0 ? '' : 'T* ' }(${escapePdfText(line)}) Tj`),
+      'ET'
+    ];
+    const stream = streamLines.join('\n');
+    const contentId = addPdfObject(objects, `<< /Length ${new TextEncoder().encode(stream).length} >>\nstream\n${stream}\nendstream`);
+    const pageId = addPdfObject(objects, `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${contentId} 0 R >>`);
+    pages.push(pageId);
   }
 
-  window.setTimeout(() => URL.revokeObjectURL(printableUrl), 60000);
+  objects[pagesId - 1] = `<< /Type /Pages /Kids [${pages.map((id) => `${id} 0 R`).join(' ')}] /Count ${pages.length} >>`;
+
+  const encoder = new TextEncoder();
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+
+  objects.forEach((object, index) => {
+    offsets.push(encoder.encode(pdf).length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+
+  const xrefOffset = encoder.encode(pdf).length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+  return new Blob([pdf], { type: 'application/pdf' });
+};
+
+const downloadPdfFallback = (title, content) => {
+  const pdfBlob = buildPdfBlob(title, content);
+  const pdfUrl = URL.createObjectURL(pdfBlob);
+  const link = document.createElement('a');
+  link.href = pdfUrl;
+  link.download = `${title.toLowerCase().replace(/\s+/g, '-')}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60000);
+};
+
+const printDocument = (title, content) => {
+  const printableHtml = buildPrintableHtml(title, content);
+  const iframe = document.createElement('iframe');
+  let didFallback = false;
+
+  const cleanup = () => {
+    window.setTimeout(() => {
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+    }, 1000);
+  };
+
+  const fallback = () => {
+    if (didFallback) return;
+    didFallback = true;
+    cleanup();
+    downloadPdfFallback(title, content);
+  };
+
+  iframe.title = title;
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '1px';
+  iframe.style.height = '1px';
+  iframe.style.border = '0';
+  iframe.style.opacity = '0';
+
+  iframe.onload = () => {
+    const printWindow = iframe.contentWindow;
+    if (!printWindow?.print) {
+      fallback();
+      return;
+    }
+
+    try {
+      printWindow.onafterprint = cleanup;
+      printWindow.focus();
+      printWindow.print();
+    } catch (error) {
+      fallback();
+    }
+  };
+
+  iframe.onerror = fallback;
+  iframe.srcdoc = printableHtml;
+
+  try {
+    document.body.appendChild(iframe);
+  } catch (error) {
+    fallback();
+  }
+
   return true;
 };
 
@@ -128,7 +288,7 @@ export const printPrescriptionDocument = ({ clinic, appointment, patient, doctor
     <div class="footer meta">Generated from CareOPD consultation records.</div>
   `;
 
-  return openPrintWindow('Prescription', content);
+  return printDocument('Prescription', content);
 };
 
 export const printLabOrderDocument = ({ clinic, appointment, patient, doctor, prescription }) => {
@@ -147,7 +307,7 @@ export const printLabOrderDocument = ({ clinic, appointment, patient, doctor, pr
     <div class="footer meta">Please carry this requisition while collecting samples or visiting the lab.</div>
   `;
 
-  return openPrintWindow('Lab Order', content);
+  return printDocument('Lab Order', content);
 };
 
 export const printReceiptDocument = ({ clinic, appointment, patient, doctor }) => {
@@ -229,5 +389,5 @@ export const printReceiptDocument = ({ clinic, appointment, patient, doctor }) =
     <div class="footer meta">Generated from CareOPD billing records.</div>
   `;
 
-  return openPrintWindow('Receipt', content);
+  return printDocument('Receipt', content);
 };

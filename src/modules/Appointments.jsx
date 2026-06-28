@@ -17,6 +17,7 @@ import { authFetch, getSessionUser } from '../utils/auth';
 import { hasPermission } from '../utils/permissions';
 import { getClinicSchedule, timeToMinutes } from '../utils/schedule';
 import { getAppointmentUiStatus, hasActiveConsultation as hasAppointmentActiveConsultation, hasVisitProgress as hasAppointmentVisitProgress } from '../utils/appointmentStatus';
+import { getAppointmentBillingAmounts } from '../utils/billingUtils';
 import { printLabOrderDocument, printPrescriptionDocument, printReceiptDocument } from '../utils/postConsultPrint';
 import { getLocalDateString } from '../utils/dateUtils';
 
@@ -807,14 +808,14 @@ const Appointments = ({
     const completed = sourceData.filter(a => getUiStatus(a) === 'Completed').length;
     const awaitingReports = sourceData.filter(a => getUiStatus(a) === 'Awaiting Reports').length;
     const cancelled = sourceData.filter(a => getUiStatus(a) === 'Cancelled').length;
-    const noShow = sourceData.filter(a => getUiStatus(a) === 'No-Show').length;
+    const noShow = sourceData.filter(a => getUiStatus(a) === 'No Show').length;
 
     return [
       { key: 'Scheduled', label: 'Scheduled', val: scheduled, color: 'bg-amber-50 text-amber-700' },
       { key: 'Completed', label: 'Completed', val: completed, color: 'bg-green-50 text-green-700' },
       { key: 'Awaiting Reports', label: 'Awaiting', val: awaitingReports, color: 'bg-cyan-50 text-cyan-700' },
       { key: 'Cancelled', label: 'Cancelled', val: cancelled, color: 'bg-red-50 text-red-700' },
-      { key: 'No-Show', label: 'No Show', val: noShow, color: 'bg-slate-100 text-slate-600' }
+      { key: 'No Show', label: 'No Show', val: noShow, color: 'bg-slate-100 text-slate-600' }
     ];
   }, [sections, searchResults, searchQuery, activeFilters]);
 
@@ -825,7 +826,7 @@ const Appointments = ({
     } else {
       newStatusList.push(key);
     }
-    if (['Scheduled', 'Completed', 'Awaiting Reports', 'Cancelled', 'No-Show'].every(s => newStatusList.includes(s))) {
+    if (['Scheduled', 'Completed', 'Awaiting Reports', 'Cancelled', 'No Show'].every(s => newStatusList.includes(s))) {
       newStatusList = [];
     }
     setActiveFilters({ ...activeFilters, status: newStatusList });
@@ -1065,9 +1066,24 @@ const Appointments = ({
       date: safeCurrentDate,
       time: ''
     });
-    const preserveVisitRecord = appt.status === 'Walked Out';
-    setRebookingApptId(preserveVisitRecord || appt.date < safeCurrentDate ? null : appt._id);
-    setIsFollowUpBooking(preserveVisitRecord);
+    setRebookingApptId(appt.date < safeCurrentDate || appt.status === 'Walked Out' ? null : appt._id);
+    setIsFollowUpBooking(false);
+    setFollowUpSourceApptId('');
+    setIsAddModalOpen(true);
+  };
+
+  const openFollowUpBooking = (appt) => {
+    const doc = getDoctorById(appt.doctorId);
+    setNewAppt({
+      patientId: getEntityId(appt.patientId),
+      department: doc ? doc.department : '',
+      doctorId: getEntityId(appt.doctorId),
+      date: safeCurrentDate,
+      time: ''
+    });
+    setRebookingApptId(null);
+    setIsFollowUpBooking(true);
+    setFollowUpSourceApptId(getEntityId(appt));
     setIsAddModalOpen(true);
   };
 
@@ -1175,29 +1191,6 @@ const Appointments = ({
       showNotification('Reports Ready', 'success', `${getPatientName(appt.patientId)} is ready for doctor review.`);
     } catch (err) {
       showNotification('Failed to mark reports ready.', 'error');
-    } finally {
-      setProcessingAppointmentId('');
-    }
-  };
-
-  const handleReviewReports = async (appt) => {
-    setProcessingAppointmentId(appt._id);
-    setOpenActionMenuId('');
-    try {
-      const response = await authFetch(`${API_BASE_URL}/api/appointments/${appt._id}/review-reports`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clinicId })
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        return showNotification(result.error || 'Failed to check in for report review.', 'error');
-      }
-
-      await fetchAllData(true);
-      showNotification('Report Review', 'success', `${getPatientName(appt.patientId)} is checked in for report review.`);
-    } catch (err) {
-      showNotification('Failed to check in for report review.', 'error');
     } finally {
       setProcessingAppointmentId('');
     }
@@ -1664,7 +1657,7 @@ const Appointments = ({
     const uiStatus = getUiStatus(appt);
     const isCancelled = uiStatus === 'Cancelled';
     const isCompleted = uiStatus === 'Completed';
-    const isNoShow = uiStatus === 'No-Show';
+    const isNoShow = uiStatus === 'No Show';
     const isDraft = uiStatus === 'Draft';
     const isWalkedOut = uiStatus === 'Walked Out';
     const showActions = !isCancelled && !isCompleted && !isNoShow && !isWalkedOut;
@@ -1711,7 +1704,6 @@ const Appointments = ({
     const isProcessing = processingAppointmentId === appt._id;
     const latestClinicalResultStatus = appt.latestClinicalResultStatus || '';
     const hasRecommendedTests = latestClinicalResultStatus === 'Tests Recommended';
-    const canReviewReports = hasRecommendedTests && (canManageAppointments || isTreatingPhysician);
     const latestClinicalLabTests = Array.isArray(appt.latestClinicalLabTests) ? appt.latestClinicalLabTests : [];
     const hasLabOrder = latestClinicalLabTests.length > 0 || (Array.isArray(appt.labTests) && appt.labTests.length > 0);
     const hasPrintedPrescription = Boolean(appt.prescriptionPrintedAt || Number(appt.prescriptionPrintCount || 0) > 0);
@@ -1721,13 +1713,14 @@ const Appointments = ({
       : 0;
     const billingTotalAmount = Number(appt.billing?.totalAmount || appt.billing?.consultationFee || 0);
     const billingAmountPaid = Number(appt.billing?.amountPaid || 0);
+    const billingPayments = Array.isArray(appt.billing?.payments) ? appt.billing.payments : [];
     const hasBillingItems = Array.isArray(appt.billing?.items) && appt.billing.items.length > 0;
     const expectedBillAmount = hasBillingItems || billingTotalAmount > 0 ? billingTotalAmount : clinicConsultationFee;
     const hasOutstandingBalance = expectedBillAmount > billingAmountPaid;
     const paymentActionLabel = hasOutstandingBalance
       ? (billingAmountPaid > 0 ? 'Collect Balance' : 'Collect Payment')
       : 'Billing & Payment';
-    const canCollectPayment = canManageAppointments && (
+    const canCollectPayment = (canManageAppointments || (data.clinic?.type === 'Solo' && isTreatingPhysician)) && (
       clinicConsultationFee > 0 ||
       activeClinicBillingServices > 0 ||
       hasBillingItems ||
@@ -1736,12 +1729,27 @@ const Appointments = ({
     const hasReceipt = Boolean(
       appt.billing?.receiptNumber ||
       Number(appt.billing?.consultationFee || 0) > 0 ||
-      (Array.isArray(appt.billing?.payments) && appt.billing.payments.length > 0)
+      billingPayments.length > 0
     );
-    const isReportReturnVisit = Boolean(appt.reportsReadyAt) || latestClinicalResultStatus === 'Awaiting Reports';
-    const isFollowUpVisit = isReportReturnVisit || hasRecommendedTests || appt.followUpOfAppointmentId || appt.type === 'Follow-Up';
-    const visitIdentifier = uiStatus === 'Checked In'
-      ? (isFollowUpVisit ? 'Follow-Up' : 'New')
+    const hasRecordedCheckInPayment = Boolean(billingPayments.length > 0 || billingAmountPaid > 0);
+    const checkInPaymentAmounts = getAppointmentBillingAmounts(appt, data.clinic || {});
+    const isCheckInPaymentFullyPaid = Boolean(
+      appt.billing?.paymentStatus === 'Paid' ||
+      (checkInPaymentAmounts.total > 0 && checkInPaymentAmounts.balance <= 0 && checkInPaymentAmounts.paid > 0)
+    );
+    const paymentRequiredBeforeConsult = data.clinic?.collectConsultationPaymentAtCheckIn === true && uiStatus === 'Checked In' && !appt.reportsReadyAt;
+    const requireFullPaymentBeforeConsult = data.clinic?.requireFullPaymentBeforeConsultation === true;
+    const isCheckInPaymentGateOpen = !paymentRequiredBeforeConsult || (
+      requireFullPaymentBeforeConsult ? isCheckInPaymentFullyPaid : hasRecordedCheckInPayment
+    );
+    const isReportsReadyCheckedIn = uiStatus === 'Checked In' && Boolean(appt.reportsReadyAt);
+    const isFollowUpCheckedIn = uiStatus === 'Checked In' && !isReportsReadyCheckedIn && Boolean(appt.followUpOfAppointmentId || appt.type === 'Follow-Up');
+    const visitIdentifier = isReportsReadyCheckedIn
+      ? 'Reports Ready'
+      : isFollowUpCheckedIn
+      ? 'Follow-Up'
+      : uiStatus === 'Checked In'
+      ? 'New'
       : '';
     const appointmentDisplayId = getShortEntityId('APT', appt);
 
@@ -1759,24 +1767,22 @@ const Appointments = ({
       consult: {
         label: appt.activeConsultationMode === 'Report Review'
           ? 'Resume Report Review'
+          : (uiStatus === 'Checked In' && Boolean(appt.reportsReadyAt))
+          ? 'Consult'
           : (uiStatus === 'Checked In' && hasRecommendedTests)
           ? 'Review Reports'
           : appt.type === 'Follow-Up'
           ? 'Add Follow-Up Note'
           : ((isInConsultation || isDraft || (uiStatus === 'Awaiting Reports' && Boolean(appt.reportsReadyAt))) ? 'Resume Consult' : 'Start Consult'),
         icon: Activity,
-        onClick: () => ((appt.activeConsultationMode === 'Report Review' || (uiStatus === 'Checked In' && hasRecommendedTests)) ? handleStartAddendum(appt) : handleStartConsultation(appt))
+        onClick: () => ((appt.activeConsultationMode === 'Report Review' || (uiStatus === 'Checked In' && hasRecommendedTests && !appt.reportsReadyAt)) ? handleStartAddendum(appt) : handleStartConsultation(appt))
       },
       reportsReady: { label: 'Reports Ready', icon: FlaskConical, onClick: () => handleReportsReady(appt) },
-      reviewReports: {
-        label: 'Review Reports',
-        icon: FlaskConical,
-        onClick: () => (canManageAppointments ? handleReviewReports(appt) : handleStartAddendum(appt))
-      },
       reminder: { label: 'Send Reminder', icon: Bell, onClick: () => handleSendReminder(appt) },
       contact: { label: 'Contact Patient', icon: Phone, onClick: () => openContact(appt) },
       leftEarly: { label: 'Patient Left', icon: XCircle, onClick: () => openLeftEarly(appt) },
       reschedule: { label: 'Reschedule', icon: CalendarDays, onClick: () => openReschedule(appt) },
+      followUp: { label: 'Follow-Up', icon: RefreshCw, onClick: () => openFollowUpBooking(appt) },
       vitals: { label: 'Add Vitals', icon: Activity, onClick: () => openVitals(appt) },
       history: { label: 'View History', icon: History, onClick: () => openHistory(appt) },
       viewVitals: { label: 'View Vitals', icon: Activity, onClick: () => openViewVitals(appt) },
@@ -1800,16 +1806,15 @@ const Appointments = ({
     ].filter(Boolean);
 
     if (isCompleted) {
-      if (canReviewReports) {
-        primaryAction = actions.reviewReports;
+      if (hasRecommendedTests) {
+        primaryAction = actions.followUp;
       } else if (!hasPrintedPrescription) {
         primaryAction = actions.printPrescription;
       } else if (hasOutstandingBalance && canCollectPayment) {
         primaryAction = actions.collectPayment;
       }
       overflowActions = [
-        ...closedLoopOverflowActions.filter((action) => action.label !== primaryAction?.label),
-        ...(hasRecommendedTests && primaryAction?.label !== actions.reviewReports.label ? [actions.reviewReports] : [])
+        ...closedLoopOverflowActions.filter((action) => action.label !== primaryAction?.label)
       ];
     } else if (showActions && (isToday || isCarryoverVisit)) {
       if (uiStatus === 'Awaiting Reports') {
@@ -1820,11 +1825,21 @@ const Appointments = ({
           primaryAction = actions.reportsReady;
           overflowActions = canCollectPayment ? [actions.collectPayment] : [];
         }
+      } else if (isDraft) {
+        if (isTreatingPhysician) {
+          primaryAction = actions.consult;
+          overflowActions = [...clinicianOverflowActions, ...(canCollectPayment ? [actions.collectPayment] : []), actions.leftEarly];
+        } else if (canManageAppointments) {
+          overflowActions = [...(canCollectPayment ? [actions.collectPayment] : []), actions.leftEarly];
+        }
       } else if (isInConsultation && isTreatingPhysician) {
         primaryAction = actions.consult;
         overflowActions = [...clinicianOverflowActions, ...(canCollectPayment ? [actions.collectPayment] : [])];
       } else if (isCheckedIn || isCarryoverVisit) {
-        if (isTreatingPhysician) {
+        if (paymentRequiredBeforeConsult && !isCheckInPaymentGateOpen && canCollectPayment) {
+          primaryAction = actions.collectPayment;
+          overflowActions = [actions.leftEarly];
+        } else if (isTreatingPhysician) {
           primaryAction = actions.consult;
           overflowActions = isCheckedIn
             ? [...clinicianOverflowActions, ...(canCollectPayment ? [actions.collectPayment] : []), actions.leftEarly]
@@ -2142,7 +2157,7 @@ const Appointments = ({
 
           {/* ADDED: ADMIN SECURITY LOCK FOR CREATING APPOINTMENTS */}
           {isAdmin && (
-            <FAB icon={Plus} onClick={() => { setRebookingApptId(null); setIsFollowUpBooking(false); setIsAddModalOpen(true); }} />
+            <FAB icon={Plus} onClick={() => { setRebookingApptId(null); setIsFollowUpBooking(false); setFollowUpSourceApptId(''); setIsAddModalOpen(true); }} />
           )}
         </>
       )}

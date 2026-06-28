@@ -6,11 +6,15 @@ const QueueCard = ({ appt, isActive, onClick }) => {
   const patient = appt.patientId || {};
   const uiStatus = getAppointmentUiStatus(appt);
   const isCompleted = uiStatus === 'Completed';
-  const isCancelled = uiStatus === 'Cancelled' || uiStatus === 'No-Show';
+  const isCancelled = uiStatus === 'Cancelled' || uiStatus === 'No Show';
   const isInConsultation = Boolean(appt.consultationStartedAt) && !appt.consultationCompletedAt;
   const isCheckedIn = Boolean(appt.checkedInAt);
   const isAwaitingReports = uiStatus === 'Awaiting Reports';
-  const visitIdentifier = (appt.followUpOfAppointmentId || appt.type === 'Follow-Up')
+  const isReportsReadyCheckedIn = uiStatus === 'Checked In' && Boolean(appt.reportsReadyAt);
+  const isFollowUpCheckedIn = uiStatus === 'Checked In' && !isReportsReadyCheckedIn && Boolean(appt.followUpOfAppointmentId || appt.type === 'Follow-Up');
+  const visitIdentifier = isReportsReadyCheckedIn
+    ? 'Reports Ready'
+    : isFollowUpCheckedIn
     ? 'Follow-Up'
     : (!patient.lastVisit ? 'New' : '');
 
@@ -64,7 +68,13 @@ const QueueCard = ({ appt, isActive, onClick }) => {
         </p>
         {visitIdentifier ? (
           <div className="mt-1">
-            <span className={`inline-flex text-[12px] font-bold uppercase px-2 py-0.5 rounded ${visitIdentifier === 'Follow-Up' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-700'}`}>
+            <span className={`inline-flex text-[12px] font-bold uppercase px-2 py-0.5 rounded ${
+              visitIdentifier === 'Reports Ready'
+                ? 'bg-cyan-100 text-cyan-800'
+                : visitIdentifier === 'Follow-Up'
+                ? 'bg-amber-100 text-amber-800'
+                : 'bg-blue-100 text-blue-700'
+            }`}>
               {visitIdentifier}
             </span>
           </div>
