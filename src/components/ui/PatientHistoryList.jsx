@@ -82,19 +82,35 @@ const getAppointmentDisplayId = (visit = {}) => {
   return rawId ? `APT-${String(rawId).slice(-6).toUpperCase()}` : '';
 };
 
+const getClinicalEntryTitle = (entry = {}, index = 0) => {
+  const entryType = String(entry.entryType || '').trim();
+  if (entryType === 'Follow-Up Note') return 'Follow-up';
+  if (entryType === 'Report Review') return 'Review Report';
+  if (entryType === 'Initial Consultation') return 'Initial Consultation';
+  return index === 0 ? 'Initial Consultation' : 'Follow-up';
+};
+
+const getClinicalResultLabel = (resultStatus = '') => {
+  const status = String(resultStatus || '').trim();
+  if (status === 'Awaiting Reports') return 'Lab test required';
+  if (status === 'Tests Recommended') return 'Completed with Test Advised';
+  if (status === 'Completed') return 'Completed';
+  return status;
+};
+
 const renderClinicalEntry = (entry, index, totalEntries, onRefillRx) => (
   <div key={entry._id || index} className={`rounded-lg border border-slate-100 bg-white shadow-sm ${index < totalEntries - 1 ? 'mb-3' : ''}`}>
-    <div className="flex items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/70 px-3 py-2">
-      <div>
+    <div className="border-b border-slate-100 bg-slate-50/70 px-3 py-2">
+      <div className="flex items-start justify-between gap-3">
         <div className="text-[12px] font-bold uppercase tracking-wider text-slate-700">
-          {entry.entryType || (index === 0 ? 'Initial Consultation' : 'Clinical Update')}
+          {getClinicalEntryTitle(entry, index)}
         </div>
-        {entry.resultStatus ? (
-          <div className="mt-1 text-[12px] text-slate-600">{entry.resultStatus}</div>
+        {entry.consultationCompletedAt ? (
+          <div className="flex-shrink-0 whitespace-nowrap text-right text-[12px] text-slate-600">{formatTimelineTimestamp(entry.consultationCompletedAt)}</div>
         ) : null}
       </div>
-      {entry.consultationCompletedAt ? (
-        <div className="text-right text-[12px] text-slate-600">{formatTimelineTimestamp(entry.consultationCompletedAt)}</div>
+      {entry.resultStatus ? (
+        <div className="mt-1 text-[12px] text-slate-600">Marked as: {getClinicalResultLabel(entry.resultStatus)}</div>
       ) : null}
     </div>
 

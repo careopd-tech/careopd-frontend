@@ -11,7 +11,7 @@ const QueueCard = ({ appt, isActive, onClick }) => {
   const isCheckedIn = Boolean(appt.checkedInAt);
   const isAwaitingReports = uiStatus === 'Awaiting Reports';
   const isReportsReadyCheckedIn = uiStatus === 'Checked In' && Boolean(appt.reportsReadyAt);
-  const isFollowUpCheckedIn = uiStatus === 'Checked In' && !isReportsReadyCheckedIn && Boolean(appt.followUpOfAppointmentId || appt.type === 'Follow-Up');
+  const isFollowUpCheckedIn = uiStatus === 'Checked In' && !isReportsReadyCheckedIn && Boolean(appt.followUpStartedAt || appt.followUpOfAppointmentId || appt.type === 'Follow-Up');
   const visitIdentifier = isReportsReadyCheckedIn
     ? 'Reports Ready'
     : isFollowUpCheckedIn
