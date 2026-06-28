@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { 
   Building2, MessageCircle, FileText, Plus, Edit2, ChevronDown, ChevronRight, UserPlus, Users, CheckCircle, AlertCircle, ShieldCheck, Trash2
 } from 'lucide-react';
@@ -911,26 +911,27 @@ const Settings = ({ data, setData, onLogout }) => {
   const renderUserAccessCard = (user) => {
     const isProtectedOwner = user.role === 'super_admin';
     return (
-      <div key={user._id} className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm flex items-center justify-between gap-2">
+      <div key={user._id} className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm space-y-2">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <h4 className="type-card-title text-slate-800 truncate">{user.name}</h4>
+            <h4 className="type-card-title text-slate-800 break-words">{user.name}</h4>
             <span className={`type-utility px-1.5 py-0.5 rounded-full ${
               user.status === 'Inactive'
                 ? 'bg-slate-100 text-slate-600'
                 : user.status === 'Pending'
                   ? 'bg-amber-50 text-amber-700'
                   : 'bg-teal-50 text-teal-700'
-            }`}>
+            } flex-shrink-0`}>
               {user.status || 'Active'}
             </span>
           </div>
-          <p className="type-label text-slate-600 truncate mt-0.5">{user.email} • {user.phone}</p>
-          <p className="type-label text-slate-400 truncate mt-0.5">
+          <p className="type-label text-slate-600 break-words mt-0.5">{user.phone || '-'}</p>
+          <p className="type-label text-slate-600 break-words mt-0.5">{user.email || '-'}</p>
+          <p className="type-label text-slate-400 break-words mt-0.5">
             {roleLabels[user.role] || user.role}
           </p>
         </div>
-        <div className="flex flex-col gap-1.5 flex-shrink-0">
+        <div className="flex flex-wrap gap-1.5 justify-end">
           {!isProtectedOwner && user.status === 'Active' && (
             <button
               type="button"
@@ -940,14 +941,16 @@ const Settings = ({ data, setData, onLogout }) => {
               Transfer Ownership
             </button>
           )}
-          <button
-            type="button"
-            disabled={user.status === 'Inactive'}
-            onClick={() => handleResetAccessUser(user)}
-            className={`type-label px-2.5 py-1.5 rounded-md transition-colors ${user.status === 'Inactive' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
-          >
-            {user.status === 'Pending' ? 'Resend Activation' : 'Reset Password'}
-          </button>
+          {!isProtectedOwner && (
+            <button
+              type="button"
+              disabled={user.status === 'Inactive'}
+              onClick={() => handleResetAccessUser(user)}
+              className={`type-label px-2.5 py-1.5 rounded-md transition-colors ${user.status === 'Inactive' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+            >
+              {user.status === 'Pending' ? 'Resend Activation' : 'Reset Password'}
+            </button>
+          )}
           <button
             type="button"
             disabled={isProtectedOwner}
@@ -1501,26 +1504,27 @@ const Settings = ({ data, setData, onLogout }) => {
                 accessUsers.map(user => {
                   const isProtectedOwner = user.role === 'super_admin';
                   return (
-                    <div key={user._id} className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm flex items-center justify-between gap-2">
+                    <div key={user._id} className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm space-y-2">
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <h4 className="type-card-title text-slate-800 truncate">{user.name}</h4>
+                          <h4 className="type-card-title text-slate-800 break-words">{user.name}</h4>
                           <span className={`type-utility px-1.5 py-0.5 rounded-full ${
                             user.status === 'Inactive'
                               ? 'bg-slate-100 text-slate-600'
                               : user.status === 'Pending'
                                 ? 'bg-amber-50 text-amber-700'
                                 : 'bg-teal-50 text-teal-700'
-                          }`}>
+                          } flex-shrink-0`}>
                             {user.status || 'Active'}
                           </span>
                         </div>
-                        <p className="text-[12px] text-slate-600 truncate mt-0.5">{user.email} • {user.phone}</p>
-                        <p className="text-[12px] text-slate-400 truncate mt-0.5">
+                        <p className="text-[12px] text-slate-600 break-words mt-0.5">{user.phone || '-'}</p>
+                        <p className="text-[12px] text-slate-600 break-words mt-0.5">{user.email || '-'}</p>
+                        <p className="text-[12px] text-slate-400 break-words mt-0.5">
                           {roleLabels[user.role] || user.role}
                         </p>
                       </div>
-                      <div className="flex flex-col gap-1.5 flex-shrink-0">
+                      <div className="flex flex-wrap gap-1.5 justify-end">
                         {!isProtectedOwner && user.status === 'Active' && (
                           <button
                             type="button"
@@ -1530,14 +1534,16 @@ const Settings = ({ data, setData, onLogout }) => {
                             Transfer Ownership
                           </button>
                         )}
-                        <button
-                          type="button"
-                          disabled={user.status === 'Inactive'}
-                          onClick={() => handleResetAccessUser(user)}
-                          className={`type-label px-2.5 py-1.5 rounded-md transition-colors ${user.status === 'Inactive' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
-                        >
-                          {user.status === 'Pending' ? 'Resend Activation' : 'Reset Password'}
-                        </button>
+                        {!isProtectedOwner && (
+                          <button
+                            type="button"
+                            disabled={user.status === 'Inactive'}
+                            onClick={() => handleResetAccessUser(user)}
+                            className={`type-label px-2.5 py-1.5 rounded-md transition-colors ${user.status === 'Inactive' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+                          >
+                            {user.status === 'Pending' ? 'Resend Activation' : 'Reset Password'}
+                          </button>
+                        )}
                         <button
                           type="button"
                           disabled={isProtectedOwner}
@@ -1718,21 +1724,6 @@ const Settings = ({ data, setData, onLogout }) => {
 
            {editModal?.type === 'consultation_workflow' && (
              <div className="space-y-3">
-               {canConfigureVitalsWorkflow && (
-                 <label className="flex items-start gap-3 p-3 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
-                   <input
-                     type="checkbox"
-                     checked={formData.preConsultVitalsEnabled === true}
-                     onChange={e => setFormData({ ...formData, preConsultVitalsEnabled: e.target.checked })}
-                     className="mt-0.5 h-4 w-4 accent-teal-600"
-                   />
-                   <div>
-                     <p className="type-section-title text-slate-800">Capture vitals at check-in</p>
-                     <p className="type-secondary text-slate-600 mt-1">Prompts to record vitals before consultation can start.</p>
-                   </div>
-                 </label>
-               )}
-
                <div className="p-3 border border-slate-200 rounded-lg bg-slate-50">
                  <label className="flex items-start gap-3 cursor-pointer">
                    <input
@@ -1765,6 +1756,21 @@ const Settings = ({ data, setData, onLogout }) => {
                    </label>
                  )}
                </div>
+
+               {canConfigureVitalsWorkflow && (
+                 <label className="flex items-start gap-3 p-3 border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
+                   <input
+                     type="checkbox"
+                     checked={formData.preConsultVitalsEnabled === true}
+                     onChange={e => setFormData({ ...formData, preConsultVitalsEnabled: e.target.checked })}
+                     className="mt-0.5 h-4 w-4 accent-teal-600"
+                   />
+                   <div>
+                     <p className="type-section-title text-slate-800">Capture vitals at check-in</p>
+                     <p className="type-secondary text-slate-600 mt-1">Prompts to record vitals before consultation can start.</p>
+                   </div>
+                 </label>
+               )}
              </div>
            )}
 

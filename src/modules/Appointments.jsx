@@ -1765,6 +1765,7 @@ const Appointments = ({
     const isCheckInPaymentGateOpen = !paymentRequiredBeforeConsult || (
       requireFullPaymentBeforeConsult ? isCheckInPaymentFullyPaid : hasRecordedCheckInPayment
     );
+    const vitalsRequiredBeforeConsult = hasPreConsultVitalsWorkflow && uiStatus === 'Checked In' && !appt.vitalsRecordedAt;
     const isReportsReadyCheckedIn = uiStatus === 'Checked In' && Boolean(appt.reportsReadyAt);
     const isFollowUpCheckedIn = uiStatus === 'Checked In' && !isReportsReadyCheckedIn && Boolean(appt.followUpStartedAt || appt.followUpOfAppointmentId || appt.type === 'Follow-Up');
     const visitIdentifier = isReportsReadyCheckedIn
@@ -1865,6 +1866,12 @@ const Appointments = ({
         if (paymentRequiredBeforeConsult && !isCheckInPaymentGateOpen && canCollectPayment) {
           primaryAction = actions.collectPayment;
           overflowActions = [actions.leftEarly];
+        } else if (vitalsRequiredBeforeConsult) {
+          primaryAction = actions.vitals;
+          overflowActions = [
+            ...(canCollectPayment ? [actions.collectPayment] : []),
+            actions.leftEarly
+          ];
         } else if (isTreatingPhysician) {
           primaryAction = actions.consult;
           overflowActions = isCheckedIn

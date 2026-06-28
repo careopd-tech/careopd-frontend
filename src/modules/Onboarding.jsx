@@ -32,9 +32,41 @@ const Onboarding = ({ setAuthState }) => {
     setStep(2);
   };
 
+  const clearStepFeedback = () => {
+    setError('');
+  };
+
+  const goToSetupChoice = () => {
+    clearStepFeedback();
+    setIsOtpSent(false);
+    setIsOtpVerified(false);
+    setFormData(prev => ({ ...prev, phone: '', otp: '', registrationToken: '' }));
+    setStep(1);
+  };
+
+  const goToMobileEntry = () => {
+    clearStepFeedback();
+    setIsOtpSent(false);
+    setIsOtpVerified(false);
+    setFormData(prev => ({ ...prev, otp: '', registrationToken: '' }));
+    setStep(2);
+  };
+
+  const goToOtpEntry = () => {
+    clearStepFeedback();
+    setIsOtpSent(true);
+    setStep(2);
+  };
+
+  const goToCredentialsStep = () => {
+    clearStepFeedback();
+    setStep(3);
+  };
+
   const handleSendOtp = async () => {
     const selectedName = formData.type === 'Solo' ? formData.doctorName : formData.clinicName;
     if (!selectedName.trim() || !formData.phone) return setError('Fill required fields.');
+    if (!/^\d{10}$/.test(formData.phone)) return setError('Enter a valid 10-digit mobile number.');
 
     setError('');
     setIsLoading(true);
@@ -228,7 +260,7 @@ const Onboarding = ({ setAuthState }) => {
                 </div>
 
                 <div className="flex gap-2 pt-2">
-                  <button type="button" onClick={() => { setIsOtpSent(false); setFormData({...formData, otp: ''}); setIsOtpVerified(false); setStep(1); }} className="px-4 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 flex items-center justify-center transition-colors">
+                  <button type="button" onClick={goToSetupChoice} className="px-4 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 flex items-center justify-center transition-colors">
                     <ArrowLeft size={18} />
                   </button>
                   <button type="button" onClick={handleSendOtp} disabled={isLoading} className="flex-1 bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-900 transition-colors flex justify-center items-center">
@@ -248,13 +280,13 @@ const Onboarding = ({ setAuthState }) => {
                     <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-teal-500" />
                     <input required type="text" maxLength={6} placeholder="123456" disabled={isLoading} className="w-full pl-9 pr-3 py-2.5 bg-white border border-teal-200 rounded-xl text-[15px] font-bold tracking-widest text-center outline-none focus:ring-2 focus:ring-teal-500" value={formData.otp} onChange={e => setFormData({...formData, otp: e.target.value.replace(/\D/g, '')})} />
                   </div>
-                  <button type="button" onClick={() => { setIsOtpSent(false); setFormData({...formData, otp: ''}); setIsOtpVerified(false); setStep(2); }} className="text-[12px] text-teal-600 font-bold hover:text-teal-700 hover:underline transition-colors">
+                  <button type="button" onClick={goToMobileEntry} className="text-[12px] text-teal-600 font-bold hover:text-teal-700 hover:underline transition-colors">
                     Edit Number
                   </button>
                 </div>
 
                 <div className="flex gap-2 pt-2">
-                  <button type="button" onClick={() => { setIsOtpSent(false); setFormData({...formData, otp: ''}); setIsOtpVerified(false); setStep(1); }} className="px-4 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 flex items-center justify-center transition-colors">
+                  <button type="button" onClick={goToSetupChoice} className="px-4 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 flex items-center justify-center transition-colors">
                     <ArrowLeft size={18} />
                   </button>
                   <button type="button" onClick={handleVerifyOtp} disabled={isLoading} className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700 transition-colors flex justify-center items-center">
@@ -304,7 +336,7 @@ const Onboarding = ({ setAuthState }) => {
 
             {step === 3 && (
               <div className="flex gap-2 mt-4">
-                <button type="button" onClick={() => { setIsOtpSent(true); setStep(2); }} className="px-4 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 flex items-center justify-center transition-colors">
+                <button type="button" onClick={goToOtpEntry} className="px-4 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 flex items-center justify-center transition-colors">
                   <ArrowLeft size={18} />
                 </button>
                 <button type="submit" className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700 flex justify-center items-center gap-2 shadow-md">
@@ -341,7 +373,7 @@ const Onboarding = ({ setAuthState }) => {
                 </div>
 
                 <div className="flex gap-2 mt-4">
-                  <button type="button" onClick={() => setStep(3)} className="px-4 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 flex items-center justify-center transition-colors">
+                  <button type="button" onClick={goToCredentialsStep} className="px-4 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 flex items-center justify-center transition-colors">
                     <ArrowLeft size={18} />
                   </button>
                   <button type="submit" disabled={isLoading} className="flex-1 bg-teal-600 text-white py-3 rounded-xl font-bold hover:bg-teal-700 flex justify-center items-center gap-2 shadow-md">
