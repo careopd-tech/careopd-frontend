@@ -1832,6 +1832,10 @@ const Appointments = ({
       hasLabOrder ? actions.printLabOrder : null,
       hasReceipt ? actions.printReceipt : null
     ].filter(Boolean);
+    const billingOverflowActions = [
+      canCollectPayment ? actions.collectPayment : null,
+      hasReceipt ? actions.printReceipt : null
+    ].filter(Boolean);
 
     if (isCompleted) {
       if (!hasPrintedPrescription) {
@@ -1847,41 +1851,41 @@ const Appointments = ({
       if (uiStatus === 'Awaiting Reports') {
         if (isTreatingPhysician && appt.reportsReadyAt) {
           primaryAction = actions.consult;
-          overflowActions = [...clinicianOverflowActions, ...(canCollectPayment ? [actions.collectPayment] : [])];
+          overflowActions = [...clinicianOverflowActions, ...billingOverflowActions];
         } else if (canManageAppointments && !appt.reportsReadyAt) {
           primaryAction = actions.reportsReady;
-          overflowActions = canCollectPayment ? [actions.collectPayment] : [];
+          overflowActions = billingOverflowActions;
         }
       } else if (isDraft) {
         if (isTreatingPhysician) {
           primaryAction = actions.consult;
-          overflowActions = [...clinicianOverflowActions, ...(canCollectPayment ? [actions.collectPayment] : []), actions.leftEarly];
+          overflowActions = [...clinicianOverflowActions, ...billingOverflowActions, actions.leftEarly];
         } else if (canManageAppointments) {
-          overflowActions = [...(canCollectPayment ? [actions.collectPayment] : []), actions.leftEarly];
+          overflowActions = [...billingOverflowActions, actions.leftEarly];
         }
       } else if (isInConsultation && isTreatingPhysician) {
         primaryAction = actions.consult;
-        overflowActions = [...clinicianOverflowActions, ...(canCollectPayment ? [actions.collectPayment] : [])];
+        overflowActions = [...clinicianOverflowActions, ...billingOverflowActions];
       } else if (isCheckedIn || isCarryoverVisit) {
         if (paymentRequiredBeforeConsult && !isCheckInPaymentGateOpen && canCollectPayment) {
           primaryAction = actions.collectPayment;
-          overflowActions = [actions.leftEarly];
+          overflowActions = [...(hasReceipt ? [actions.printReceipt] : []), actions.leftEarly];
         } else if (vitalsRequiredBeforeConsult) {
           primaryAction = actions.vitals;
           overflowActions = [
-            ...(canCollectPayment ? [actions.collectPayment] : []),
+            ...billingOverflowActions,
             actions.leftEarly
           ];
         } else if (isTreatingPhysician) {
           primaryAction = actions.consult;
           overflowActions = isCheckedIn
-            ? [...clinicianOverflowActions, ...(canCollectPayment ? [actions.collectPayment] : []), actions.leftEarly]
-            : [...clinicianOverflowActions, ...(canCollectPayment ? [actions.collectPayment] : [])];
-        } else if (canManageAppointments && hasPreConsultVitalsWorkflow && isCheckedIn) {
+            ? [...clinicianOverflowActions, ...billingOverflowActions, actions.leftEarly]
+            : [...clinicianOverflowActions, ...billingOverflowActions];
+        } else if (canManageAppointments && vitalsRequiredBeforeConsult && isCheckedIn) {
           primaryAction = actions.vitals;
-          overflowActions = [...(canCollectPayment ? [actions.collectPayment] : []), actions.leftEarly];
+          overflowActions = [...billingOverflowActions, actions.leftEarly];
         } else if (canManageAppointments && isCheckedIn) {
-          overflowActions = [...(canCollectPayment ? [actions.collectPayment] : []), actions.leftEarly];
+          overflowActions = [...billingOverflowActions, actions.leftEarly];
         }
       } else if (isToday && canManageAppointments) {
         if (todayPhase === 'arrival-window') {

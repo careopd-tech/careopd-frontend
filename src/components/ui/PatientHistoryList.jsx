@@ -280,7 +280,7 @@ const PatientHistoryList = ({
         const isFetching = fetchingId === visit._id;
         const clinicalTimeline = getClinicalTimeline(visit);
         const hasMultipleClinicalEntries = clinicalTimeline.length > 1;
-        const followUpVisitCount = Number(visit.followUpNoteCount || (clinicalTimeline.length - 1));
+        const clinicalUpdateCount = Math.max(clinicalTimeline.length - 1, 0);
         const appointmentDisplayId = getAppointmentDisplayId(visit);
 
         const visitDocId = String(visit.doctorId?._id || visit.doctorId);
@@ -336,7 +336,7 @@ const PatientHistoryList = ({
                   )}
                   {hasValidStatus && hasMultipleClinicalEntries && (
                     <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-[12px] font-medium text-teal-800">
-                      This appointment contains the initial visit and {followUpVisitCount} follow-up visit{followUpVisitCount > 1 ? 's' : ''}.
+                      This appointment contains the initial visit and {clinicalUpdateCount} clinical update{clinicalUpdateCount > 1 ? 's' : ''}.
                     </div>
                   )}
 
