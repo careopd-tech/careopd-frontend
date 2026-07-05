@@ -234,7 +234,7 @@ const PostConsultActionsModal = ({
         <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
           <div className="flex items-center gap-2">
             <Wallet size={16} className="text-slate-600" />
-            <div className="type-label text-slate-600 uppercase">Billing & Payment</div>
+            <div className="type-label text-slate-600 uppercase">Payments & Receipts</div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">

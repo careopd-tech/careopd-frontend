@@ -1766,7 +1766,7 @@ const Settings = ({ data, setData, onLogout }) => {
                      className="mt-0.5 h-4 w-4 accent-teal-600"
                    />
                    <div>
-                     <p className="type-section-title text-slate-800">Capture vitals at check-in</p>
+                     <p className="type-section-title text-slate-800">Capture vitals before consultation</p>
                      <p className="type-secondary text-slate-600 mt-1">Prompts to record vitals before consultation can start.</p>
                    </div>
                  </label>

@@ -43,10 +43,11 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, cl
     const doctorShifts = getDoctorShiftWindows(doctor, clinic || {});
     const baseSlots = generateTimeSlots(clinicSchedule.appointmentWindowMinutes);
 
+    const nonBlockingStatuses = new Set(['Cancelled', 'Walked Out', 'No Show', 'Expired']);
     const bookedTimes = appointments
       .filter(a => {
         const apptDoctorId = a.doctorId && typeof a.doctorId === 'object' ? a.doctorId._id : a.doctorId;
-        return String(apptDoctorId) === String(currentDocId) && a.date === date && a.status !== 'Cancelled';
+        return String(apptDoctorId) === String(currentDocId) && a.date === date && !nonBlockingStatuses.has(a.status);
       })
       .map(a => a.time);
 

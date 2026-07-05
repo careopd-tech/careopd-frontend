@@ -17,8 +17,9 @@ const buildPrintableHtml = (title, content) => `<!doctype html>
     <meta charset="utf-8" />
     <title>${escapeHtml(title)}</title>
     <style>
+      @page { margin: 12mm; }
       body { font-family: Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
-      .page { max-width: 760px; margin: 0 auto; background: #fff; min-height: 100vh; padding: 32px; }
+      .page { max-width: 760px; margin: 0 auto; background: #fff; padding: 32px; box-sizing: border-box; }
       .header { border-bottom: 2px solid #0f766e; padding-bottom: 16px; margin-bottom: 20px; }
       .clinic { font-size: 26px; font-weight: 700; color: #0f172a; }
       .meta, .muted { color: #475569; font-size: 13px; line-height: 1.6; }
@@ -34,8 +35,9 @@ const buildPrintableHtml = (title, content) => `<!doctype html>
       th, td { text-align: left; border-bottom: 1px solid #e2e8f0; padding: 10px 8px; vertical-align: top; }
       th { color: #475569; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
       @media print {
-        body { background: #fff; }
-        .page { padding: 20px; }
+        html, body { background: #fff; width: auto; height: auto; }
+        .page { max-width: none; margin: 0; padding: 0; }
+        .card, table, tr { break-inside: avoid; page-break-inside: avoid; }
       }
     </style>
   </head>

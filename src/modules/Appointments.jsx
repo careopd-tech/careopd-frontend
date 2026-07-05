@@ -809,13 +809,15 @@ const Appointments = ({
     const awaitingReports = sourceData.filter(a => getUiStatus(a) === 'Awaiting Reports').length;
     const cancelled = sourceData.filter(a => getUiStatus(a) === 'Cancelled').length;
     const noShow = sourceData.filter(a => getUiStatus(a) === 'No Show').length;
+    const expired = sourceData.filter(a => getUiStatus(a) === 'Expired').length;
 
     return [
       { key: 'Scheduled', label: 'Scheduled', val: scheduled, color: 'bg-amber-50 text-amber-700' },
       { key: 'Completed', label: 'Completed', val: completed, color: 'bg-green-50 text-green-700' },
       { key: 'Awaiting Reports', label: 'Awaiting', val: awaitingReports, color: 'bg-cyan-50 text-cyan-700' },
       { key: 'Cancelled', label: 'Cancelled', val: cancelled, color: 'bg-red-50 text-red-700' },
-      { key: 'No Show', label: 'No Show', val: noShow, color: 'bg-slate-100 text-slate-600' }
+      { key: 'No Show', label: 'No Show', val: noShow, color: 'bg-slate-100 text-slate-600' },
+      { key: 'Expired', label: 'Expired', val: expired, color: 'bg-orange-50 text-orange-700' }
     ];
   }, [sections, searchResults, searchQuery, activeFilters]);
 
@@ -826,7 +828,7 @@ const Appointments = ({
     } else {
       newStatusList.push(key);
     }
-    if (['Scheduled', 'Completed', 'Awaiting Reports', 'Cancelled', 'No Show'].every(s => newStatusList.includes(s))) {
+    if (['Scheduled', 'Completed', 'Awaiting Reports', 'Cancelled', 'No Show', 'Expired'].every(s => newStatusList.includes(s))) {
       newStatusList = [];
     }
     setActiveFilters({ ...activeFilters, status: newStatusList });
@@ -1681,9 +1683,10 @@ const Appointments = ({
     const isCancelled = uiStatus === 'Cancelled';
     const isCompleted = uiStatus === 'Completed';
     const isNoShow = uiStatus === 'No Show';
+    const isExpired = uiStatus === 'Expired';
     const isDraft = uiStatus === 'Draft';
     const isWalkedOut = uiStatus === 'Walked Out';
-    const showActions = !isCancelled && !isCompleted && !isNoShow && !isWalkedOut;
+    const showActions = !isCancelled && !isCompleted && !isNoShow && !isExpired && !isWalkedOut;
     const isToday = appt.date === safeCurrentDate;
     const isFuture = appt.date > safeCurrentDate;
     const isPast = appt.date < safeCurrentDate;
@@ -1706,6 +1709,7 @@ const Appointments = ({
       'Test Recommended': 'text-emerald-700',
       'Tests Recommended': 'text-emerald-700',
       'Cancelled': 'text-red-600',
+      'Expired': 'text-orange-700',
       'No Show': 'text-slate-600',
       'No-Show': 'text-slate-600'
     }[cardStatus] || 'text-slate-600';
@@ -1721,6 +1725,7 @@ const Appointments = ({
       'Test Recommended': 'bg-emerald-500',
       'Tests Recommended': 'bg-emerald-500',
       'Cancelled': 'bg-red-500',
+      'Expired': 'bg-orange-500',
       'No Show': 'bg-slate-400',
       'No-Show': 'bg-slate-400'
     }[cardStatus] || 'bg-slate-400';
@@ -1742,7 +1747,7 @@ const Appointments = ({
     const hasOutstandingBalance = expectedBillAmount > billingAmountPaid;
     const paymentActionLabel = hasOutstandingBalance
       ? (billingAmountPaid > 0 ? 'Collect Balance' : 'Collect Payment')
-      : 'Billing & Payment';
+      : 'Payment Details';
     const canCollectPayment = (canManageAppointments || (data.clinic?.type === 'Solo' && isTreatingPhysician)) && (
       clinicConsultationFee > 0 ||
       activeClinicBillingServices > 0 ||
@@ -1754,6 +1759,7 @@ const Appointments = ({
       Number(appt.billing?.consultationFee || 0) > 0 ||
       billingPayments.length > 0
     );
+    const hasPaymentReceived = Boolean(billingPayments.length > 0 || billingAmountPaid > 0);
     const hasRecordedCheckInPayment = Boolean(billingPayments.length > 0 || billingAmountPaid > 0);
     const checkInPaymentAmounts = getAppointmentBillingAmounts(appt, data.clinic || {});
     const isCheckInPaymentFullyPaid = Boolean(
@@ -1813,6 +1819,7 @@ const Appointments = ({
       contact: { label: 'Contact Patient', icon: Phone, onClick: () => openContact(appt) },
       leftEarly: { label: 'Patient Left', icon: XCircle, onClick: () => openLeftEarly(appt) },
       reschedule: { label: 'Reschedule', icon: CalendarDays, onClick: () => openReschedule(appt) },
+      bookFollowUp: { label: 'Book Follow-up', icon: CalendarDays, onClick: () => openFollowUpBooking(appt) },
       reportReview: { label: 'Review Reports', icon: RefreshCw, onClick: () => handleStartReportReview(appt) },
       vitals: { label: 'Add Vitals', icon: Activity, onClick: () => openVitals(appt) },
       history: { label: 'View History', icon: History, onClick: () => openHistory(appt) },
@@ -1820,7 +1827,13 @@ const Appointments = ({
       printPrescription: { label: 'Print Prescription', icon: Printer, onClick: () => handlePrintPrescription(appt) },
       printLabOrder: { label: 'Print Lab Order', icon: FlaskConical, onClick: () => handlePrintLabOrder(appt) },
       collectPayment: { label: paymentActionLabel, icon: Wallet, onClick: () => openBillingPayment(appt), disabled: !canCollectPayment },
-      printReceipt: { label: 'Print Receipt', icon: ReceiptText, onClick: () => handlePrintReceipt(appt) }
+      printReceipt: {
+        label: 'Print Receipt',
+        icon: ReceiptText,
+        onClick: () => handlePrintReceipt(appt),
+        disabled: !hasPaymentReceived,
+        disabledTitle: 'No payment received for this appointment.'
+      }
     };
 
     let primaryAction = null;
@@ -1831,7 +1844,7 @@ const Appointments = ({
     ];
     const closedLoopOverflowActions = [
       canCollectPayment ? actions.collectPayment : null,
-      hasPrintedPrescription ? actions.printPrescription : null,
+      actions.printPrescription,
       hasLabOrder ? actions.printLabOrder : null,
       hasReceipt ? actions.printReceipt : null
     ].filter(Boolean);
@@ -1841,11 +1854,7 @@ const Appointments = ({
     ].filter(Boolean);
 
     if (isCompleted) {
-      if (!hasPrintedPrescription) {
-        primaryAction = actions.printPrescription;
-      } else if (hasOutstandingBalance && canCollectPayment) {
-        primaryAction = actions.collectPayment;
-      }
+      primaryAction = actions.bookFollowUp;
       overflowActions = [
         ...(hasRecommendedTests ? [actions.reportReview] : []),
         ...closedLoopOverflowActions.filter((action) => action.label !== primaryAction?.label)
@@ -1913,7 +1922,7 @@ const Appointments = ({
     }
 
     const hasPrimaryInlineAction = (showActions || isCompleted) && Boolean(primaryAction);
-    const hasArchivedInlineAction = (isCancelled || isNoShow || isWalkedOut) && isAdmin;
+    const hasArchivedInlineAction = (isCancelled || isNoShow || isExpired || isWalkedOut) && isAdmin;
     const cardOverflowActions = ((showActions || isCompleted) && (isToday || isCarryoverVisit || isCompleted || (isFuture && canManageAppointments)))
       ? overflowActions
       : [];
@@ -1931,7 +1940,7 @@ const Appointments = ({
               ? 'justify-center min-w-[10rem] px-3 text-white bg-teal-600 hover:bg-teal-700 shadow-sm'
               : 'justify-start w-full px-3 text-slate-700 hover:bg-slate-50'
           }`}
-          title={action.disabled ? 'Print prescription first to unlock invoice.' : undefined}
+          title={action.disabled ? action.disabledTitle : undefined}
         >
           {isPrimary && isProcessing ? <Loader2 size={13} className="animate-spin" /> : Icon ? <Icon size={13} /> : null}
           {action.label}

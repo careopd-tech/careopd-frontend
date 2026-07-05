@@ -6,7 +6,7 @@ const QueueCard = ({ appt, isActive, onClick }) => {
   const patient = appt.patientId || {};
   const uiStatus = getAppointmentUiStatus(appt);
   const isCompleted = uiStatus === 'Completed';
-  const isCancelled = uiStatus === 'Cancelled' || uiStatus === 'No Show';
+  const isCancelled = uiStatus === 'Cancelled' || uiStatus === 'No Show' || uiStatus === 'Expired';
   const isInConsultation = Boolean(appt.consultationStartedAt) && !appt.consultationCompletedAt;
   const isCheckedIn = Boolean(appt.checkedInAt);
   const isAwaitingReports = uiStatus === 'Awaiting Reports';
@@ -21,7 +21,7 @@ const QueueCard = ({ appt, isActive, onClick }) => {
     ? 'Follow-Up'
     : (!patient.lastVisit ? 'New' : '');
 
-  // Doctors don't need clutter. Hide cancelled/no-shows from their active view.
+  // Doctors don't need clutter. Hide archived appointments from their active view.
   if (isCancelled) return null; 
 
   return (

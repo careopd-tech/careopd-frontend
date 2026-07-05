@@ -1,7 +1,7 @@
 import { getLocalDateString } from './dateUtils';
 
 export const CLINICALLY_CLOSED_STATUSES = ['Completed'];
-export const TERMINAL_APPOINTMENT_STATUSES = ['Completed', 'Cancelled', 'Walked Out'];
+export const TERMINAL_APPOINTMENT_STATUSES = ['Completed', 'Cancelled', 'Walked Out', 'No Show', 'Expired'];
 
 export const hasActiveConsultation = (appt = {}) => (
   (appt.status === 'In Consultation' || Boolean(appt.consultationStartedAt)) &&
@@ -18,6 +18,8 @@ export const hasVisitProgress = (appt = {}) => (
 export const getAppointmentUiStatus = (appt = {}, todayStr = getLocalDateString()) => {
   if (appt.status === 'Cancelled') return 'Cancelled';
   if (appt.status === 'Completed') return 'Completed';
+  if (appt.status === 'No Show') return 'No Show';
+  if (appt.status === 'Expired') return 'Expired';
   if (appt.status === 'Awaiting Reports') return 'Awaiting Reports';
   if (appt.status === 'Draft') return 'Draft';
   if (appt.status === 'In Consultation') return 'In Consultation';
@@ -37,5 +39,5 @@ export const getAppointmentUiStatus = (appt = {}, todayStr = getLocalDateString(
 
 export const hasClinicalRecordStatus = (status = '') => {
   const normalizedStatus = String(status).trim().toUpperCase();
-  return normalizedStatus !== 'CANCELLED' && normalizedStatus !== 'NO SHOW' && normalizedStatus !== 'NO-SHOW';
+  return normalizedStatus !== 'CANCELLED' && normalizedStatus !== 'NO SHOW' && normalizedStatus !== 'NO-SHOW' && normalizedStatus !== 'EXPIRED';
 };
