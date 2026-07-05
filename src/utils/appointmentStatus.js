@@ -28,12 +28,12 @@ export const getAppointmentUiStatus = (appt = {}, todayStr = getLocalDateString(
   if (hasActiveConsultation(appt)) return 'In Consultation';
   if ((appt.hasConsultationDraft || appt.consultationDraft) && appt.consultationDraftSavedAt) return 'Draft';
   if (appt.checkedInAt) return 'Checked In';
-
+/*
   const isPast = appt.date < todayStr;
   if (isPast && (appt.status === 'Scheduled' || appt.status === 'Pending') && !hasVisitProgress(appt)) {
     return 'No Show';
   }
-
+*/
   return appt.status || 'Scheduled';
 };
 
