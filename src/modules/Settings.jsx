@@ -7,7 +7,7 @@ import ModuleHeader from '../components/ui/ModuleHeader';
 import AlertMessage from '../components/ui/AlertMessage';
 import ClinicalLibraryModal from '../components/settings/ClinicalLibraryModal';
 import API_BASE_URL from '../config';
-import { authFetch, getSessionUser, updateSessionFromAuth } from '../utils/auth';
+import { authFetch, getSessionUser, refreshSession, updateSessionFromAuth } from '../utils/auth';
 import { hasPermission } from '../utils/permissions';
 import { getLocalDateString } from '../utils/dateUtils';
 import {
@@ -126,13 +126,27 @@ const Settings = ({ data, setData, onLogout }) => {
   });
 
   const savedUser = getSessionUser();
-  const canManageAccess = hasPermission(savedUser.permissions, 'settings.users_access');
-  const canManageRolePermissions = hasPermission(savedUser.permissions, 'settings.permissions');
-  const canManageClinicSettings = hasPermission(savedUser.permissions, 'settings.clinic');
-  const canManageCatalog = hasPermission(savedUser.permissions, 'settings.catalog');
-  const canManageCommunication = hasPermission(savedUser.permissions, 'settings.communication');
-  const canManagePolicies = hasPermission(savedUser.permissions, 'settings.policies');
-  const canConfigureVitalsWorkflow = savedUser.accountRole === 'super_admin' && data.clinic?.type === 'Clinic';
+  const canManageAccess = hasPermission(savedUser.permissions, 'settings.users_access.manage');
+  const canManageRolePermissions = hasPermission(savedUser.permissions, 'settings.access_controls.manage');
+  const canManageClinicProfile = hasPermission(savedUser.permissions, 'settings.clinic_profile.edit');
+  const canManageSchedule = hasPermission(savedUser.permissions, 'settings.schedule.edit');
+  const canViewSchedule = canManageSchedule || hasPermission(savedUser.permissions, 'settings.schedule.view');
+  const canManageBillingServices = hasPermission(savedUser.permissions, 'settings.billing_services.edit');
+  const canViewBillingServices = canManageBillingServices || hasPermission(savedUser.permissions, 'settings.billing_services.view');
+  const canManageWorkflow = hasPermission(savedUser.permissions, 'settings.workflow.edit');
+  const canViewWorkflow = canManageWorkflow || hasPermission(savedUser.permissions, 'settings.workflow.view');
+  const canManageCatalog = hasPermission(savedUser.permissions, 'settings.catalog.edit');
+  const canViewCatalog = canManageCatalog || hasPermission(savedUser.permissions, 'settings.catalog.view');
+  const canManageCommunication = hasPermission(savedUser.permissions, 'settings.communication.edit');
+  const canViewCommunication = canManageCommunication || hasPermission(savedUser.permissions, 'settings.communication.view');
+  const canManagePolicies = hasPermission(savedUser.permissions, 'settings.policies.edit');
+  const canViewPolicies = canManagePolicies || hasPermission(savedUser.permissions, 'settings.policies.view');
+  const canViewClinicSettings = canManageClinicProfile || canViewSchedule || canViewBillingServices || canViewWorkflow;
+  const canConfigureVitalsWorkflow = canManageWorkflow && data.clinic?.type === 'Clinic';
+  const clinicDoctors = Array.isArray(data.doctors) ? data.doctors : [];
+  const isClinicWorkspace = data.clinic?.type === 'Clinic';
+  const ownerUserId = savedUser.ownerUserId || data.clinic?.ownerUserId || '';
+  const canTransferOwnership = savedUser.accountRole === 'super_admin' && (!ownerUserId || String(ownerUserId) === String(savedUser._id));
 
   useEffect(() => {
     localStorage.setItem('settings_notifications', JSON.stringify(notificationStack.slice(0, 30)));
@@ -175,14 +189,16 @@ const Settings = ({ data, setData, onLogout }) => {
       if (!clinicId) return;
 
       try {
-        const [response, catalogResponse] = await Promise.all([
+        const [response, catalogResponse, doctorsResponse] = await Promise.all([
           fetch(`${API_BASE_URL}/api/clinics/${clinicId}`),
-          fetch(`${API_BASE_URL}/api/clinical-catalog/${clinicId}`)
+          fetch(`${API_BASE_URL}/api/clinical-catalog/${clinicId}`),
+          fetch(`${API_BASE_URL}/api/doctors/${clinicId}`)
         ]);
 
-        const [clinicData, catalogData] = await Promise.all([
+        const [clinicData, catalogData, doctorsData] = await Promise.all([
           response.ok ? response.json() : Promise.resolve(null),
-          catalogResponse.ok ? catalogResponse.json() : Promise.resolve(null)
+          catalogResponse.ok ? catalogResponse.json() : Promise.resolve(null),
+          doctorsResponse.ok ? doctorsResponse.json() : Promise.resolve(null)
         ]);
 
         if (clinicData) {
@@ -200,6 +216,10 @@ const Settings = ({ data, setData, onLogout }) => {
 
         if (catalogData) {
           setData(prev => ({ ...prev, clinicalCatalog: catalogData }));
+        }
+
+        if (Array.isArray(doctorsData)) {
+          setData(prev => ({ ...prev, doctors: doctorsData }));
         }
       } catch (err) {
         console.error("Failed to load settings", err);
@@ -230,6 +250,9 @@ const Settings = ({ data, setData, onLogout }) => {
 
         if (usersRes.ok) {
           setAccessUsers(await usersRes.json());
+        } else if (usersRes.status === 403 && canManageAccess) {
+          setAccessUsers([]);
+          await refreshSession();
         }
 
         if (doctorsRes.ok) {
@@ -242,6 +265,8 @@ const Settings = ({ data, setData, onLogout }) => {
           const nextPermissionProfiles = permissionsPayload.permissionProfiles || { clinic_admin: {}, doctor: {} };
           setPermissionProfiles(nextPermissionProfiles);
           setSavedPermissionProfiles(nextPermissionProfiles);
+        } else if (permissionsRes.status === 403 && canManageRolePermissions) {
+          await refreshSession();
         }
       } catch (err) {
         console.error('Failed to load access settings', err);
@@ -303,6 +328,7 @@ const Settings = ({ data, setData, onLogout }) => {
       const consultationFeeRaw = String(formData.consultationFee ?? '').trim();
       const numericConsultationFee = Number(consultationFeeRaw);
       if (!consultationFeeRaw || !Number.isFinite(numericConsultationFee) || numericConsultationFee < 0) errors.push('consultationFee');
+      if (data.clinic?.type === 'Clinic' && !formData.selectedDoctorId) errors.push('selectedDoctorId');
 
       const seenServiceNames = new Map();
       (formData.billingServices || []).forEach((service, index) => {
@@ -329,6 +355,9 @@ const Settings = ({ data, setData, onLogout }) => {
     if (errors.length > 0) {
       setInvalidFields(errors);
       if (editModal.type === 'billing_services') {
+        if (errors.includes('selectedDoctorId')) {
+          return setModalError('Select a doctor before saving consultation fee.');
+        }
         if (errors.includes('consultationFee')) {
           return setModalError('Consultation fee must be entered as a valid non-negative amount.');
         }
@@ -388,6 +417,7 @@ const Settings = ({ data, setData, onLogout }) => {
 
     const clinicId = localStorage.getItem('clinicId');
     let updatePayload = {};
+    let doctorFeePayload = null;
 
     if (editModal.type === 'template') {
       const currentList = [...(data.clinic.templates || [])];
@@ -427,22 +457,33 @@ const Settings = ({ data, setData, onLogout }) => {
         requireFullPaymentBeforeConsultation: collectConsultationPaymentAtCheckIn && formData.requireFullPaymentBeforeConsultation === true
       };
     } else if (editModal.type === 'billing_services') {
+      const billingServicesPayload = (formData.billingServices || [])
+        .map((service) => {
+          const name = String(service.name || '').trim();
+          const priceRaw = String(service.price ?? '').trim();
+          if (!name && !priceRaw) return null;
+          return {
+            _id: service._id,
+            name,
+            price: Number(priceRaw),
+            active: service.active !== false
+          };
+        })
+        .filter(Boolean);
+
       updatePayload = {
-        consultationFee: Number(formData.consultationFee),
-        billingServices: (formData.billingServices || [])
-          .map((service) => {
-            const name = String(service.name || '').trim();
-            const priceRaw = String(service.price ?? '').trim();
-            if (!name && !priceRaw) return null;
-            return {
-              _id: service._id,
-              name,
-              price: Number(priceRaw),
-              active: service.active !== false
-            };
-          })
-          .filter(Boolean)
+        billingServices: billingServicesPayload
       };
+
+      if (data.clinic?.type === 'Clinic') {
+        doctorFeePayload = {
+          doctorId: formData.selectedDoctorId,
+          consultationFee: Number(formData.consultationFee),
+          updatedBy: savedUser?._id || null
+        };
+      } else {
+        updatePayload.consultationFee = Number(formData.consultationFee);
+      }
     } else if (editModal.stateKey === 'hours') {
       updatePayload = { hours: formData.value };
     }
@@ -462,7 +503,36 @@ const Settings = ({ data, setData, onLogout }) => {
         });
         if (response.ok) {
           const updatedClinic = await response.json();
-          setData(prev => ({ ...prev, clinic: updatedClinic }));
+          let updatedDoctor = null;
+          if (doctorFeePayload?.doctorId) {
+            const doctorResponse = await fetch(`${API_BASE_URL}/api/doctors/${doctorFeePayload.doctorId}/consultation-fee`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                clinicId,
+                consultationFee: doctorFeePayload.consultationFee,
+                updatedBy: doctorFeePayload.updatedBy
+              })
+            });
+
+            if (!doctorResponse.ok) {
+              const result = await doctorResponse.json().catch(() => ({}));
+              setModalError(result.error || 'Failed to save doctor consultation fee.');
+              return;
+            }
+
+            updatedDoctor = await doctorResponse.json();
+          }
+
+          setData(prev => ({
+            ...prev,
+            clinic: updatedClinic,
+            doctors: updatedDoctor
+              ? (Array.isArray(prev.doctors) ? prev.doctors : []).map((doctor) => (
+                  String(doctor._id) === String(updatedDoctor._id) ? updatedDoctor : doctor
+                ))
+              : prev.doctors
+          }));
           setEditModal(null);
           showNotification('Settings Saved', 'success', `${editModal.title || 'Settings'} updated successfully.`);
         } else {
@@ -701,7 +771,7 @@ const Settings = ({ data, setData, onLogout }) => {
           permissionProfiles: persistedProfiles
         };
         localStorage.setItem('user', JSON.stringify(nextSessionUser));
-        showNotification('Permissions Updated', 'success', `${roleLabels[roleKey]} permissions saved successfully.`);
+        showNotification('Access Updated', 'success', `${roleLabels[roleKey]} access controls saved successfully.`);
       } else {
         showNotification('Action Failed', 'error', result.error || 'Failed to update role permissions.');
       }
@@ -758,26 +828,29 @@ const Settings = ({ data, setData, onLogout }) => {
   // --- RENDER HELPERS ---
   const SettingItem = ({ title, subtitle, onEdit }) => {
     const isClinicDetails = title === 'Clinic Details';
+    const canEdit = typeof onEdit === 'function';
 
     return (
       <div
         onClick={onEdit}
         // Compact Padding: p-2.5 to match standard cards
-        className="flex justify-between items-center p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-teal-300 transition-colors cursor-pointer group"
+        className={`flex justify-between items-center p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm transition-colors group ${canEdit ? 'hover:border-teal-300 cursor-pointer' : 'cursor-default'}`}
       >
         <div className="min-w-0 pr-2">
-          <h4 className="type-card-title text-slate-800 truncate group-hover:text-teal-700 transition-colors">{title}</h4>
+          <h4 className={`type-card-title text-slate-800 truncate transition-colors ${canEdit ? 'group-hover:text-teal-700' : ''}`}>{title}</h4>
           {isClinicDetails && (
             <p className="type-label text-teal-700 truncate mt-0.5">{workspaceTypeLabel} ({workspaceStatusLabel})</p>
           )}
           {subtitle && <p className="type-label text-slate-600 truncate mt-0.5">{subtitle}</p>}
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          className="flex-shrink-0 text-slate-400 group-hover:text-teal-600 bg-slate-50 group-hover:bg-teal-50 p-1.5 rounded-md transition-colors"
-        >
-          <Edit2 size={14} />
-        </button>
+        {canEdit ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+            className="flex-shrink-0 text-slate-400 group-hover:text-teal-600 bg-slate-50 group-hover:bg-teal-50 p-1.5 rounded-md transition-colors"
+          >
+            <Edit2 size={14} />
+          </button>
+        ) : null}
       </div>
     );
   };
@@ -799,7 +872,7 @@ const Settings = ({ data, setData, onLogout }) => {
     const isExpanded = isSearchMode ? true : expandedSection === id;
     const Icon = typeof icon === 'function' ? icon : null;
     return (
-      <div className={`flex flex-col border-b border-slate-100 ${isSearchMode ? 'flex-none' : isExpanded ? 'flex-1 min-h-0' : 'flex-none'}`}>
+      <div key={id} className={`flex flex-col border-b border-slate-100 ${isSearchMode ? 'flex-none' : isExpanded ? 'flex-1 min-h-0' : 'flex-none'}`}>
         <button 
           onClick={() => {
             if (!isSearchMode) {
@@ -826,7 +899,7 @@ const Settings = ({ data, setData, onLogout }) => {
           // MATCHING CONTENT STYLE:
           // p-2 space-y-1.5 (was p-3 space-y-2)
           <div className={`${isSearchMode ? '' : 'flex-1 overflow-y-auto scrollbar-hide'} bg-slate-50/50 p-2 space-y-1.5 animate-fadeIn`}>
-            {isSearchMode
+            {isSectionObject || isSearchMode
               ? visibleItems.map(item => (
                   <React.Fragment key={item.key}>
                     {item.render()}
@@ -868,32 +941,37 @@ const Settings = ({ data, setData, onLogout }) => {
     clinic_admin: 'Clinic Admin',
     doctor: 'Clinic Doctor'
   };
-  const permissionGroups = [
-    {
-      title: 'Operations',
-      items: [
-        { key: 'appointments.view_all', label: 'View full appointment book' },
-        { key: 'appointments.manage', label: 'Create and manage appointments' },
-        { key: 'appointments.consult_own', label: 'Consult own appointment queue' },
-        { key: 'patients.view_all', label: 'View full patient list' },
-        { key: 'patients.view_own', label: 'View own patients only' },
-        { key: 'patients.create_edit', label: 'Create and edit patients' },
-        { key: 'doctors.view', label: 'View doctors module' },
-        { key: 'doctors.manage', label: 'Create and manage doctors' }
-      ]
-    },
-    {
-      title: 'Settings',
-      items: [
-        { key: 'settings.clinic', label: 'Manage clinic details and schedule' },
-        { key: 'settings.catalog', label: 'Manage clinical catalog' },
-        { key: 'settings.communication', label: 'Manage WhatsApp templates' },
-        { key: 'settings.policies', label: 'Manage policies' },
-        { key: 'settings.users_access', label: 'Manage users and access' },
-        { key: 'settings.permissions', label: 'Configure role permissions' }
-      ]
-    }
-  ];
+  const permissionGroupsByRole = {
+    clinic_admin: [
+      {
+        title: 'Access',
+        items: [
+          { key: 'settings.users_access.manage', label: 'Manage users and access' },
+          { key: 'settings.access_controls.manage', label: 'Configure access controls' }
+        ]
+      }
+    ],
+    doctor: [
+      {
+        title: 'Billing',
+        items: [
+          { key: 'billing.collect_payment', label: 'Collect payments' },
+          { key: 'billing.record_refund', label: 'Return payments' }
+        ]
+      },
+      {
+        title: 'Settings',
+        items: [
+          { key: 'settings.schedule.edit', label: 'Edit clinic schedule' },
+          { key: 'settings.billing_services.edit', label: 'Edit billing and services' },
+          { key: 'settings.workflow.edit', label: 'Edit appointment workflow' },
+          { key: 'settings.communication.edit', label: 'Edit WhatsApp templates' },
+          { key: 'settings.policies.edit', label: 'Edit policies' }
+        ]
+      }
+    ]
+  };
+  const permissionGroups = Object.values(permissionGroupsByRole).flat();
   const searchTerm = normalizeSearchText(searchQuery);
   const isSearchMode = searchTerm.length > 0;
   const matchesSearch = (...values) => values.some(value => normalizeSearchText(value).includes(searchTerm));
@@ -932,7 +1010,7 @@ const Settings = ({ data, setData, onLogout }) => {
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5 justify-end">
-          {!isProtectedOwner && user.status === 'Active' && (
+          {canTransferOwnership && !isProtectedOwner && user.status === 'Active' && (
             <button
               type="button"
               onClick={() => openTransferConfirm(user)}
@@ -971,9 +1049,15 @@ const Settings = ({ data, setData, onLogout }) => {
   };
 
   const renderRolePermissionCard = (roleKey) => {
+    const rolePermissionGroups = permissionGroupsByRole[roleKey] || [];
     return (
       <div className="px-3 pb-3 pt-2 bg-white border border-t-0 border-slate-200 rounded-b-xl shadow-sm space-y-3">
-        {permissionGroups.map(group => (
+        <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
+          <p className="type-secondary text-slate-600">
+            Core {roleLabels[roleKey]} permissions are mandatory. Only optional access is configurable here.
+          </p>
+        </div>
+        {rolePermissionGroups.map(group => (
           <div key={`${roleKey}-${group.title}`} className="space-y-2">
             <p className="type-utility uppercase text-slate-400">{group.title}</p>
             {group.items.map(item => (
@@ -1039,7 +1123,7 @@ const Settings = ({ data, setData, onLogout }) => {
   const getSectionItems = () => {
     const clinicItems = [];
 
-    if (canManageClinicSettings) {
+    if (canViewClinicSettings) {
       clinicItems.push(
         {
           key: 'clinic-code',
@@ -1061,7 +1145,7 @@ const Settings = ({ data, setData, onLogout }) => {
             <SettingItem
               title="Clinic Details"
               subtitle={(data.clinic?.name || 'My Clinic') + " • " + (data.clinic?.address || 'Set address...')}
-              onEdit={() => openEdit({ title: 'Edit Clinic Details', type: 'clinic_details', initialData: { name: data.clinic?.name, address: data.clinic?.address } })}
+              onEdit={canManageClinicProfile ? () => openEdit({ title: 'Edit Clinic Details', type: 'clinic_details', initialData: { name: data.clinic?.name, address: data.clinic?.address } }) : undefined}
             />
           )
         },
@@ -1072,7 +1156,7 @@ const Settings = ({ data, setData, onLogout }) => {
             <SettingItem
               title="Clinic Schedule"
               subtitle={formatClinicScheduleSummary(data.clinic || clinicSchedule)}
-              onEdit={() => openEdit({
+              onEdit={canManageSchedule ? () => openEdit({
                 title: 'Edit Clinic Schedule',
                 type: 'clinic_schedule',
                 initialData: {
@@ -1083,25 +1167,30 @@ const Settings = ({ data, setData, onLogout }) => {
                   eveningEnd: clinicSchedule.eveningEnd,
                   appointmentWindowMinutes: clinicSchedule.appointmentWindowMinutes
                 }
-              })}
+              }) : undefined}
             />
           )
         },
         {
           key: 'billing-services',
-          searchText: `billing services consultation fee pricing ecg blood sugar diabetic check ${data.clinic?.consultationFee || 0} ${(data.clinic?.billingServices || []).map(service => `${service.name} ${service.price}`).join(' ')}`,
+          searchText: `billing services consultation fee pricing ecg blood sugar diabetic check ${isClinicWorkspace ? clinicDoctors.map(doctor => `${doctor.name} ${doctor.department} ${doctor.consultationFee || 0}`).join(' ') : data.clinic?.consultationFee || 0} ${(data.clinic?.billingServices || []).map(service => `${service.name} ${service.price}`).join(' ')}`,
           render: () => (
             <SettingItem
               title="Billing & Services"
-              subtitle={`Consultation Rs ${Number(data.clinic?.consultationFee || 0).toFixed(2)} • ${(data.clinic?.billingServices || []).filter(service => service.active !== false).length} services configured`}
-              onEdit={() => openEdit({
+              subtitle={isClinicWorkspace
+                ? `${clinicDoctors.length} doctor fee${clinicDoctors.length === 1 ? '' : 's'} • ${(data.clinic?.billingServices || []).filter(service => service.active !== false).length} services configured`
+                : `Consultation Rs ${Number(data.clinic?.consultationFee || 0).toFixed(2)} • ${(data.clinic?.billingServices || []).filter(service => service.active !== false).length} services configured`}
+              onEdit={canManageBillingServices ? () => openEdit({
                 title: 'Billing & Services',
                 type: 'billing_services',
                 initialData: {
-                  consultationFee: String(Number(data.clinic?.consultationFee || 0)),
+                  selectedDoctorId: isClinicWorkspace ? String(clinicDoctors[0]?._id || '') : '',
+                  consultationFee: isClinicWorkspace
+                    ? String(Number(clinicDoctors[0]?.consultationFee || 0))
+                    : String(Number(data.clinic?.consultationFee || 0)),
                   billingServices: normalizeBillingServiceRows(data.clinic?.billingServices || [])
                 }
-              })}
+              }) : undefined}
             />
           )
         }
@@ -1109,32 +1198,32 @@ const Settings = ({ data, setData, onLogout }) => {
 
       clinicItems.push({
         key: 'consultation-workflow',
-        searchText: 'consultation workflow vitals payment check-in full payment required before consultation triage',
+        searchText: 'appointment workflow vitals payment check-in full payment required before consultation triage',
         render: () => {
           const paymentAtCheckIn = data.clinic?.collectConsultationPaymentAtCheckIn === true;
           const fullPaymentRequired = data.clinic?.requireFullPaymentBeforeConsultation === true;
           return (
             <SettingItem
-              title="Consultation Workflow"
+              title="Appointment Workflow"
               subtitle={[
                 canConfigureVitalsWorkflow && data.clinic?.preConsultVitalsEnabled ? 'Vitals before consultation' : '',
                 paymentAtCheckIn ? (fullPaymentRequired ? 'Full payment before consult' : 'Payment step before consult') : 'Direct consult after check-in'
               ].filter(Boolean).join(' - ')}
-              onEdit={() => openEdit({
-                title: 'Consultation Workflow',
+              onEdit={canManageWorkflow ? () => openEdit({
+                title: 'Appointment Workflow',
                 type: 'consultation_workflow',
                 initialData: {
                   preConsultVitalsEnabled: data.clinic?.preConsultVitalsEnabled === true,
                   collectConsultationPaymentAtCheckIn: paymentAtCheckIn,
                   requireFullPaymentBeforeConsultation: fullPaymentRequired
                 }
-              })}
+              }) : undefined}
             />
           );
         }
       });
 
-      if (canUpgradeSolo) {
+      if (canUpgradeSolo && canManageClinicProfile) {
         clinicItems.push({
           key: 'upgrade-clinic',
           searchText: `register clinic upgrade establishment review ${clinicRegistrationStatus} ${clinicRegistrationRemark}`,
@@ -1149,21 +1238,21 @@ const Settings = ({ data, setData, onLogout }) => {
       }
     }
 
-    const catalogItems = canManageCatalog ? [
+    const catalogItems = canViewCatalog ? [
       {
         key: 'catalog-complaints',
         searchText: `chief complaints clinical catalog symptoms ${(clinicalCatalog.complaints || []).length} items`,
-        render: () => <SettingItem title="Chief Complaints" subtitle={`${(clinicalCatalog.complaints || []).length} items`} onEdit={() => setClinicalLibraryType('complaint')} />
+        render: () => <SettingItem title="Chief Complaints" subtitle={`${(clinicalCatalog.complaints || []).length} items`} onEdit={canManageCatalog ? () => setClinicalLibraryType('complaint') : undefined} />
       },
       {
         key: 'catalog-drugs',
         searchText: `drug master medicines prescriptions catalog ${(clinicalCatalog.drugs || []).length} items`,
-        render: () => <SettingItem title="Drug Master" subtitle={`${(clinicalCatalog.drugs || []).length} items`} onEdit={() => setClinicalLibraryType('drug')} />
+        render: () => <SettingItem title="Drug Master" subtitle={`${(clinicalCatalog.drugs || []).length} items`} onEdit={canManageCatalog ? () => setClinicalLibraryType('drug') : undefined} />
       },
       {
         key: 'catalog-lab-tests',
         searchText: `lab tests diagnostics catalog ${(clinicalCatalog.labTests || []).length} items`,
-        render: () => <SettingItem title="Lab Tests" subtitle={`${(clinicalCatalog.labTests || []).length} items`} onEdit={() => setClinicalLibraryType('lab_test')} />
+        render: () => <SettingItem title="Lab Tests" subtitle={`${(clinicalCatalog.labTests || []).length} items`} onEdit={canManageCatalog ? () => setClinicalLibraryType('lab_test') : undefined} />
       }
     ] : [];
 
@@ -1206,7 +1295,7 @@ const Settings = ({ data, setData, onLogout }) => {
             searchText: 'delegate daily operations ownership permissions role controls clinic admins doctors manage workspace',
             render: () => (
               <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
-                <p className="type-secondary text-amber-800">Delegate tasks! Use these settings to control exactly what admins and doctors can view and edit.</p>
+                <p className="type-secondary text-amber-800">Core persona access is fixed. Use these controls only for optional admin and doctor add-ons.</p>
               </div>
             )
           },
@@ -1218,7 +1307,7 @@ const Settings = ({ data, setData, onLogout }) => {
         ]
       : [];
 
-    const whatsappItems = canManageCommunication
+    const whatsappItems = canViewCommunication
       ? [
           ...clinicTemplates.map((tpl, idx) => ({
             key: `template-${idx}`,
@@ -1227,11 +1316,11 @@ const Settings = ({ data, setData, onLogout }) => {
               <SettingItem
                 title={tpl.title}
                 subtitle={tpl.text}
-                onEdit={() => openEdit({ title: 'Edit Template', type: 'template', index: idx, initialData: { title: tpl.title, text: tpl.text } })}
+                onEdit={canManageCommunication ? () => openEdit({ title: 'Edit Template', type: 'template', index: idx, initialData: { title: tpl.title, text: tpl.text } }) : undefined}
               />
             )
           })),
-          {
+          ...(canManageCommunication ? [{
             key: 'template-add',
             searchText: 'add new template whatsapp settings communication',
             render: () => renderPrimaryButton({
@@ -1240,11 +1329,11 @@ const Settings = ({ data, setData, onLogout }) => {
               label: 'Add Template',
               className: 'type-secondary w-full mt-1.5 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100'
             })
-          }
+          }] : [])
         ]
       : [];
 
-    const policyItems = canManagePolicies
+    const policyItems = canViewPolicies
       ? [
           ...clinicPolicies.map((pol, idx) => ({
             key: `policy-${idx}`,
@@ -1253,11 +1342,11 @@ const Settings = ({ data, setData, onLogout }) => {
               <SettingItem
                 title={pol.title}
                 subtitle={pol.text}
-                onEdit={() => openEdit({ title: 'Edit Policy', type: 'policy', index: idx, initialData: { title: pol.title, text: pol.text } })}
+                onEdit={canManagePolicies ? () => openEdit({ title: 'Edit Policy', type: 'policy', index: idx, initialData: { title: pol.title, text: pol.text } }) : undefined}
               />
             )
           })),
-          {
+          ...(canManagePolicies ? [{
             key: 'policy-add',
             searchText: 'add new policy clinic policy settings',
             render: () => renderPrimaryButton({
@@ -1266,7 +1355,7 @@ const Settings = ({ data, setData, onLogout }) => {
               label: 'Add Policy',
               className: 'type-secondary w-full mt-1.5 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100'
             })
-          }
+          }] : [])
         ]
       : [];
 
@@ -1274,7 +1363,7 @@ const Settings = ({ data, setData, onLogout }) => {
       { id: 'clinic', title: 'Clinic Settings', icon: Building2, colorClass: 'text-blue-600', items: clinicItems },
       { id: 'clinical-library', title: 'Clinical Catalog', icon: FileText, colorClass: 'text-teal-600', items: catalogItems },
       { id: 'access', title: 'Users & Access', icon: Users, colorClass: 'text-indigo-600', items: accessItems },
-      { id: 'permissions', title: 'Role Permissions', icon: ShieldCheck, colorClass: 'text-amber-600', items: permissionItems },
+      { id: 'permissions', title: 'Access Controls', icon: ShieldCheck, colorClass: 'text-amber-600', items: permissionItems },
       { id: 'whatsapp', title: 'Whatsapp Settings', icon: MessageCircle, colorClass: 'text-green-600', items: whatsappItems },
       { id: 'policy', title: 'Policy Settings', icon: FileText, colorClass: 'text-purple-600', items: policyItems }
     ].filter(section => section.items.length > 0);
@@ -1403,226 +1492,7 @@ const Settings = ({ data, setData, onLogout }) => {
             </div>
           )}
           
-          {/* 1. CLINIC */}
-          {canManageClinicSettings && renderAccordion('clinic', 'Clinic Settings', Building2, 'text-blue-600', 
-            <>
-              <div className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm">
-                <p className="type-label text-slate-600 uppercase">Clinic Code</p>
-                <p className="type-page-title tracking-[0.18em] text-teal-600 mt-1">
-                  {data.clinic?.clinicCode ? `${data.clinic.clinicCode.slice(0, 4)}-${data.clinic.clinicCode.slice(4)}` : 'Not Available'}
-                </p>
-                <p className="type-secondary text-slate-400 mt-1">Share this code with your team for secure sign-in.</p>
-              </div>
-              <SettingItem 
-                title="Clinic Details" 
-                subtitle={(data.clinic?.name || 'My Clinic') + " • " + (data.clinic?.address || 'Set address...')} 
-                onEdit={() => openEdit({ title: 'Edit Clinic Details', type: 'clinic_details', initialData: { name: data.clinic?.name, address: data.clinic?.address } })}
-              />
-              <SettingItem 
-                title="Clinic Schedule" 
-                subtitle={formatClinicScheduleSummary(data.clinic || clinicSchedule)} 
-                onEdit={() => openEdit({
-                  title: 'Edit Clinic Schedule',
-                  type: 'clinic_schedule',
-                  initialData: {
-                    open24Hours: clinicSchedule.open24Hours === true,
-                    morningStart: clinicSchedule.morningStart,
-                    morningEnd: clinicSchedule.morningEnd,
-                    eveningStart: clinicSchedule.eveningStart,
-                    eveningEnd: clinicSchedule.eveningEnd,
-                    appointmentWindowMinutes: clinicSchedule.appointmentWindowMinutes
-                  }
-                })}
-              />
-              <SettingItem
-                title="Billing & Services"
-                subtitle={`Consultation Rs ${Number(data.clinic?.consultationFee || 0).toFixed(2)} - ${(data.clinic?.billingServices || []).filter(service => service.active !== false).length} services configured`}
-                onEdit={() => openEdit({
-                  title: 'Billing & Services',
-                  type: 'billing_services',
-                  initialData: {
-                    consultationFee: String(Number(data.clinic?.consultationFee || 0)),
-                    billingServices: normalizeBillingServiceRows(data.clinic?.billingServices || [])
-                  }
-                })}
-              />
-              <SettingItem
-                title="Consultation Workflow"
-                subtitle={[
-                  canConfigureVitalsWorkflow && data.clinic?.preConsultVitalsEnabled ? 'Vitals before consultation' : '',
-                  data.clinic?.collectConsultationPaymentAtCheckIn === true
-                    ? (data.clinic?.requireFullPaymentBeforeConsultation === true ? 'Full payment before consult' : 'Payment step before consult')
-                    : 'Direct consult after check-in'
-                ].filter(Boolean).join(' - ')}
-                onEdit={() => openEdit({
-                  title: 'Consultation Workflow',
-                  type: 'consultation_workflow',
-                  initialData: {
-                    preConsultVitalsEnabled: data.clinic?.preConsultVitalsEnabled === true,
-                    collectConsultationPaymentAtCheckIn: data.clinic?.collectConsultationPaymentAtCheckIn === true,
-                    requireFullPaymentBeforeConsultation: data.clinic?.requireFullPaymentBeforeConsultation === true
-                  }
-                })}
-              />
-              {canUpgradeSolo && (
-                <SettingItem
-                  title="Register Your Clinic"
-                  subtitle={registrationActionSubtitle}
-                  onEdit={openUpgradeModal}
-                />
-              )}
-            </>
-          )}
-
-          {canManageCatalog && renderAccordion('clinical-library', 'Clinical Catalog', FileText, 'text-teal-600',
-            <>
-              <SettingItem
-                title="Chief Complaints"
-                subtitle={`${(clinicalCatalog.complaints || []).length} items`}
-                onEdit={() => setClinicalLibraryType('complaint')}
-              />
-              <SettingItem
-                title="Drug Master"
-                subtitle={`${(clinicalCatalog.drugs || []).length} items`}
-                onEdit={() => setClinicalLibraryType('drug')}
-              />
-              <SettingItem
-                title="Lab Tests"
-                subtitle={`${(clinicalCatalog.labTests || []).length} items`}
-                onEdit={() => setClinicalLibraryType('lab_test')}
-              />
-            </>
-          )}
-
-          {canManageAccess && renderAccordion('access', 'Users & Access', Users, 'text-indigo-600',
-            <>
-              {accessLoading ? (
-                <div className="type-secondary p-4 text-center text-slate-400">Loading users...</div>
-              ) : accessUsers.length === 0 ? (
-                <div className="type-secondary p-4 text-center text-slate-400">No users found</div>
-              ) : (
-                accessUsers.map(user => {
-                  const isProtectedOwner = user.role === 'super_admin';
-                  return (
-                    <div key={user._id} className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm space-y-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <h4 className="type-card-title text-slate-800 break-words">{user.name}</h4>
-                          <span className={`type-utility px-1.5 py-0.5 rounded-full ${
-                            user.status === 'Inactive'
-                              ? 'bg-slate-100 text-slate-600'
-                              : user.status === 'Pending'
-                                ? 'bg-amber-50 text-amber-700'
-                                : 'bg-teal-50 text-teal-700'
-                          } flex-shrink-0`}>
-                            {user.status || 'Active'}
-                          </span>
-                        </div>
-                        <p className="text-[12px] text-slate-600 break-words mt-0.5">{user.phone || '-'}</p>
-                        <p className="text-[12px] text-slate-600 break-words mt-0.5">{user.email || '-'}</p>
-                        <p className="text-[12px] text-slate-400 break-words mt-0.5">
-                          {roleLabels[user.role] || user.role}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 justify-end">
-                        {!isProtectedOwner && user.status === 'Active' && (
-                          <button
-                            type="button"
-                            onClick={() => openTransferConfirm(user)}
-                            className="type-label px-2.5 py-1.5 rounded-md transition-colors bg-amber-50 text-amber-700 hover:bg-amber-100"
-                          >
-                            Transfer Ownership
-                          </button>
-                        )}
-                        {!isProtectedOwner && (
-                          <button
-                            type="button"
-                            disabled={user.status === 'Inactive'}
-                            onClick={() => handleResetAccessUser(user)}
-                            className={`type-label px-2.5 py-1.5 rounded-md transition-colors ${user.status === 'Inactive' ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
-                          >
-                            {user.status === 'Pending' ? 'Resend Activation' : 'Reset Password'}
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          disabled={isProtectedOwner}
-                          onClick={() => openStatusConfirm(user)}
-                          className={`type-label px-2.5 py-1.5 rounded-md transition-colors ${
-                            isProtectedOwner
-                              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                              : user.status === 'Inactive'
-                                ? 'bg-green-50 text-green-700 hover:bg-green-100'
-                                : 'bg-red-50 text-red-600 hover:bg-red-100'
-                          }`}
-                        >
-                          {isProtectedOwner ? 'Owner' : user.status === 'Inactive' ? 'Reactivate' : 'Deactivate'}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-
-              <button
-                onClick={openAccessModal}
-                className="type-secondary w-full mt-1.5 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100"
-              >
-                <UserPlus size={14} /> Add Admin
-              </button>
-            </>
-          )}
-
-          {canManageRolePermissions && renderAccordion('permissions', 'Role Permissions', ShieldCheck, 'text-amber-600',
-            <div className="space-y-3">
-              <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
-                <p className="type-secondary text-amber-800">Delegate tasks! Use these settings to control exactly what admins and doctors can view and edit.</p>
-              </div>
-              {renderRolePermissionTabs()}
-            </div>
-          )}
-          
-          {/* 2. WHATSAPP SETTINGS (Renamed) */}
-          {canManageCommunication && renderAccordion('whatsapp', 'Whatsapp Settings', MessageCircle, 'text-green-600',
-            <>
-              {clinicTemplates.map((tpl, idx) => (
-                <SettingItem 
-                  key={idx}
-                  title={tpl.title} 
-                  subtitle={tpl.text} 
-                  onEdit={() => openEdit({ title: 'Edit Template', type: 'template', index: idx, initialData: { title: tpl.title, text: tpl.text } })}
-                />
-              ))}
-
-              <button 
-                onClick={() => openEdit({ title: 'Add New Template', type: 'template', initialData: { title: '', text: '' } })}
-                className="type-secondary w-full mt-1.5 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100"
-              >
-                <Plus size={14} /> Add Template
-              </button>
-            </>
-          )}
-
-          {/* 3. POLICIES */}
-          {canManagePolicies && renderAccordion('policy', 'Policy Settings', FileText, 'text-purple-600',
-            <>
-              {clinicPolicies.map((pol, idx) => (
-                <SettingItem 
-                  key={idx}
-                  title={pol.title} 
-                  subtitle={pol.text} 
-                  onEdit={() => openEdit({ title: 'Edit Policy', type: 'policy', index: idx, initialData: { title: pol.title, text: pol.text } })}
-                />
-              ))}
-
-              <button 
-                onClick={() => openEdit({ title: 'Add New Policy', type: 'policy', initialData: { title: '', text: '' } })}
-                className="type-secondary w-full mt-1.5 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100"
-              >
-                <Plus size={14} /> Add Policy
-              </button>
-            </>
-          )}
+          {visibleSections.map(section => renderAccordion(section))}
         </div>
       </div>
 
@@ -1776,6 +1646,31 @@ const Settings = ({ data, setData, onLogout }) => {
 
            {editModal?.type === 'billing_services' && (
              <>
+               {isClinicWorkspace && (
+                 <div>
+                   <label className="type-label block text-slate-600 mb-1 uppercase">Doctor *</label>
+                   <select
+                     className={`type-body w-full p-2 border rounded-lg bg-white outline-none focus:ring-1 ${invalidFields.includes('selectedDoctorId') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
+                     value={formData.selectedDoctorId || ''}
+                     onChange={e => {
+                       const selectedDoctor = clinicDoctors.find(doctor => String(doctor._id) === String(e.target.value));
+                       setFormData({
+                         ...formData,
+                         selectedDoctorId: e.target.value,
+                         consultationFee: String(Number(selectedDoctor?.consultationFee || 0))
+                       });
+                     }}
+                   >
+                     <option value="" disabled>Select doctor</option>
+                     {clinicDoctors.map((doctor) => (
+                       <option key={doctor._id} value={doctor._id}>
+                         {doctor.name}{doctor.department ? ` - ${doctor.department}` : ''}
+                       </option>
+                     ))}
+                   </select>
+                 </div>
+               )}
+
                <div>
                  <label className="type-label block text-slate-600 mb-1 uppercase">Consultation Fee *</label>
                  <input

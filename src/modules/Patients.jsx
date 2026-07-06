@@ -40,6 +40,7 @@ const Patients = ({ data, setData, onLogout, onBookAppointment, bookingNotificat
   const sessionUser = getSessionUser();
   const canManagePatients = hasPermission(sessionUser.permissions, 'patients.create_edit');
   const canManageAppointments = hasPermission(sessionUser.permissions, 'appointments.manage');
+  const canCollectPayments = hasPermission(sessionUser.permissions, 'billing.collect_payment');
 
   const rbacQuery = `&userRole=${userRole}&doctorId=${doctorId}`;
 
@@ -869,7 +870,7 @@ const PatientSkeleton = () => (
               const hasReceipt = hasBillingRecord(appt);
               const doctorName = appt.doctorId?.name || appt.doctorName || 'Doctor not assigned';
               const paymentLabel = paid > 0 && balance > 0 ? 'Collect Balance' : 'Collect Payment';
-              const canOpenBilling = canManageAppointments && isBillingAvailableForAppointment(appt);
+              const canOpenBilling = canCollectPayments && isBillingAvailableForAppointment(appt);
               const hasPendingPayment = canOpenBilling && balance > 0 && billingStatus !== 'Fully Paid';
               const isOpeningBilling = openingBillingAppointmentId === appt._id;
 
@@ -920,7 +921,7 @@ const PatientSkeleton = () => (
                     >
                       <ReceiptText size={13} /> Print Receipt
                     </button>
-                    {canManageAppointments && hasPendingPayment && (
+                    {hasPendingPayment && (
                       <button
                         type="button"
                         onClick={() => openBillingPayment(appt)}

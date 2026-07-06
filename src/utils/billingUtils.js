@@ -15,7 +15,9 @@ export const formatBillingCurrency = (value) => `Rs ${Number(value || 0).toFixed
 export const buildConsultationBillingItem = (clinic = {}, appointment = {}) => {
   const billing = appointment?.billing || {};
   const consultationAmount = normalizeMoney(
-    billing.consultationFee > 0 ? billing.consultationFee : clinic?.consultationFee
+    billing.consultationFee > 0
+      ? billing.consultationFee
+      : appointment?.consultationFeeSnapshot ?? clinic?.consultationFee
   );
 
   return {

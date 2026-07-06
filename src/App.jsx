@@ -23,10 +23,14 @@ import {
   logoutSession,
   maintainActiveSession,
   refreshSession,
-  SESSION_EXPIRED_EVENT
+  SESSION_EXPIRED_EVENT,
+  SESSION_UPDATED_EVENT
 } from './utils/auth';
 import { getAvailableTabs } from './utils/permissions';
 import { APP_VERSION } from './config/appVersion';
+
+const SESSION_PERMISSION_SYNC_INTERVAL_MS = 60 * 1000;
+const SESSION_PERMISSION_SYNC_MIN_GAP_MS = SESSION_PERMISSION_SYNC_INTERVAL_MS;
 
 const getCachedClinic = () => {
   try {
@@ -47,6 +51,7 @@ const App = () => {
   const [userRole, setUserRole] = useState(() => {
     return localStorage.getItem('userRole') || 'admin';
   });
+  const [sessionVersion, setSessionVersion] = useState(0);
   const [authMessage, setAuthMessage] = useState('');
 
   // UNIFIED: Everyone defaults to the Appointments (Queue) module
@@ -66,6 +71,7 @@ const App = () => {
   }));
 
   const savedUser = (() => {
+    void sessionVersion;
     try {
       return JSON.parse(localStorage.getItem('user') || '{}');
     } catch (err) {
@@ -181,24 +187,55 @@ const App = () => {
     const handleSessionExpired = (event) => {
       returnToLogin(event.detail?.message || 'Your session has expired. Please sign in again.');
     };
+    const handleSessionUpdated = (event) => {
+      if (event.detail?.user?.role) {
+        setUserRole(event.detail.user.role);
+      }
+      setSessionVersion(version => version + 1);
+    };
 
     window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
-    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+    window.addEventListener(SESSION_UPDATED_EVENT, handleSessionUpdated);
+    return () => {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+      window.removeEventListener(SESSION_UPDATED_EVENT, handleSessionUpdated);
+    };
   }, []);
 
   useEffect(() => {
     if (authState !== 'authenticated') return undefined;
 
+    let lastPermissionSyncAt = 0;
+
+    const syncSessionPermissions = ({ force = false } = {}) => {
+      if (document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (!force && now - lastPermissionSyncAt < SESSION_PERMISSION_SYNC_MIN_GAP_MS) return;
+      lastPermissionSyncAt = now;
+      refreshSession().catch(() => {});
+    };
+
     const renewOnActivity = () => {
       maintainActiveSession();
     };
 
+    syncSessionPermissions();
+    const permissionSyncTimer = window.setInterval(
+      () => syncSessionPermissions({ force: true }),
+      SESSION_PERMISSION_SYNC_INTERVAL_MS
+    );
+
     window.addEventListener('pointerdown', renewOnActivity, { passive: true });
     window.addEventListener('keydown', renewOnActivity);
+    window.addEventListener('focus', syncSessionPermissions);
+    document.addEventListener('visibilitychange', syncSessionPermissions);
 
     return () => {
+      window.clearInterval(permissionSyncTimer);
       window.removeEventListener('pointerdown', renewOnActivity);
       window.removeEventListener('keydown', renewOnActivity);
+      window.removeEventListener('focus', syncSessionPermissions);
+      document.removeEventListener('visibilitychange', syncSessionPermissions);
     };
   }, [authState]);
 

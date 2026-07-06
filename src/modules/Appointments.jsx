@@ -48,6 +48,7 @@ const Appointments = ({
   // --- ADDED: RBAC HELPER ---
   const canManageAppointments = hasPermission(sessionUser.permissions, 'appointments.manage');
   const canViewAllAppointments = hasPermission(sessionUser.permissions, 'appointments.view_all') || canManageAppointments;
+  const canCollectPayments = hasPermission(sessionUser.permissions, 'billing.collect_payment');
   const isAdmin = canManageAppointments;
 
   // --- NEW: 30-Day Window Boundary ---
@@ -1735,7 +1736,7 @@ const Appointments = ({
     const latestClinicalLabTests = Array.isArray(appt.latestClinicalLabTests) ? appt.latestClinicalLabTests : [];
     const hasLabOrder = latestClinicalLabTests.length > 0 || (Array.isArray(appt.labTests) && appt.labTests.length > 0);
     const hasPrintedPrescription = Boolean(appt.prescriptionPrintedAt || Number(appt.prescriptionPrintCount || 0) > 0);
-    const clinicConsultationFee = Number(data.clinic?.consultationFee || 0);
+    const clinicConsultationFee = Number(appt.consultationFeeSnapshot ?? data.clinic?.consultationFee ?? 0);
     const activeClinicBillingServices = Array.isArray(data.clinic?.billingServices)
       ? data.clinic.billingServices.filter((service) => service.active !== false).length
       : 0;
@@ -1748,7 +1749,7 @@ const Appointments = ({
     const paymentActionLabel = hasOutstandingBalance
       ? (billingAmountPaid > 0 ? 'Collect Balance' : 'Collect Payment')
       : 'Payment Details';
-    const canCollectPayment = (canManageAppointments || (data.clinic?.type === 'Solo' && isTreatingPhysician)) && (
+    const canCollectPayment = canCollectPayments && (
       clinicConsultationFee > 0 ||
       activeClinicBillingServices > 0 ||
       hasBillingItems ||

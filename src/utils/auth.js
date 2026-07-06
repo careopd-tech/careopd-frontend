@@ -13,6 +13,7 @@ let accessToken = '';
 export const getAuthToken = () => accessToken;
 
 export const SESSION_EXPIRED_EVENT = 'careopd:session-expired';
+export const SESSION_UPDATED_EVENT = 'careopd:session-updated';
 
 let sessionExpiryNotified = false;
 let refreshRequest = null;
@@ -137,6 +138,10 @@ export const updateSessionFromAuth = ({ user, token }) => {
     accessToken = token;
     localStorage.removeItem('token');
   }
+
+  window.dispatchEvent(new CustomEvent(SESSION_UPDATED_EVENT, {
+    detail: { user }
+  }));
 };
 
 export const clearSession = () => {
