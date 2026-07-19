@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { History, Loader2, Activity, FileText, Pill, FlaskConical, RotateCw, ChevronDown } from 'lucide-react';
+import { History, Loader2, Activity, FileText, Pill, FlaskConical, RotateCw, ChevronDown, CalendarDays } from 'lucide-react';
 import { getLocalDateString } from '../../utils/dateUtils';
 import { getAppointmentUiStatus, hasClinicalRecordStatus } from '../../utils/appointmentStatus';
+import { getSessionUser } from '../../utils/auth';
+import { hasPermission as hasAppPermission } from '../../utils/permissions';
 
 export const getUiStatus = (appt) => getAppointmentUiStatus(appt, getLocalDateString());
 
@@ -60,6 +62,7 @@ const getClinicalTimeline = (visit = {}) => {
     complaints: visit.complaints,
     diagnosis: visit.diagnosis,
     advice: visit.advice,
+    followUp: visit.followUp,
     medicines: visit.medicines,
     labTests: visit.labTests
   }];
@@ -97,6 +100,23 @@ const getClinicalResultLabel = (resultStatus = '') => {
   if (status === 'Tests Recommended') return 'Completed with Test Advised';
   if (status === 'Completed') return 'Completed';
   return status;
+};
+
+const formatFollowUpDate = (dateString = '') => {
+  if (!dateString) return '';
+  const parsed = new Date(`${dateString}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const getClinicalRestrictionMessages = (visit = {}) => {
+  const restricted = visit.clinicalAccessRestricted || {};
+  return [
+    restricted.prescription ? 'Prescription access is restricted for your role.' : '',
+    restricted.vitals ? 'Vitals access follows the record-vitals workflow permission.' : '',
+    restricted.reports ? 'Reports and lab orders are restricted for your role.' : '',
+    restricted.diagnosis ? 'Diagnosis and complaints access is restricted for your role.' : ''
+  ].filter(Boolean);
 };
 
 const renderClinicalEntry = (entry, index, totalEntries, onRefillRx) => (
@@ -168,6 +188,22 @@ const renderClinicalEntry = (entry, index, totalEntries, onRefillRx) => (
         </div>
       )}
 
+      {(entry.advice || entry.followUp?.required) && (
+        <div>
+          <h4 className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5"><CalendarDays size={12} /> Advice and Follow-Up</h4>
+          <div className="bg-white p-2 rounded-lg border border-slate-100 space-y-2">
+            {entry.advice && <div className="text-[12px] font-medium text-slate-800 italic">{entry.advice}</div>}
+            {entry.followUp?.required && (
+              <div className="text-[12px] text-slate-700">
+                <span className="font-bold text-teal-800">Follow-up after {entry.followUp.afterDays || '--'} days</span>
+                {entry.followUp.date && <span className="text-slate-500"> | {formatFollowUpDate(entry.followUp.date)}</span>}
+                {entry.followUp.note && <div className="mt-0.5 italic">{entry.followUp.note}</div>}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {onRefillRx && entry.medicines && entry.medicines.length > 0 && index === 0 && (
         <button type="button" onClick={() => onRefillRx(entry.medicines)} className="w-full py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[12px] rounded-lg transition-colors flex justify-center items-center gap-1.5 mt-2 border border-blue-200">
           <RotateCw size={12} /> Repeat Medicines from Latest Record
@@ -188,6 +224,12 @@ const PatientHistoryList = ({
 }) => {
   const loggedInDoctorId = localStorage.getItem('doctorId');
   const loggedInRole = localStorage.getItem('userRole') || 'admin';
+  const sessionUser = getSessionUser();
+  const canViewPrescriptions = hasAppPermission(sessionUser.permissions, 'documents.view_prescription');
+  const canViewVitals = hasAppPermission(sessionUser.permissions, 'appointments.record_vitals') || hasAppPermission(sessionUser.permissions, 'appointments.consult_own');
+  const canViewReports = hasAppPermission(sessionUser.permissions, 'clinical.view_reports');
+  const canViewDiagnosis = hasAppPermission(sessionUser.permissions, 'clinical.view_diagnosis');
+  const canViewClinicalHistory = loggedInRole !== 'doctor' || canViewPrescriptions || canViewVitals || canViewReports || canViewDiagnosis;
   const [expandedId, setExpandedId] = useState(null);
   const [fetchingId, setFetchingId] = useState(null);
 
@@ -220,6 +262,7 @@ const PatientHistoryList = ({
           const visitDocId = String(visit.doctorId?._id || visit.doctorId);
           let hasPermission = false;
           if (loggedInRole === 'doctor') hasPermission = true;
+          else if (canViewClinicalHistory) hasPermission = true;
           else if (loggedInDoctorId) hasPermission = visitDocId === String(loggedInDoctorId);
 
           const isOwnConsultation = loggedInDoctorId ? (visitDocId === String(loggedInDoctorId)) : false;
@@ -232,7 +275,7 @@ const PatientHistoryList = ({
               onClick={() => hasPermission && canOpenVisit && onVisitClick && onVisitClick(visit)}
               disabled={!hasPermission || !canOpenVisit}
               className={`flex-none w-32 p-2 rounded-xl shadow-sm transition-all flex flex-col items-start justify-center gap-1 border ${isLatest ? 'border-teal-500 bg-teal-50/20' : 'border-slate-200 bg-white'} ${hasPermission && canOpenVisit ? 'hover:shadow-md hover:border-teal-400 cursor-pointer' : 'cursor-not-allowed opacity-75'}`}
-              title={!hasPermission ? 'HIPAA Restriction: You are not the attending doctor for this visit.' : (!canOpenVisit ? 'No clinical record exists for missed or cancelled visits.' : 'View details')}
+              title={!hasPermission ? 'HIPAA Restriction: clinical history access is not enabled for your role.' : (!canOpenVisit ? 'No clinical record exists for missed or cancelled visits.' : 'View details')}
             >
               <span className={`text-[12px] font-bold ${isLatest ? 'text-teal-800' : 'text-slate-700'}`}>{visit.date}</span>
               {appointmentDisplayId && (
@@ -290,10 +333,12 @@ const PatientHistoryList = ({
 
         let hasPermission = false;
         if (loggedInRole === 'doctor') hasPermission = true;
+        else if (canViewClinicalHistory) hasPermission = true;
         else if (loggedInDoctorId) hasPermission = isOwnConsultation;
 
         const hasValidStatus = hasClinicalRecord(uiStatus);
         const canExpand = hasPermission;
+        const clinicalRestrictionMessages = getClinicalRestrictionMessages(visit);
 
         return (
           <div key={visit._id || idx} className={embeddedMarker ? 'group' : 'relative flex flex-col md:flex-row items-start justify-between md:justify-normal md:odd:flex-row-reverse group'}>
@@ -309,7 +354,7 @@ const PatientHistoryList = ({
                 onClick={() => handleAccordionClick(visit, hasPermission)}
                 disabled={!canExpand || isFetching}
                 className={`w-full px-3 py-2.5 text-left focus:outline-none flex items-center justify-between gap-3 ${canExpand ? 'cursor-pointer hover:bg-slate-50' : 'cursor-default'}`}
-                title={!hasPermission ? 'HIPAA Restriction: You are not the attending doctor.' : (!hasValidStatus ? 'No clinical record for this appointment.' : 'Click to view clinical notes')}
+                title={!hasPermission ? 'HIPAA Restriction: clinical history access is not enabled for your role.' : (!hasValidStatus ? 'No clinical record for this appointment.' : 'Click to view clinical notes')}
               >
                 <span className={`text-[13px] font-bold truncate ${canExpand ? 'text-slate-800' : 'text-slate-600'}`}>
                   {visit.time} | {visit.date}
@@ -338,6 +383,14 @@ const PatientHistoryList = ({
                   {hasValidStatus && hasMultipleClinicalEntries && (
                     <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-[12px] font-medium text-teal-800">
                       This appointment contains the initial visit and {clinicalUpdateCount} clinical update{clinicalUpdateCount > 1 ? 's' : ''}.
+                    </div>
+                  )}
+
+                  {clinicalRestrictionMessages.length > 0 && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] font-medium text-amber-800 space-y-1">
+                      {clinicalRestrictionMessages.map(message => (
+                        <p key={message}>{message}</p>
+                      ))}
                     </div>
                   )}
 

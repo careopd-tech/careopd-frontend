@@ -49,6 +49,9 @@ const Appointments = ({
   const canManageAppointments = hasPermission(sessionUser.permissions, 'appointments.manage');
   const canViewAllAppointments = hasPermission(sessionUser.permissions, 'appointments.view_all') || canManageAppointments;
   const canCollectPayments = hasPermission(sessionUser.permissions, 'billing.collect_payment');
+  const canViewPrescriptions = hasPermission(sessionUser.permissions, 'documents.view_prescription');
+  const canViewReports = hasPermission(sessionUser.permissions, 'clinical.view_reports');
+  const canRecordVitals = hasPermission(sessionUser.permissions, 'appointments.record_vitals') || hasPermission(sessionUser.permissions, 'appointments.consult_own');
   const isAdmin = canManageAppointments;
 
   // --- NEW: 30-Day Window Boundary ---
@@ -251,7 +254,7 @@ const Appointments = ({
             ? fetch(`${API_BASE_URL}/api/doctors/${clinicId}`).then(res => (res.ok ? res.json() : []))
             : Promise.resolve(null),
           shouldLoadCalendar
-            ? fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments&date=${safeCurrentDate}${rbacQuery}`).then(res => (res.ok ? res.json() : []))
+            ? authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments&date=${safeCurrentDate}${rbacQuery}`).then(res => (res.ok ? res.json() : []))
             : Promise.resolve(null),
           shouldLoadClinic
             ? fetch(`${API_BASE_URL}/api/clinics/${clinicId}`).then(res => (res.ok ? res.json() : null))
@@ -383,6 +386,15 @@ const Appointments = ({
       ? draftOverride
       : (appointment?.consultationDraft || appointment?.followUpPrefill || {});
     const sanitizeText = (value) => String(value || '').trim();
+    const defaultCurrentMed = {
+      name: '',
+      route: 'Oral',
+      quantity: '1',
+      frequency: 'Two times a day',
+      timing: 'After Meal',
+      duration: '5 Days',
+      instructions: ''
+    };
     const normalizeMedicine = (medicine = {}) => ({
       name: sanitizeText(medicine.name),
       route: sanitizeText(medicine.route),
@@ -392,6 +404,19 @@ const Appointments = ({
       duration: sanitizeText(medicine.duration),
       instructions: sanitizeText(medicine.instructions)
     });
+    const normalizeFollowUp = (followUp = {}) => {
+      const required = followUp?.required === true;
+      const parsedDays = Number(followUp?.afterDays);
+      const afterDays = required && Number.isFinite(parsedDays) && parsedDays > 0
+        ? String(Math.min(Math.round(parsedDays), 365))
+        : '';
+      return {
+        required,
+        afterDays,
+        date: required ? sanitizeText(followUp?.date).slice(0, 10) : '',
+        note: required ? sanitizeText(followUp?.note).slice(0, 300) : ''
+      };
+    };
 
     return {
       vitals: {
@@ -410,7 +435,7 @@ const Appointments = ({
       medicines: Array.isArray(sourceDraft.medicines)
         ? sourceDraft.medicines.map(normalizeMedicine).filter((medicine) => Object.values(medicine).some(Boolean))
         : [],
-      currentMed: normalizeMedicine(sourceDraft.currentMed || {}),
+      currentMed: normalizeMedicine({ ...defaultCurrentMed, ...(sourceDraft.currentMed || {}) }),
       isCustomRegimen: sourceDraft.isCustomRegimen === true,
       isMedSelected: sourceDraft.isMedSelected === true,
       labTests: Array.isArray(sourceDraft.labTests)
@@ -418,7 +443,8 @@ const Appointments = ({
           .map((test) => ({ name: sanitizeText(typeof test === 'string' ? test : test?.name) }))
           .filter((test) => test.name)
         : [],
-      labInputText: sanitizeText(sourceDraft.labInputText)
+      labInputText: sanitizeText(sourceDraft.labInputText),
+      followUp: normalizeFollowUp(sourceDraft.followUp)
     };
   }, []);
 
@@ -445,6 +471,36 @@ const Appointments = ({
       patientId: patientRef || mergedAppt.patientId || { name: 'Unknown Patient' }
     };
   }, [data.patients, searchResults]);
+
+  const patchAppointmentLocally = useCallback((appt, overrides = {}) => {
+    const appointmentId = getEntityId(overrides?._id || appt?._id);
+    if (!appointmentId) return null;
+
+    const patchedAppointment = buildConsultationAppointment(appt, overrides);
+    const patchList = (items = []) => items.map((item) => (
+      getEntityId(item) === appointmentId
+        ? buildConsultationAppointment(item, patchedAppointment)
+        : item
+    ));
+
+    const currentSections = sectionsRef.current || {};
+    const nextSections = {
+      today: patchList(currentSections.today),
+      upcoming: patchList(currentSections.upcoming),
+      previous: patchList(currentSections.previous)
+    };
+
+    sectionsRef.current = nextSections;
+    setSections(nextSections);
+    setSearchResults((currentResults) => patchList(currentResults));
+    setData((prev) => ({
+      ...prev,
+      appointments: patchList(prev.appointments || []),
+      cachedSections: nextSections,
+      calendar30: patchList(prev.calendar30 || [])
+    }));
+    return patchedAppointment;
+  }, [buildConsultationAppointment, setData]);
 
   const getTodayAppointmentPhase = (appt) => {
     if (appt.date !== safeCurrentDate || appt.checkedInAt) return '';
@@ -541,7 +597,9 @@ const Appointments = ({
         { key: 'appointments calendar', url: `${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments&date=${safeCurrentDate}${rbacQuery}` }
       ];
 
-      const dashboardPromise = Promise.all(dashboardRequests.map(req => fetch(req.url))).then(async ([snapshotRes, docsRes, patsRes, calRes]) => {
+      const dashboardPromise = Promise.all(dashboardRequests.map(req => (
+        req.key.startsWith('appointments') ? authFetch(req.url) : fetch(req.url)
+      ))).then(async ([snapshotRes, docsRes, patsRes, calRes]) => {
         const dashboardResponses = [snapshotRes, docsRes, patsRes, calRes];
         const failedIndex = dashboardResponses.findIndex(res => !res.ok);
 
@@ -585,7 +643,7 @@ const Appointments = ({
               const currentPages = Math.ceil((currentList.length || 1) / 20);
               const limit = Math.max(currentPages * 20, 20);
 
-              const res = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=batch&group=${group}&page=1&limit=${limit}&date=${safeCurrentDate}${rbacQuery}`);
+              const res = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=batch&group=${group}&page=1&limit=${limit}&date=${safeCurrentDate}${rbacQuery}`);
               if (res.ok) {
                 let list = await res.json();
                 if (group === 'previous') {
@@ -622,7 +680,7 @@ const Appointments = ({
         const currentPagesLoaded = isNewSearch ? 1 : searchPageRef.current;
         const limitToFetch = Math.max(20, currentPagesLoaded * 20);
 
-        const searchPromise = fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=search&query=${currentQuery}&page=1&limit=${limitToFetch}${rbacQuery}`)
+        const searchPromise = authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=search&query=${currentQuery}&page=1&limit=${limitToFetch}${rbacQuery}`)
           .then(res => res.json())
           .then(data => {
             const results = Array.isArray(data) ? data : (data.data || []);
@@ -722,7 +780,7 @@ const Appointments = ({
         limitToFetch = 20;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=batch&group=${group}&page=${pageToFetch}&limit=${limitToFetch}&date=${safeCurrentDate}${rbacQuery}`);
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=batch&group=${group}&page=${pageToFetch}&limit=${limitToFetch}&date=${safeCurrentDate}${rbacQuery}`);
       if (response.ok) {
         const newItems = await response.json();
 
@@ -765,7 +823,7 @@ const Appointments = ({
     setIsSearchLoadingMore(true);
     try {
       const nextPage = searchPage + 1;
-      const response = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=search&query=${searchQuery}&page=${nextPage}&limit=20${rbacQuery}`);
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=search&query=${searchQuery}&page=${nextPage}&limit=20${rbacQuery}`);
       const data = await response.json();
       const newItems = Array.isArray(data) ? data : (data.data || []);
 
@@ -1143,6 +1201,9 @@ const Appointments = ({
     setConsultationDraft(draft);
     if (!isConsultationPadOpen || !activeConsultationAppt?._id) return;
 
+    const draftSnapshot = serializeConsultationDraft(activeConsultationAppt, draft);
+    if (draftSnapshot === initialConsultationDraftSnapshotRef.current) return;
+
     if (consultationDraftSaveTimeoutRef.current) {
       window.clearTimeout(consultationDraftSaveTimeoutRef.current);
     }
@@ -1151,7 +1212,7 @@ const Appointments = ({
         // Explicit save on exit surfaces an error; background autosave should not interrupt care entry.
       });
     }, 400);
-  }, [activeConsultationAppt?._id, isConsultationPadOpen, persistConsultationDraft]);
+  }, [activeConsultationAppt, isConsultationPadOpen, persistConsultationDraft, serializeConsultationDraft]);
 
   const handleStartConsultation = async (appt) => {
     setProcessingAppointmentId(appt._id);
@@ -1167,8 +1228,8 @@ const Appointments = ({
         return showNotification(result.error || 'Failed to start consultation.', 'error');
       }
 
-      openConsultation(buildConsultationAppointment(appt, result.appointment));
-      await fetchAllData(true);
+      const patchedAppointment = patchAppointmentLocally(appt, result.appointment);
+      openConsultation(patchedAppointment || buildConsultationAppointment(appt, result.appointment));
     } catch (err) {
       showNotification('Failed to start consultation.', 'error');
     } finally {
@@ -1190,8 +1251,8 @@ const Appointments = ({
         return showNotification(result.error || 'Failed to open report review.', 'error');
       }
 
-      openConsultation(buildConsultationAppointment(appt, result.appointment));
-      await fetchAllData(true);
+      const patchedAppointment = patchAppointmentLocally(appt, result.appointment);
+      openConsultation(patchedAppointment || buildConsultationAppointment(appt, result.appointment));
     } catch (err) {
       showNotification('Failed to open report review.', 'error');
     } finally {
@@ -1413,7 +1474,7 @@ const Appointments = ({
 
     try {
       const patientId = getEntityId(appt.patientId);
-      const response = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=history&patientId=${patientId}${rbacQuery}`);
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=history&patientId=${patientId}${rbacQuery}`);
       const result = await response.json().catch(() => ([]));
       if (!response.ok) {
         return setHistoryError('Failed to load patient history.');
@@ -1436,7 +1497,8 @@ const Appointments = ({
         labTests: Array.isArray(appt.latestClinicalLabTests) ? appt.latestClinicalLabTests : (Array.isArray(appt.labTests) ? appt.labTests : []),
         complaints: appt.complaints || '',
         diagnosis: appt.diagnosis || '',
-        advice: appt.advice || ''
+        advice: appt.advice || '',
+        followUp: appt.followUp || null
       }
     };
 
@@ -1840,13 +1902,13 @@ const Appointments = ({
     let primaryAction = null;
     let overflowActions = [];
     const clinicianOverflowActions = [
-      ...(data.clinic?.type === 'Clinic' ? [actions.viewVitals] : []),
-      actions.vitals
-    ];
+      ...(data.clinic?.type === 'Clinic' && canRecordVitals ? [actions.viewVitals] : []),
+      canRecordVitals ? actions.vitals : null
+    ].filter(Boolean);
     const closedLoopOverflowActions = [
       canCollectPayment ? actions.collectPayment : null,
-      actions.printPrescription,
-      hasLabOrder ? actions.printLabOrder : null,
+      canViewPrescriptions ? actions.printPrescription : null,
+      canViewReports && hasLabOrder ? actions.printLabOrder : null,
       hasReceipt ? actions.printReceipt : null
     ].filter(Boolean);
     const billingOverflowActions = [
@@ -1883,7 +1945,7 @@ const Appointments = ({
         if (paymentRequiredBeforeConsult && !isCheckInPaymentGateOpen && canCollectPayment) {
           primaryAction = actions.collectPayment;
           overflowActions = [...(hasReceipt ? [actions.printReceipt] : []), actions.leftEarly];
-        } else if (vitalsRequiredBeforeConsult) {
+        } else if (vitalsRequiredBeforeConsult && canRecordVitals) {
           primaryAction = actions.vitals;
           overflowActions = [
             ...billingOverflowActions,
@@ -1894,7 +1956,7 @@ const Appointments = ({
           overflowActions = isCheckedIn
             ? [...clinicianOverflowActions, ...billingOverflowActions, actions.leftEarly]
             : [...clinicianOverflowActions, ...billingOverflowActions];
-        } else if (canManageAppointments && vitalsRequiredBeforeConsult && isCheckedIn) {
+        } else if (canManageAppointments && canRecordVitals && vitalsRequiredBeforeConsult && isCheckedIn) {
           primaryAction = actions.vitals;
           overflowActions = [...billingOverflowActions, actions.leftEarly];
         } else if (canManageAppointments && isCheckedIn) {

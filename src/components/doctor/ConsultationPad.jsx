@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import PatientHistoryList, { filterValidHistory, getUiStatus, getStatusStyling } from '../ui/PatientHistoryList';
-import { Plus, Trash2, FileText, Activity, Pill, CheckCircle, Loader2, FlaskConical, X, History, Search, ChevronRight, Check, ChevronDown, RotateCw } from 'lucide-react';
+import { Plus, Trash2, FileText, Activity, Pill, CheckCircle, Loader2, FlaskConical, X, History, Search, ChevronRight, Check, ChevronDown, RotateCw, CalendarDays } from 'lucide-react';
 import API_BASE_URL from '../../config';
+import { authFetch } from '../../utils/auth';
 import { getQuickCatalogItems, groupCatalogByCategory, isActiveCatalogItem } from '../../utils/clinicalCatalog';
 
 // --- RX DICTIONARIES ---
@@ -17,6 +18,45 @@ const DEFAULT_MEDICATION_DRAFT = {
   timing: 'After Meal',
   duration: '5 Days',
   instructions: ''
+};
+const DEFAULT_FOLLOW_UP_DRAFT = {
+  required: false,
+  afterDays: '',
+  date: '',
+  note: ''
+};
+const FOLLOW_UP_DAY_OPTIONS = [3, 5, 7, 15, 30];
+
+const getFollowUpDate = (sourceDate, days) => {
+  const parsedDays = Number(days);
+  if (!Number.isFinite(parsedDays) || parsedDays <= 0) return '';
+  const base = /^\d{4}-\d{2}-\d{2}$/.test(String(sourceDate || ''))
+    ? new Date(`${sourceDate}T00:00:00`)
+    : new Date();
+  if (Number.isNaN(base.getTime())) return '';
+  base.setDate(base.getDate() + Math.round(parsedDays));
+  return base.toISOString().slice(0, 10);
+};
+
+const formatFollowUpDate = (dateString = '') => {
+  if (!dateString) return '';
+  const parsed = new Date(`${dateString}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const normalizeFollowUp = (followUp = {}, appointmentDate = '') => {
+  const required = followUp?.required === true;
+  const parsedDays = Number(followUp?.afterDays);
+  const afterDays = required && Number.isFinite(parsedDays) && parsedDays > 0
+    ? String(Math.min(Math.round(parsedDays), 365))
+    : '';
+  return {
+    required,
+    afterDays,
+    date: required && afterDays ? getFollowUpDate(appointmentDate, afterDays) : '',
+    note: required ? String(followUp?.note || '').slice(0, 300) : ''
+  };
 };
 
 const withDraftItemIds = (items = [], prefix = 'item') => (
@@ -45,7 +85,8 @@ const getInitialConsultationState = (appointment = {}) => {
     isCustomRegimen: savedDraft.isCustomRegimen === true,
     labTests: withDraftItemIds(savedDraft.labTests, 'lab'),
     labInputText: savedDraft.labInputText || '',
-    isMedSelected: savedDraft.isMedSelected === true
+    isMedSelected: savedDraft.isMedSelected === true,
+    followUp: normalizeFollowUp(savedDraft.followUp, appointment?.date)
   };
 };
 
@@ -89,6 +130,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
 
   const [labTests, setLabTests] = useState(initialState.labTests);
   const [labInputText, setLabInputText] = useState(initialState.labInputText);
+  const [followUp, setFollowUp] = useState(initialState.followUp);
 
   const [showRxSuggestions, setShowRxSuggestions] = useState(false);
   const [isMedSelected, setIsMedSelected] = useState(initialState.isMedSelected);
@@ -151,6 +193,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
     setIsCustomRegimen(nextState.isCustomRegimen);
     setLabTests(nextState.labTests);
     setLabInputText(nextState.labInputText);
+    setFollowUp(nextState.followUp);
     setIsMedSelected(nextState.isMedSelected);
     setShowRxSuggestions(false);
     setActiveSheet(null);
@@ -167,7 +210,7 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
       setIsHistoryLoading(true);
       const clinicId = localStorage.getItem('clinicId');
       const pId = activeAppt.patientId._id || activeAppt.patientId;
-      fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=history&patientId=${pId}`)
+      authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=history&patientId=${pId}`)
         .then(res => res.json())
         .then(data => {
           const validHistory = filterValidHistory(data, activeAppt._id);
@@ -191,9 +234,10 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
       isCustomRegimen,
       isMedSelected,
       labTests,
-      labInputText
+      labInputText,
+      followUp
     });
-  }, [vitals, complaintsList, complaintInputText, clinicalNotes, medicines, currentMed, isCustomRegimen, isMedSelected, labTests, labInputText, onDraftChange]);
+  }, [vitals, complaintsList, complaintInputText, clinicalNotes, medicines, currentMed, isCustomRegimen, isMedSelected, labTests, labInputText, followUp, onDraftChange]);
 
   // --- HANDLERS ---
   const handleRefillRx = (pastMeds) => {
@@ -258,8 +302,33 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
     setIsMedSelected(false); setShowRxSuggestions(false); setIsCustomRegimen(false);
   };
 
+  const updateFollowUp = (patch) => {
+    setFollowUp((current) => normalizeFollowUp({ ...current, ...patch }, activeAppt?.date));
+  };
+
+  const handleFollowUpToggle = (checked) => {
+    if (!checked) {
+      setFollowUp(DEFAULT_FOLLOW_UP_DRAFT);
+      return;
+    }
+    updateFollowUp({ required: true, afterDays: followUp.afterDays || '7' });
+  };
+
+  const handleFollowUpDaysChange = (value) => {
+    const digitsOnly = String(value || '').replace(/\D/g, '').slice(0, 3);
+    updateFollowUp({ required: digitsOnly !== '', afterDays: digitsOnly });
+  };
+
   const handleSave = (finalStatus) => {
-    const prescriptionData = { vitals, complaints: complaintsList.join(', '), diagnosis: clinicalNotes.diagnosis, advice: clinicalNotes.advice, medicines, labTests };
+    const prescriptionData = {
+      vitals,
+      complaints: complaintsList.join(', '),
+      diagnosis: clinicalNotes.diagnosis,
+      advice: clinicalNotes.advice,
+      followUp: normalizeFollowUp(followUp, activeAppt?.date),
+      medicines,
+      labTests
+    };
     onComplete(activeAppt._id, prescriptionData, finalStatus);
   };
 
@@ -336,7 +405,8 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
     clinicalNotes.diagnosis.trim() !== '' ||
     medicines.length > 0 ||
     labTests.length > 0 ||
-    clinicalNotes.advice.trim() !== '';
+    clinicalNotes.advice.trim() !== '' ||
+    followUp.required === true;
 
   // --- MAIN RENDER ---
   return (
@@ -726,6 +796,67 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
             <label className="block text-[12px] font-bold uppercase tracking-wider text-teal-700 mb-1">General Advice</label>
             <input type="text" placeholder="e.g. Drink plenty of warm water..." className="w-full p-2 border border-slate-200 rounded-lg text-[12px] bg-slate-50 outline-none focus:border-teal-400 focus:bg-white" value={clinicalNotes.advice} onChange={e => setClinicalNotes({ ...clinicalNotes, advice: e.target.value })} />
           </section>
+
+          {/* FOLLOW-UP */}
+          <section className="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <label className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wider text-teal-700">
+                <CalendarDays size={14} />
+                Follow-Up
+              </label>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={followUp.required}
+                  onChange={(e) => handleFollowUpToggle(e.target.checked)}
+                />
+                <div className="w-10 h-5 bg-slate-200 rounded-full peer peer-checked:bg-teal-600 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+              </label>
+            </div>
+
+            {followUp.required && (
+              <div className="mt-3 space-y-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {FOLLOW_UP_DAY_OPTIONS.map((days) => (
+                    <button
+                      type="button"
+                      key={days}
+                      onClick={() => updateFollowUp({ required: true, afterDays: String(days) })}
+                      className={`px-2.5 py-1 rounded-lg text-[12px] font-bold border transition-colors ${String(followUp.afterDays) === String(days)
+                          ? 'bg-teal-100 text-teal-800 border-teal-200'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                    >
+                      {days}d
+                    </button>
+                  ))}
+                  <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-50 border border-slate-200 rounded-lg">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className="w-10 bg-transparent outline-none text-[12px] font-bold text-slate-800 text-center"
+                      value={followUp.afterDays}
+                      onChange={(e) => handleFollowUpDaysChange(e.target.value)}
+                    />
+                    <span className="text-[12px] text-slate-500 font-medium">days</span>
+                  </div>
+                </div>
+                {followUp.date && (
+                  <div className="text-[12px] text-slate-600">
+                    Review date: <span className="font-bold text-slate-800">{formatFollowUpDate(followUp.date)}</span>
+                  </div>
+                )}
+                <input
+                  type="text"
+                  placeholder="Follow-up note"
+                  className="w-full p-2 border border-slate-200 rounded-lg text-[12px] bg-slate-50 outline-none focus:border-teal-400 focus:bg-white"
+                  value={followUp.note}
+                  onChange={(e) => updateFollowUp({ note: e.target.value })}
+                />
+              </div>
+            )}
+          </section>
         </div>
       </div>
 
@@ -849,8 +980,15 @@ const ConsultationPad = ({ activeAppt, onComplete, onDraftChange, isSubmitting, 
               {/* 6. Advice */}
               <div>
                 <h4 className="text-[12px] font-bold text-slate-400 uppercase tracking-wider mb-2">General Advice</h4>
-                <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
+                <div className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm space-y-2">
                   <p className="text-[12px] font-medium text-slate-800 italic">{selectedPastVisit.advice || '--'}</p>
+                  {selectedPastVisit.followUp?.required && (
+                    <div className="pt-2 border-t border-slate-100 text-[12px] text-slate-700">
+                      <div className="font-bold text-teal-800 flex items-center gap-1.5"><CalendarDays size={12} /> Follow-up after {selectedPastVisit.followUp.afterDays || '--'} days</div>
+                      {selectedPastVisit.followUp.date && <div className="mt-0.5">Review date: {formatFollowUpDate(selectedPastVisit.followUp.date)}</div>}
+                      {selectedPastVisit.followUp.note && <div className="mt-0.5 italic">{selectedPastVisit.followUp.note}</div>}
+                    </div>
+                  )}
                 </div>
               </div>
 

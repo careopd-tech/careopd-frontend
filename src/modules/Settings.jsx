@@ -126,8 +126,10 @@ const Settings = ({ data, setData, onLogout }) => {
   });
 
   const savedUser = getSessionUser();
+  const ownerUserId = savedUser.ownerUserId || data.clinic?.ownerUserId || '';
+  const isSuperAdminOwner = savedUser.accountRole === 'super_admin' && (!ownerUserId || String(ownerUserId) === String(savedUser._id));
   const canManageAccess = hasPermission(savedUser.permissions, 'settings.users_access.manage');
-  const canManageRolePermissions = hasPermission(savedUser.permissions, 'settings.access_controls.manage');
+  const canManageRolePermissions = isSuperAdminOwner && hasPermission(savedUser.permissions, 'settings.access_controls.manage');
   const canManageClinicProfile = hasPermission(savedUser.permissions, 'settings.clinic_profile.edit');
   const canManageSchedule = hasPermission(savedUser.permissions, 'settings.schedule.edit');
   const canViewSchedule = canManageSchedule || hasPermission(savedUser.permissions, 'settings.schedule.view');
@@ -145,8 +147,7 @@ const Settings = ({ data, setData, onLogout }) => {
   const canConfigureVitalsWorkflow = canManageWorkflow && data.clinic?.type === 'Clinic';
   const clinicDoctors = Array.isArray(data.doctors) ? data.doctors : [];
   const isClinicWorkspace = data.clinic?.type === 'Clinic';
-  const ownerUserId = savedUser.ownerUserId || data.clinic?.ownerUserId || '';
-  const canTransferOwnership = savedUser.accountRole === 'super_admin' && (!ownerUserId || String(ownerUserId) === String(savedUser._id));
+  const canTransferOwnership = isSuperAdminOwner;
 
   useEffect(() => {
     localStorage.setItem('settings_notifications', JSON.stringify(notificationStack.slice(0, 30)));
@@ -946,8 +947,16 @@ const Settings = ({ data, setData, onLogout }) => {
       {
         title: 'Access',
         items: [
-          { key: 'settings.users_access.manage', label: 'Manage users and access' },
-          { key: 'settings.access_controls.manage', label: 'Configure access controls' }
+          { key: 'appointments.record_vitals', label: 'Record and view vitals' },
+          { key: 'settings.users_access.manage', label: 'Manage users and access' }
+        ]
+      },
+      {
+        title: 'Clinical Documents',
+        items: [
+          { key: 'documents.view_prescription', label: 'View prescriptions' },
+          { key: 'clinical.view_reports', label: 'View reports and lab orders' },
+          { key: 'clinical.view_diagnosis', label: 'View diagnosis and complaints' }
         ]
       }
     ],
@@ -964,9 +973,7 @@ const Settings = ({ data, setData, onLogout }) => {
         items: [
           { key: 'settings.schedule.edit', label: 'Edit clinic schedule' },
           { key: 'settings.billing_services.edit', label: 'Edit billing and services' },
-          { key: 'settings.workflow.edit', label: 'Edit appointment workflow' },
-          { key: 'settings.communication.edit', label: 'Edit WhatsApp templates' },
-          { key: 'settings.policies.edit', label: 'Edit policies' }
+          { key: 'settings.workflow.edit', label: 'Edit appointment workflow' }
         ]
       }
     ]
@@ -1295,7 +1302,7 @@ const Settings = ({ data, setData, onLogout }) => {
             searchText: 'delegate daily operations ownership permissions role controls clinic admins doctors manage workspace',
             render: () => (
               <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
-                <p className="type-secondary text-amber-800">Core persona access is fixed. Use these controls only for optional admin and doctor add-ons.</p>
+                <p className="type-secondary text-amber-800">Only the Super Admin can configure role access. Use these controls for optional admin and doctor add-ons.</p>
               </div>
             )
           },

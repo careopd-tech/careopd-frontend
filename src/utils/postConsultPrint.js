@@ -11,6 +11,13 @@ const renderChipList = (items = []) => (
     : '<p class="muted">None recorded</p>'
 );
 
+const formatDate = (dateString = '') => {
+  if (!dateString) return '';
+  const parsed = new Date(`${dateString}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return String(dateString || '');
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
 const buildPrintableHtml = (title, content) => `<!doctype html>
 <html>
   <head>
@@ -256,6 +263,14 @@ const buildHeader = ({ clinic = {}, appointment = {}, patient = {}, doctor = {} 
 export const printPrescriptionDocument = ({ clinic, appointment, patient, doctor, prescription }) => {
   const medicines = Array.isArray(prescription?.medicines) ? prescription.medicines : [];
   if (medicines.length === 0) return false;
+  const followUp = prescription?.followUp || {};
+  const followUpLabel = followUp.required
+    ? [
+      followUp.afterDays ? `After ${followUp.afterDays} days` : 'Required',
+      followUp.date ? formatDate(followUp.date) : '',
+      followUp.note || ''
+    ].filter(Boolean).join(' | ')
+    : '';
 
   const content = `
     ${buildHeader({ clinic, appointment, patient, doctor })}
@@ -267,6 +282,10 @@ export const printPrescriptionDocument = ({ clinic, appointment, patient, doctor
       <div class="value">${escapeHtml(prescription?.diagnosis || '--')}</div>
       <div class="label" style="margin-top:12px;">Advice</div>
       <div class="value">${escapeHtml(prescription?.advice || '--')}</div>
+      ${followUpLabel ? `
+        <div class="label" style="margin-top:12px;">Follow-Up</div>
+        <div class="value">${escapeHtml(followUpLabel)}</div>
+      ` : ''}
     </div>
     <h2>Prescription</h2>
     <table>

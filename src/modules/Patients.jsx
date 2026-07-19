@@ -63,8 +63,7 @@ const Patients = ({ data, setData, onLogout, onBookAppointment, bookingNotificat
   const [selectedPatientDetail, setSelectedPatientDetail] = useState(null);
   const [activePatientTab, setActivePatientTab] = useState('profile');
   const [editingProfileField, setEditingProfileField] = useState('');
-  const [profileDraftValue, setProfileDraftValue] = useState('');
-  const [profileNameDraft, setProfileNameDraft] = useState({ firstName: '', middleName: '', lastName: '' });
+  const [profileEditDraft, setProfileEditDraft] = useState({});
   const [savingProfileField, setSavingProfileField] = useState('');
   const [profileInlineError, setProfileInlineError] = useState('');
   const hasActiveFilters = typeFilter !== '' || dateRange.from || dateRange.to || searchQuery !== '';
@@ -375,7 +374,7 @@ const PatientSkeleton = () => (
   };
 
   const fetchPatientHistory = async (patientId) => {
-    const res = await fetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=history&patientId=${patientId}${rbacQuery}`);
+    const res = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=history&patientId=${patientId}${rbacQuery}`);
     const data = await res.json().catch(() => ([]));
     if (!res.ok) throw new Error(data?.error || 'Failed to fetch history');
     return filterValidHistory(data);
@@ -439,8 +438,7 @@ const PatientSkeleton = () => (
     setSelectedPatientDetail(patient);
     setActivePatientTab('profile');
     setEditingProfileField('');
-    setProfileDraftValue('');
-    setProfileNameDraft({ firstName: '', middleName: '', lastName: '' });
+    setProfileEditDraft({});
     setProfileInlineError('');
     setDetailVisitHistory([]);
     setDetailVisitError('');
@@ -563,70 +561,74 @@ const PatientSkeleton = () => (
     return trimmed;
   };
 
-  const openProfileNameEditor = () => {
-    setEditingProfileField('name');
-    setProfileNameDraft(getPatientNameParts(selectedPatientDetail));
-    setProfileDraftValue('');
+  const getPatientProfileDraft = (patient = {}) => {
+    const nameParts = getPatientNameParts(patient);
+    return {
+      ...nameParts,
+      age: String(patient.age || ''),
+      gender: patient.gender || 'M',
+      bloodGroup: patient.bloodGroup || '',
+      phone: String(patient.phone || ''),
+      email: String(patient.email || ''),
+      address: String(patient.address || '')
+    };
+  };
+
+  const openProfileEditor = () => {
+    setEditingProfileField('profile');
+    setProfileEditDraft(getPatientProfileDraft(selectedPatientDetail));
     setProfileInlineError('');
   };
 
-  const openProfileFieldEditor = (field, value) => {
-    setEditingProfileField(field);
-    setProfileDraftValue(String(value || ''));
-    setProfileNameDraft({ firstName: '', middleName: '', lastName: '' });
-    setProfileInlineError('');
-  };
-
-  const cancelProfileFieldEdit = () => {
+  const cancelProfileEdit = () => {
     setEditingProfileField('');
-    setProfileDraftValue('');
-    setProfileNameDraft({ firstName: '', middleName: '', lastName: '' });
+    setProfileEditDraft({});
     setProfileInlineError('');
   };
 
-  const handleProfileDraftChange = (field, value) => {
-    setProfileDraftValue(normalizeProfileDraft(field, value));
-  };
-
-  const handleProfileNameDraftChange = (field, value) => {
-    setProfileNameDraft(prev => ({
+  const handleProfileEditDraftChange = (field, value) => {
+    setProfileEditDraft(prev => ({
       ...prev,
-      [field]: normalizeNameDraft(value)
+      [field]: normalizeProfileDraft(field, value)
     }));
   };
 
-  const saveProfileField = async (field) => {
+  const saveProfile = async () => {
     if (!selectedPatientDetail || savingProfileField) return;
-    const nextValue = normalizeProfileDraft(field, profileDraftValue);
-    const requiredFields = ['age', 'phone', 'address'];
+    const draft = {
+      ...getPatientProfileDraft(selectedPatientDetail),
+      ...profileEditDraft
+    };
+    const firstName = normalizeNameDraft(draft.firstName);
+    const middleName = normalizeNameDraft(draft.middleName);
+    const lastName = normalizeNameDraft(draft.lastName);
+    const age = normalizeProfileDraft('age', draft.age);
+    const phone = normalizeProfileDraft('phone', draft.phone);
+    const address = normalizeProfileDraft('address', draft.address);
 
-    if (requiredFields.includes(field) && !nextValue) {
-      return setProfileInlineError('This field is required.');
-    }
-    if (field === 'name' && !normalizeNameDraft(profileNameDraft.firstName)) {
+    if (!firstName) {
       return setProfileInlineError('First name is required.');
     }
-    if (field === 'phone' && nextValue.length !== 10) {
+    if (!age || !phone || !address) {
+      return setProfileInlineError('Please fill all required profile fields.');
+    }
+    if (phone.length !== 10) {
       return setProfileInlineError('Enter a valid 10-digit mobile number.');
     }
 
-    const payload = { clinicId };
-
-    if (field === 'name') {
-      const nextNameParts = {
-        firstName: normalizeNameDraft(profileNameDraft.firstName),
-        middleName: normalizeNameDraft(profileNameDraft.middleName),
-        lastName: normalizeNameDraft(profileNameDraft.lastName)
-      };
-      payload.name = [nextNameParts.firstName, nextNameParts.middleName, nextNameParts.lastName]
-        .filter(Boolean)
-        .join(' ');
-    } else {
-      payload[field] = nextValue;
-    }
+    const payload = {
+      clinicId,
+      name: [firstName, middleName, lastName].filter(Boolean).join(' '),
+      age,
+      gender: ['M', 'F', 'O'].includes(draft.gender) ? draft.gender : 'M',
+      bloodGroup: draft.bloodGroup || '',
+      phone,
+      email: normalizeProfileDraft('email', draft.email),
+      address
+    };
 
     try {
-      setSavingProfileField(field);
+      setSavingProfileField('profile');
       setProfileInlineError('');
       const response = await fetch(`${API_BASE_URL}/api/patients/${selectedPatientDetail._id}`, {
         method: 'PUT',
@@ -641,7 +643,7 @@ const PatientSkeleton = () => (
 
       const updatedPatient = await response.json();
       updatePatientLocally(updatedPatient);
-      cancelProfileFieldEdit();
+      cancelProfileEdit();
       showNotification('Profile Updated', 'success', `${selectedPatientDetail.name || 'Patient'} profile updated.`);
     } catch (err) {
       setProfileInlineError('Server connection failed.');
@@ -661,9 +663,8 @@ const PatientSkeleton = () => (
 
   const renderInlineProfileNameGroup = () => {
     const nameParts = getPatientNameParts(selectedPatientDetail);
-    const isEditing = editingProfileField === 'name';
-    const isSaving = savingProfileField === 'name';
-    const actionButtonClass = 'h-8 w-8 rounded-md transition-colors inline-flex items-center justify-center flex-shrink-0';
+    const isEditing = editingProfileField === 'profile';
+    const isSaving = savingProfileField === 'profile';
     const profileLabelClass = 'type-label text-[12px] leading-none text-slate-600 uppercase inline-flex items-center gap-1.5';
     const nameFields = [
       { field: 'firstName', label: 'First Name', required: true },
@@ -678,42 +679,15 @@ const PatientSkeleton = () => (
             <Users size={14} className="shrink-0" />
             Full Name
           </label>
-          <div className="flex items-center gap-1">
-            {canManagePatients && (
-              <button
-                type="button"
-                onClick={() => (isEditing ? saveProfileField('name') : openProfileNameEditor())}
-                disabled={isSaving || Boolean(savingProfileField && savingProfileField !== 'name')}
-                aria-label={isEditing ? 'Save name' : 'Edit name'}
-                title={isEditing ? 'Save' : 'Edit'}
-                className={`${actionButtonClass} ${isEditing ? 'text-teal-700 hover:bg-teal-50' : 'text-blue-700 hover:bg-blue-50'} disabled:opacity-60`}
-              >
-                {isSaving ? <Loader2 size={13} className="animate-spin" /> : isEditing ? <Save size={13} /> : <Edit2 size={13} />}
-              </button>
-            )}
-
-            {canManagePatients && isEditing && (
-              <button
-                type="button"
-                onClick={cancelProfileFieldEdit}
-                disabled={isSaving}
-                aria-label="Cancel name edit"
-                title="Cancel"
-                className={`${actionButtonClass} text-slate-600 hover:bg-slate-100 disabled:opacity-60`}
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
         </div>
         <div className="grid grid-cols-3 gap-2">
           {nameFields.map(item => (
             <input
               key={item.field}
               type="text"
-              value={isEditing ? profileNameDraft[item.field] : nameParts[item.field] || ''}
+              value={isEditing ? (profileEditDraft[item.field] || '') : nameParts[item.field] || ''}
               placeholder={item.label}
-              onChange={(event) => handleProfileNameDraftChange(item.field, event.target.value)}
+              onChange={(event) => handleProfileEditDraftChange(item.field, event.target.value)}
               disabled={!isEditing || isSaving || !canManagePatients}
               className={`type-body w-full min-w-0 p-2 border rounded-lg outline-none transition-colors disabled:opacity-100 ${
                 isEditing
@@ -731,10 +705,9 @@ const PatientSkeleton = () => (
     const patient = selectedPatientDetail || {};
     const Icon = config.icon;
     const value = config.getValue ? config.getValue(patient) : patient[config.field] || '';
-    const isEditing = editingProfileField === config.field;
-    const isSaving = savingProfileField === config.field;
+    const isEditing = editingProfileField === 'profile';
+    const isSaving = savingProfileField === 'profile';
     const displayValue = config.display ? config.display(value) : value || '-';
-    const actionButtonClass = 'h-8 w-8 rounded-md transition-colors inline-flex items-center justify-center flex-shrink-0';
     const profileLabelClass = 'type-label text-[12px] leading-none text-slate-600 uppercase inline-flex items-center gap-1.5';
 
     return (
@@ -744,38 +717,11 @@ const PatientSkeleton = () => (
             {Icon ? <Icon size={14} className="shrink-0" /> : <span className="w-3.5 shrink-0" />}
             {config.label}
           </label>
-          <div className="flex items-center gap-1">
-            {canManagePatients && (
-              <button
-                type="button"
-                onClick={() => (isEditing ? saveProfileField(config.field) : openProfileFieldEditor(config.field, value))}
-                disabled={isSaving || Boolean(savingProfileField && savingProfileField !== config.field)}
-                aria-label={isEditing ? `Save ${config.label}` : `Edit ${config.label}`}
-                title={isEditing ? 'Save' : 'Edit'}
-                className={`${actionButtonClass} ${isEditing ? 'text-teal-700 hover:bg-teal-50' : 'text-blue-700 hover:bg-blue-50'} disabled:opacity-60`}
-              >
-                {isSaving ? <Loader2 size={13} className="animate-spin" /> : isEditing ? <Save size={13} /> : <Edit2 size={13} />}
-              </button>
-            )}
-
-            {canManagePatients && isEditing && (
-              <button
-                type="button"
-                onClick={cancelProfileFieldEdit}
-                disabled={isSaving}
-                aria-label={`Cancel ${config.label} edit`}
-                title="Cancel"
-                className={`${actionButtonClass} text-slate-600 hover:bg-slate-100 disabled:opacity-60`}
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
         </div>
         {config.type === 'select' ? (
           <select
-            value={isEditing ? profileDraftValue : value}
-            onChange={(event) => handleProfileDraftChange(config.field, event.target.value)}
+            value={isEditing ? (profileEditDraft[config.field] ?? '') : value}
+            onChange={(event) => handleProfileEditDraftChange(config.field, event.target.value)}
             disabled={!isEditing || isSaving || !canManagePatients}
             className={`type-body w-full min-w-0 p-2 border rounded-lg outline-none transition-colors disabled:opacity-100 ${
               isEditing
@@ -790,8 +736,8 @@ const PatientSkeleton = () => (
         ) : (
           <input
             type={config.type || 'text'}
-            value={isEditing ? profileDraftValue : displayValue}
-            onChange={(event) => handleProfileDraftChange(config.field, event.target.value)}
+            value={isEditing ? (profileEditDraft[config.field] ?? '') : displayValue}
+            onChange={(event) => handleProfileEditDraftChange(config.field, event.target.value)}
             disabled={!isEditing || isSaving || !canManagePatients}
             className={`type-body w-full min-w-0 p-2 border rounded-lg outline-none transition-colors disabled:opacity-100 ${
               isEditing
@@ -807,8 +753,7 @@ const PatientSkeleton = () => (
   const patientDetailTabs = [
     { id: 'profile', label: 'Profile', icon: Users },
     { id: 'visits', label: 'Visits', icon: History },
-    { id: 'billing', label: 'Billing', icon: Wallet },
-    { id: 'followUps', label: 'Follow-Ups', icon: CalendarDays }
+    { id: 'billing', label: 'Billing', icon: Wallet }
   ];
 
   const renderPatientBillingTab = (patient) => {
@@ -976,16 +921,6 @@ const PatientSkeleton = () => (
       return renderPatientBillingTab(patient);
     }
 
-    if (activePatientTab !== 'profile') {
-      const tabLabel = patientDetailTabs.find(tab => tab.id === activePatientTab)?.label || 'This tab';
-      return (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 text-center">
-          <div className="type-section-title text-slate-700">{tabLabel}</div>
-          <p className="type-secondary mt-1 text-slate-400">This section will be implemented next so we can test one tab at a time.</p>
-        </div>
-      );
-    }
-
     return (
       <div className="space-y-2.5 animate-fadeIn">
         {profileInlineError && (
@@ -1008,6 +943,39 @@ const PatientSkeleton = () => (
           {renderInlineProfileField(profileFieldConfigs[4])}
           {renderInlineProfileField(profileFieldConfigs[5])}
         </section>
+        {canManagePatients && (
+          <div className="sticky bottom-0 -mx-2 mt-3 border-t border-slate-100 bg-white/95 px-2 py-2 backdrop-blur">
+            {editingProfileField === 'profile' ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={cancelProfileEdit}
+                  disabled={savingProfileField === 'profile'}
+                  className="type-section-title flex-1 rounded-lg border border-slate-200 bg-white py-2 text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={saveProfile}
+                  disabled={savingProfileField === 'profile'}
+                  className="type-section-title flex-1 rounded-lg bg-teal-600 py-2 text-white transition-colors hover:bg-teal-700 disabled:opacity-70 flex items-center justify-center gap-2"
+                >
+                  {savingProfileField === 'profile' ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                  {savingProfileField === 'profile' ? 'Saving...' : 'Save Profile'}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={openProfileEditor}
+                className="type-section-title w-full rounded-lg bg-teal-600 py-2 text-white transition-colors hover:bg-teal-700 flex items-center justify-center gap-2"
+              >
+                <Edit2 size={15} /> Edit Profile
+              </button>
+            )}
+          </div>
+        )}
       </div>
     );
   };
