@@ -19,6 +19,7 @@ import {
   getCachedClinicalCatalog
 } from './utils/clinicalCatalog';
 import {
+  authFetch,
   clearSession,
   logoutSession,
   maintainActiveSession,
@@ -102,8 +103,8 @@ const App = () => {
     const fetchClinicType = async () => {
       try {
         const [clinicResponse, catalogResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/clinics/${clinicId}`),
-          fetch(`${API_BASE_URL}/api/clinical-catalog/${clinicId}`)
+          authFetch(`${API_BASE_URL}/api/clinics/${clinicId}`),
+          authFetch(`${API_BASE_URL}/api/clinical-catalog/${clinicId}`)
         ]);
 
         if (clinicResponse.ok) {

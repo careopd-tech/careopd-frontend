@@ -206,7 +206,7 @@ const PatientSkeleton = () => (
       
       // 1. Fetch Stats (Snapshot) - WITH FAILSAFES
       promises.push(
-        fetch(`${API_BASE_URL}/api/patients/${clinicId}?mode=snapshot&date=${safeCurrentDate}${rbacQuery}`)
+        authFetch(`${API_BASE_URL}/api/patients/${clinicId}?mode=snapshot&date=${safeCurrentDate}${rbacQuery}`)
           .then(res => res.json())
           .then(resData => {
              if (resData && resData.stats) {
@@ -227,7 +227,7 @@ const PatientSkeleton = () => (
       if (dateRange.to) url += `&dateTo=${dateRange.to}`;
 
       promises.push(
-        fetch(url)
+        authFetch(url)
           .then(res => res.json())
           .then(resData => {
             const incomingPatients = Array.isArray(resData.data) ? resData.data : [];
@@ -348,13 +348,13 @@ const PatientSkeleton = () => (
       const method = newPatient._id ? 'PUT' : 'POST';
       const patPayload = { ...newPatient, name: fullName, clinicId, type: newPatient._id ? newPatient.type : 'New' };
 
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patPayload) });
+      const res = await authFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patPayload) });
       if (res.ok) {
         await fetchPatientData(1);
         
         // This instantly tells the Appointments page to update its dropdown!
         if (setData) {
-          const allPatsRes = await fetch(`${API_BASE_URL}/api/patients/${clinicId}?tag=patients`);
+          const allPatsRes = await authFetch(`${API_BASE_URL}/api/patients/${clinicId}?tag=patients`);
           if (allPatsRes.ok) {
              const freshPats = await allPatsRes.json();
              setData(prev => ({ ...prev, patients: freshPats }));
@@ -630,7 +630,7 @@ const PatientSkeleton = () => (
     try {
       setSavingProfileField('profile');
       setProfileInlineError('');
-      const response = await fetch(`${API_BASE_URL}/api/patients/${selectedPatientDetail._id}`, {
+      const response = await authFetch(`${API_BASE_URL}/api/patients/${selectedPatientDetail._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

@@ -191,9 +191,9 @@ const Settings = ({ data, setData, onLogout }) => {
 
       try {
         const [response, catalogResponse, doctorsResponse] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/clinics/${clinicId}`),
-          fetch(`${API_BASE_URL}/api/clinical-catalog/${clinicId}`),
-          fetch(`${API_BASE_URL}/api/doctors/${clinicId}`)
+          authFetch(`${API_BASE_URL}/api/clinics/${clinicId}`),
+          authFetch(`${API_BASE_URL}/api/clinical-catalog/${clinicId}`),
+          authFetch(`${API_BASE_URL}/api/doctors/${clinicId}`)
         ]);
 
         const [clinicData, catalogData, doctorsData] = await Promise.all([
@@ -242,7 +242,7 @@ const Settings = ({ data, setData, onLogout }) => {
           canManageAccess
             ? authFetch(`${API_BASE_URL}/api/users?clinicId=${clinicId}`)
             : Promise.resolve({ ok: false }),
-          fetch(`${API_BASE_URL}/api/doctors/${clinicId}`),
+          authFetch(`${API_BASE_URL}/api/doctors/${clinicId}`),
           canManageRolePermissions
             ? authFetch(`${API_BASE_URL}/api/clinics/${clinicId}/permissions`)
             : Promise.resolve({ ok: false })
@@ -493,11 +493,10 @@ const Settings = ({ data, setData, onLogout }) => {
       try {
         setLoading(true);
         const isWorkflowPreference = editModal.type === 'consultation_workflow';
-        const request = isWorkflowPreference ? authFetch : fetch;
         const endpoint = isWorkflowPreference
           ? `${API_BASE_URL}/api/clinics/${clinicId}/workflow-preferences`
           : `${API_BASE_URL}/api/clinics/${clinicId}`;
-        const response = await request(endpoint, {
+        const response = await authFetch(endpoint, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updatePayload)
@@ -506,7 +505,7 @@ const Settings = ({ data, setData, onLogout }) => {
           const updatedClinic = await response.json();
           let updatedDoctor = null;
           if (doctorFeePayload?.doctorId) {
-            const doctorResponse = await fetch(`${API_BASE_URL}/api/doctors/${doctorFeePayload.doctorId}/consultation-fee`, {
+            const doctorResponse = await authFetch(`${API_BASE_URL}/api/doctors/${doctorFeePayload.doctorId}/consultation-fee`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -584,7 +583,7 @@ const Settings = ({ data, setData, onLogout }) => {
         registeringAuthority
       };
 
-      const response = await fetch(`${API_BASE_URL}/api/clinics/${clinicId}/upgrade-to-clinic`, {
+      const response = await authFetch(`${API_BASE_URL}/api/clinics/${clinicId}/upgrade-to-clinic`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

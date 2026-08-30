@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import API_BASE_URL from '../config';
+import { authFetch } from '../utils/auth';
 
 export const useSearch = (endpoint, clinicId) => {
   const [query, setQuery] = useState('');
@@ -18,7 +19,7 @@ export const useSearch = (endpoint, clinicId) => {
       setIsSearching(true);
       try {
         // Calls: /api/appointments/CLINIC_ID?mode=search&query=TEXT
-        const res = await fetch(`${API_BASE_URL}${endpoint}/${clinicId}?mode=search&query=${query}`);
+        const res = await authFetch(`${API_BASE_URL}${endpoint}/${clinicId}?mode=search&query=${encodeURIComponent(query)}`);
         if (res.ok) {
           const data = await res.json();
           setResults(data);

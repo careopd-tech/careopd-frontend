@@ -124,6 +124,7 @@ const Appointments = ({
   const [actionAppt, setActionAppt] = useState(null);
   const [contactAppt, setContactAppt] = useState(null);
   const [previewAppt, setPreviewAppt] = useState(null);
+  const [timelineAppt, setTimelineAppt] = useState(null);
   const [openActionMenuId, setOpenActionMenuId] = useState('');
   const [openActionMenuPosition, setOpenActionMenuPosition] = useState(null);
   const [processingAppointmentId, setProcessingAppointmentId] = useState('');
@@ -251,13 +252,13 @@ const Appointments = ({
       try {
         const [doctors, calendar30, clinic] = await Promise.all([
           shouldLoadDoctors
-            ? fetch(`${API_BASE_URL}/api/doctors/${clinicId}`).then(res => (res.ok ? res.json() : []))
+            ? authFetch(`${API_BASE_URL}/api/doctors/${clinicId}`).then(res => (res.ok ? res.json() : []))
             : Promise.resolve(null),
           shouldLoadCalendar
             ? authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments&date=${safeCurrentDate}${rbacQuery}`).then(res => (res.ok ? res.json() : []))
             : Promise.resolve(null),
           shouldLoadClinic
-            ? fetch(`${API_BASE_URL}/api/clinics/${clinicId}`).then(res => (res.ok ? res.json() : null))
+            ? authFetch(`${API_BASE_URL}/api/clinics/${clinicId}`).then(res => (res.ok ? res.json() : null))
             : Promise.resolve(null)
         ]);
 
@@ -379,6 +380,70 @@ const Appointments = ({
   const getDoctorById = (doctorRef) => {
     const doctorId = getEntityId(doctorRef);
     return (data.doctors || []).find(d => getEntityId(d) === doctorId);
+  };
+
+  const formatTimelineDateTime = (value, fallback = '') => {
+    if (!value) return fallback;
+    const dateValue = new Date(value);
+    if (Number.isNaN(dateValue.getTime())) return fallback;
+    return dateValue.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const buildAppointmentStatusTimeline = (appt = {}) => {
+    const events = [];
+    const addEvent = (key, label, at, description, tone = 'slate') => {
+      if (!at && key !== 'scheduled') return;
+      events.push({
+        key,
+        label,
+        at,
+        formattedAt: formatTimelineDateTime(at, key === 'scheduled' ? `${appt.date || '-'} at ${appt.time || '-'}` : ''),
+        description,
+        tone
+      });
+    };
+
+    addEvent('scheduled', 'Scheduled', appt.createdAt || appt.updatedAt, `Booked for ${appt.date || '-'} at ${appt.time || '-'}`, 'amber');
+    addEvent('rescheduled', 'Rescheduled', appt.rescheduledAt, `Moved to ${appt.date || '-'} at ${appt.time || '-'}`, 'blue');
+    addEvent('checked-in', 'Checked In', appt.checkedInAt, 'Patient arrived and was checked in.', 'teal');
+    addEvent('in-consultation', 'In Consultation', appt.consultationStartedAt, 'Consultation started.', 'blue');
+    addEvent('draft', 'Draft', appt.consultationExitedAt || appt.consultationDraftSavedAt, 'Consultation was paused with a saved draft.', 'violet');
+    addEvent('awaiting-reports', 'Awaiting Reports', appt.consultationCompletedAt && appt.status === 'Awaiting Reports' ? appt.consultationCompletedAt : null, 'Consultation saved with tests advised.', 'cyan');
+    addEvent('reports-ready', 'Reports Ready', appt.reportsReadyAt, 'Reports marked ready for review.', 'emerald');
+    addEvent('report-review', 'Report Review', appt.reportReviewStartedAt, 'Report review started.', 'blue');
+    addEvent('follow-up', 'Follow-Up Note', appt.followUpStartedAt, 'Follow-up consultation note started.', 'blue');
+    addEvent('completed', 'Completed', appt.consultationCompletedAt && appt.status === 'Completed' ? appt.consultationCompletedAt : null, 'Consultation completed.', 'green');
+    addEvent('cancelled', 'Cancelled', appt.cancelledAt, 'Appointment was cancelled.', 'red');
+    addEvent('walked-out', 'Walked Out', appt.leftEarlyAt, appt.leftEarlyReason ? `Patient left before consultation: ${appt.leftEarlyReason}` : 'Patient left before consultation.', 'slate');
+    addEvent('no-show', 'No Show', appt.noShowAt, 'Patient did not arrive for the appointment.', 'slate');
+    addEvent('expired', 'Expired', appt.expiredAt, 'Awaiting reports window expired.', 'orange');
+
+    const sortedEvents = events.sort((a, b) => {
+      const aTime = a.at ? new Date(a.at).getTime() : 0;
+      const bTime = b.at ? new Date(b.at).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    const uiStatus = getUiStatus(appt);
+    const hasCurrentStatusEvent = sortedEvents.some(event => event.label === uiStatus || (uiStatus === 'Checked In' && event.key === 'reports-ready'));
+    if (!hasCurrentStatusEvent) {
+      sortedEvents.unshift({
+        key: 'current',
+        label: uiStatus,
+        at: null,
+        formattedAt: 'Current',
+        description: 'Current appointment status.',
+        tone: 'slate'
+      });
+    }
+
+    return sortedEvents;
   };
 
   const buildConsultationDraftPayload = useCallback((appointment = {}, draftOverride = null) => {
@@ -598,7 +663,7 @@ const Appointments = ({
       ];
 
       const dashboardPromise = Promise.all(dashboardRequests.map(req => (
-        req.key.startsWith('appointments') ? authFetch(req.url) : fetch(req.url)
+        authFetch(req.url)
       ))).then(async ([snapshotRes, docsRes, patsRes, calRes]) => {
         const dashboardResponses = [snapshotRes, docsRes, patsRes, calRes];
         const failedIndex = dashboardResponses.findIndex(res => !res.ok);
@@ -623,7 +688,7 @@ const Appointments = ({
             docsRes.json(),
             patsRes.json(),
             calRes.json(),
-            fetch(`${API_BASE_URL}/api/clinics/${clinicId}`)
+            authFetch(`${API_BASE_URL}/api/clinics/${clinicId}`)
               .then(async (response) => (response.ok ? response.json() : null))
               .catch(() => null)
           ]);
@@ -1011,7 +1076,7 @@ const Appointments = ({
     try {
       const url = rebookingApptId ? `${API_BASE_URL}/api/appointments/${rebookingApptId}` : `${API_BASE_URL}/api/appointments`;
       const method = rebookingApptId ? 'PUT' : 'POST';
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const res = await authFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const result = await res.json();
 
       if (res.ok) {
@@ -1996,7 +2061,10 @@ const Appointments = ({
       return (
         <button
           type="button"
-          onClick={action.onClick}
+          onClick={(event) => {
+            event.stopPropagation();
+            action.onClick();
+          }}
           disabled={isProcessing || action.disabled}
           className={`type-label h-8 rounded-lg flex items-center gap-1.5 whitespace-nowrap transition-colors disabled:opacity-70 ${
             isPrimary
@@ -2018,6 +2086,7 @@ const Appointments = ({
       const gap = 8;
 
       const toggleMenu = (event) => {
+        event.stopPropagation();
         if (openActionMenuId === appt._id) {
           setOpenActionMenuId('');
           setOpenActionMenuPosition(null);
@@ -2062,7 +2131,26 @@ const Appointments = ({
     };
 
     return (
-      <div key={appt._id} className="p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col gap-2 bg-white">
+      <div
+        key={appt._id}
+        role="button"
+        tabIndex={0}
+        onClick={() => {
+          setTimelineAppt(appt);
+          setOpenActionMenuId('');
+          setOpenActionMenuPosition(null);
+        }}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setTimelineAppt(appt);
+            setOpenActionMenuId('');
+            setOpenActionMenuPosition(null);
+          }
+        }}
+        className="p-3 rounded-xl border border-slate-100 shadow-sm relative flex flex-col gap-2 bg-white cursor-pointer transition-colors hover:border-teal-200 hover:bg-teal-50/20 focus:outline-none focus:ring-2 focus:ring-teal-500/30"
+      >
         <div className="flex-1 min-w-0">
           <div className="grid h-5 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 mb-1.5">
             <div className="flex h-5 items-center gap-1.5 min-w-0 overflow-hidden whitespace-nowrap">
@@ -2112,7 +2200,16 @@ const Appointments = ({
               </span>
             ) : <span />}
             {isAdmin && (
-              <button onClick={() => handleRebook(appt)} className="type-label h-8 min-w-[10rem] text-white bg-blue-600 hover:bg-blue-700 shadow-sm rounded-lg flex items-center justify-center gap-1 whitespace-nowrap px-3"><RefreshCw size={12} /> ReBook</button>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleRebook(appt);
+                }}
+                className="type-label h-8 min-w-[10rem] text-white bg-blue-600 hover:bg-blue-700 shadow-sm rounded-lg flex items-center justify-center gap-1 whitespace-nowrap px-3"
+              >
+                <RefreshCw size={12} /> ReBook
+              </button>
             )}
           </div>
         )}
@@ -2186,6 +2283,20 @@ const Appointments = ({
   const vitalsPatient = getPatientDetails(actionAppt?.patientId);
   const vitalsPatientGender = { M: 'Male', F: 'Female', O: 'Other' }[vitalsPatient?.gender] || vitalsPatient?.gender || 'Gender Unknown';
   const isPatientLockedForBooking = modalOnly && Boolean(newAppt.patientId) && newAppt.patientId !== 'add_new';
+  const timelineEvents = timelineAppt ? buildAppointmentStatusTimeline(timelineAppt) : [];
+  const timelineCurrentStatus = timelineAppt ? getUiStatus(timelineAppt) : '';
+  const timelineDotClass = {
+    amber: 'bg-amber-500 ring-amber-100',
+    blue: 'bg-blue-500 ring-blue-100',
+    teal: 'bg-teal-500 ring-teal-100',
+    violet: 'bg-violet-500 ring-violet-100',
+    cyan: 'bg-cyan-500 ring-cyan-100',
+    emerald: 'bg-emerald-500 ring-emerald-100',
+    green: 'bg-green-500 ring-green-100',
+    red: 'bg-red-500 ring-red-100',
+    orange: 'bg-orange-500 ring-orange-100',
+    slate: 'bg-slate-400 ring-slate-100'
+  };
 
   return (
     <div className={modalOnly ? "contents" : "h-full flex flex-col relative"}>
@@ -2695,6 +2806,53 @@ const Appointments = ({
       >
         <AlertMessage message={historyError} />
         <PatientHistoryList historyData={historyData} isLoading={isHistoryLoading} layout="vertical" embeddedMarker />
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(timelineAppt)}
+        onClose={() => setTimelineAppt(null)}
+        title="Appointment Timeline"
+        panelClassName="careopd-modal-panel bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[calc(var(--app-height)-1.5rem)] animate-scaleIn"
+      >
+        {timelineAppt && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="type-card-title text-slate-800 truncate">{getPatientName(timelineAppt.patientId)}</p>
+                  <p className="type-body text-slate-600 mt-0.5 truncate">with {getDoctorName(timelineAppt.doctorId)}</p>
+                  <p className="type-label text-slate-500 mt-1">{timelineAppt.date || '-'} at {timelineAppt.time || '-'}</p>
+                </div>
+                <span className="type-utility text-slate-600 bg-white border border-slate-200 rounded px-2 py-1 uppercase whitespace-nowrap">
+                  {timelineCurrentStatus}
+                </span>
+              </div>
+            </div>
+
+            <div className="relative pl-4">
+              <div className="absolute left-[1.19rem] top-2 bottom-2 w-px bg-slate-200" />
+              <div className="space-y-3">
+                {timelineEvents.map((event, index) => {
+                  const isLatest = index === 0;
+                  return (
+                    <div key={`${event.key}-${index}`} className="relative flex gap-3">
+                      <span className={`relative z-10 mt-1 h-2.5 w-2.5 rounded-full ring-4 ${timelineDotClass[event.tone] || timelineDotClass.slate}`} />
+                      <div className={`flex-1 rounded-lg border p-3 ${isLatest ? 'border-teal-200 bg-teal-50/60' : 'border-slate-100 bg-white'}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="type-card-title text-slate-800">{event.label}</p>
+                          <span className="type-label text-slate-500 whitespace-nowrap">{event.formattedAt}</span>
+                        </div>
+                        {event.description ? (
+                          <p className="type-secondary text-slate-600 mt-1">{event.description}</p>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Modal

@@ -9,7 +9,7 @@ import AlertMessage from '../components/ui/AlertMessage';
 import ModuleHeader from '../components/ui/ModuleHeader';
 import StatFilterStrip from '../components/ui/StatFilterStrip';
 import API_BASE_URL from '../config';
-import { getSessionUser } from '../utils/auth';
+import { authFetch, getSessionUser } from '../utils/auth';
 import { hasPermission } from '../utils/permissions';
 import {
   formatTimeLabel,
@@ -215,9 +215,9 @@ const Doctors = ({ data, setData, onLogout }) => {
 
       try {
         const [docsRes, apptsRes, clinicRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/doctors/${clinicId}?tag=doctors`),
-          fetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments`),
-          fetch(`${API_BASE_URL}/api/clinics/${clinicId}`)
+          authFetch(`${API_BASE_URL}/api/doctors/${clinicId}?tag=doctors`),
+          authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments`),
+          authFetch(`${API_BASE_URL}/api/clinics/${clinicId}`)
         ]);
 
         if (docsRes.ok && apptsRes.ok) {
@@ -316,7 +316,7 @@ const Doctors = ({ data, setData, onLogout }) => {
     try {
       setIsStatusSubmitting(true);
       const clinicId = localStorage.getItem('clinicId');
-      const response = await fetch(`${API_BASE_URL}/api/doctors/${activeModal.doctorId}`, {
+      const response = await authFetch(`${API_BASE_URL}/api/doctors/${activeModal.doctorId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clinicId, status: targetStatus, reason: finalReason })
@@ -353,7 +353,7 @@ const Doctors = ({ data, setData, onLogout }) => {
 
     if (clinicId && doc?._id) {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/doctors/${clinicId}/${doc._id}`);
+        const response = await authFetch(`${API_BASE_URL}/api/doctors/${clinicId}/${doc._id}`);
         if (response.ok) {
           resolvedDoctor = await response.json();
         }
@@ -569,13 +569,13 @@ const Doctors = ({ data, setData, onLogout }) => {
       setIsSavingDoctor(true);
       let response;
       if (newDoctor._id) {
-        response = await fetch(`${API_BASE_URL}/api/doctors/${newDoctor._id}`, {
+        response = await authFetch(`${API_BASE_URL}/api/doctors/${newDoctor._id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(docPayload)
         });
       } else {
-        response = await fetch(`${API_BASE_URL}/api/doctors`, {
+        response = await authFetch(`${API_BASE_URL}/api/doctors`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(docPayload)

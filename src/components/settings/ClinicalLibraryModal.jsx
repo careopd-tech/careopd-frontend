@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Edit2, Loader2, Pin, Plus, Save, Search, Tra
 import Modal from '../ui/Modal';
 import AlertMessage from '../ui/AlertMessage';
 import API_BASE_URL from '../../config';
+import { authFetch } from '../../utils/auth';
 
 const normalizeText = (value) => String(value || '')
   .trim()
@@ -353,7 +354,7 @@ const ClinicalLibraryModal = ({
       setDeletingGroupId(group.id);
       setError('');
 
-      const response = await fetch(`${API_BASE_URL}/api/clinical-catalog/groups/${group.placeholderId}?clinicId=${clinicId}`, {
+      const response = await authFetch(`${API_BASE_URL}/api/clinical-catalog/groups/${group.placeholderId}?clinicId=${clinicId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -396,7 +397,7 @@ const ClinicalLibraryModal = ({
       setSavingGroupId(groupId);
       setError('');
 
-      const response = await fetch(`${API_BASE_URL}/api/clinical-catalog/groups`, {
+      const response = await authFetch(`${API_BASE_URL}/api/clinical-catalog/groups`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -517,7 +518,7 @@ const ClinicalLibraryModal = ({
         pinned
       };
 
-      const response = await fetch(
+      const response = await authFetch(
         item.isNew ? `${API_BASE_URL}/api/clinical-catalog` : `${API_BASE_URL}/api/clinical-catalog/${item._id}`,
         {
           method: item.isNew ? 'POST' : 'PUT',
@@ -564,7 +565,7 @@ const ClinicalLibraryModal = ({
       setPinningKey(key);
       setError('');
 
-      const response = await fetch(`${API_BASE_URL}/api/clinical-catalog/${item._id}`, {
+      const response = await authFetch(`${API_BASE_URL}/api/clinical-catalog/${item._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -612,7 +613,7 @@ const ClinicalLibraryModal = ({
       setDeletingKey(key);
       setError('');
 
-      const response = await fetch(`${API_BASE_URL}/api/clinical-catalog/${item._id}?clinicId=${clinicId}`, {
+      const response = await authFetch(`${API_BASE_URL}/api/clinical-catalog/${item._id}?clinicId=${clinicId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
       });

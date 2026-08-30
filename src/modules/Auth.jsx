@@ -5,18 +5,12 @@ import API_BASE_URL from '../config';
 import { updateSessionFromAuth } from '../utils/auth';
 import { APP_VERSION } from '../config/appVersion';
 
-const TEST_LOGIN_CREDENTIALS = {
-  clinicCode: 'AJHRMNKF',
-  email: '7383378090',
-  password: 'Password'
-};
-
 // FIXED: Added setUserRole to props matching App.jsx
 const Auth = ({ authState, setAuthState, setUserRole, sessionMessage = '' }) => {
   const [showPassword, setShowPassword] = useState(false);
-  const [clinicCode, setClinicCode] = useState(TEST_LOGIN_CREDENTIALS.clinicCode);
-  const [email, setEmail] = useState(TEST_LOGIN_CREDENTIALS.email);
-  const [password, setPassword] = useState(TEST_LOGIN_CREDENTIALS.password);
+  const [clinicCode, setClinicCode] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   
   const [isLoading, setIsLoading] = useState(false);
@@ -40,23 +34,17 @@ const Auth = ({ authState, setAuthState, setUserRole, sessionMessage = '' }) => 
     return normalized.length > 4 ? `${normalized.slice(0, 4)}-${normalized.slice(4)}` : normalized;
   };
   const isValidClinicCode = (value) => normalizeClinicCode(value).length === 8;
-  const applyTestLoginCredentials = () => {
-    setClinicCode(TEST_LOGIN_CREDENTIALS.clinicCode);
-    setEmail(TEST_LOGIN_CREDENTIALS.email);
-    setPassword(TEST_LOGIN_CREDENTIALS.password);
+  const closeAuthFlow = () => {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setAuthState('login');
+    setClinicCode('');
+    setEmail('');
+    setPassword('');
     setConfirmPassword('');
     setOtp('');
     setError('');
     setSuccess('');
     setInvalidFields([]);
-  };
-  const closeAuthFlow = () => {
-    window.history.replaceState({}, document.title, window.location.pathname);
-    setAuthState('login');
-    setError('');
-    setSuccess('');
-    setInvalidFields([]);
-    applyTestLoginCredentials();
     setActivationCompleted(false);
   };
   const closeActivationTab = () => {
@@ -357,24 +345,6 @@ const Auth = ({ authState, setAuthState, setUserRole, sessionMessage = '' }) => 
             <span>{success}</span>
           </div>
         )}
-        {authState === 'login' && (
-          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-900">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-bold uppercase tracking-wide">Testing Quick Login</span>
-              <button
-                type="button"
-                onClick={applyTestLoginCredentials}
-                className="font-bold text-amber-700 hover:text-amber-900"
-              >
-                Refill
-              </button>
-            </div>
-            <p className="mt-1">Clinic Code: AJHR-MNKF</p>
-            <p>Mobile: 7383378090</p>
-            <p>Password: Password</p>
-          </div>
-        )}
-
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           {(authState === 'login' || authState === 'forgot' || authState === 'reset') && (
