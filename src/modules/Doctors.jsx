@@ -11,6 +11,7 @@ import StatFilterStrip from '../components/ui/StatFilterStrip';
 import API_BASE_URL from '../config';
 import { authFetch, getSessionUser } from '../utils/auth';
 import { hasPermission } from '../utils/permissions';
+import { optimizeProfilePhoto } from '../utils/imageOptimization';
 import {
   formatTimeLabel,
   generateTimeSlots,
@@ -72,6 +73,7 @@ const Doctors = ({ data, setData, onLogout }) => {
   const [deptFilter, setDeptFilter] = useState('');
   const [expandedSection, setExpandedSection] = useState('available');
   const [isSavingDoctor, setIsSavingDoctor] = useState(false);
+  const [isOptimizingPhoto, setIsOptimizingPhoto] = useState(false);
   const [isStatusSubmitting, setIsStatusSubmitting] = useState(false);
   const [openStatusMenuId, setOpenStatusMenuId] = useState('');
 
@@ -150,7 +152,7 @@ const Doctors = ({ data, setData, onLogout }) => {
     name: '', phone: '', email: '', gender: 'M', address: '',
     department: '', qualification: '', experience: '', regNo: '',
     ...getWorkspaceDoctorHours({}, { defaultFollowsClinicSchedule: false }),
-    photoUrl: '', photo: ''
+    photoUrl: '', photo: '', photoChanged: false
   });
 
   // Sync Notification Stack to LocalStorage
@@ -424,19 +426,26 @@ const Doctors = ({ data, setData, onLogout }) => {
       setNewDoctor({ ...newDoctor, phone: val });
   };
 
-  const handlePhotoInput = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-          setNewDoctor(prev => ({
-              ...prev,
-              photoUrl: url,        
-              photo: reader.result  
-          }));
-      };
-      reader.readAsDataURL(file);
+  const handlePhotoInput = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setModalError('');
+    setIsOptimizingPhoto(true);
+    try {
+      const optimized = await optimizeProfilePhoto(file);
+      setNewDoctor(prev => ({
+        ...prev,
+        photoUrl: optimized.dataUrl,
+        photo: optimized.dataUrl,
+        photoChanged: true
+      }));
+      setInvalidFields(prev => prev.filter(field => field !== 'photo'));
+    } catch (error) {
+      setModalError(error.message || 'Could not optimize the selected photo.');
+    } finally {
+      setIsOptimizingPhoto(false);
+      e.target.value = '';
     }
   };
 
@@ -562,8 +571,11 @@ const Doctors = ({ data, setData, onLogout }) => {
       ...resolvedDoctorHours,
       followsClinicSchedule: doctorFollowsClinicSchedule,
       status: newDoctor.status || 'Available',
-      photo: newDoctor.photo || newDoctor.name.charAt(0) 
     };
+
+    if (!newDoctor._id || newDoctor.photoChanged) {
+      docPayload.photo = newDoctor.photo;
+    }
 
     try {
       setIsSavingDoctor(true);
@@ -900,10 +912,12 @@ const Doctors = ({ data, setData, onLogout }) => {
             {(addDoctorTab === 'working_hours' || (isSoloWorkspace && addDoctorTab === 'professional')) ? (
               <button 
                 onClick={handleSaveDoctor}
-                disabled={isSavingDoctor}
+                disabled={isSavingDoctor || isOptimizingPhoto}
                 className="type-section-title flex-1 bg-teal-600 text-white py-1.5 rounded-lg flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                {isSavingDoctor
+                {isOptimizingPhoto
+                  ? <><Loader2 size={16} className="animate-spin" /> Optimizing photo...</>
+                  : isSavingDoctor
                   ? <><Loader2 size={16} className="animate-spin" /> {newDoctor._id ? 'Updating...' : 'Creating...'}</>
                   : newDoctor._id ? "Update Profile" : "Create Profile"}
               </button>
@@ -947,8 +961,9 @@ const Doctors = ({ data, setData, onLogout }) => {
                     </div>
                     <input 
                       type="file" 
-                      accept="image/*" 
+                      accept="image/jpeg,image/png,image/webp"
                       capture="environment"
+                      disabled={isOptimizingPhoto}
                       className="hidden" 
                       onChange={handlePhotoInput} 
                     />

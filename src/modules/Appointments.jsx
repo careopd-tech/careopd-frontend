@@ -252,7 +252,7 @@ const Appointments = ({
       try {
         const [doctors, calendar30, clinic] = await Promise.all([
           shouldLoadDoctors
-            ? authFetch(`${API_BASE_URL}/api/doctors/${clinicId}`).then(res => (res.ok ? res.json() : []))
+            ? authFetch(`${API_BASE_URL}/api/doctors/${clinicId}?includePhoto=false`).then(res => (res.ok ? res.json() : []))
             : Promise.resolve(null),
           shouldLoadCalendar
             ? authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments&date=${safeCurrentDate}${rbacQuery}`).then(res => (res.ok ? res.json() : []))
@@ -657,7 +657,7 @@ const Appointments = ({
       const promises = [];
       const dashboardRequests = [
         { key: 'appointments snapshot', url: `${API_BASE_URL}/api/appointments/${clinicId}?mode=snapshot&date=${safeCurrentDate}${rbacQuery}` },
-        { key: 'doctors', url: `${API_BASE_URL}/api/doctors/${clinicId}` },
+        { key: 'doctors', url: `${API_BASE_URL}/api/doctors/${clinicId}?includePhoto=false` },
         { key: 'patients', url: `${API_BASE_URL}/api/patients/${clinicId}` },
         { key: 'appointments calendar', url: `${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments&date=${safeCurrentDate}${rbacQuery}` }
       ];

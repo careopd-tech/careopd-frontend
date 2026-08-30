@@ -193,7 +193,7 @@ const Settings = ({ data, setData, onLogout }) => {
         const [response, catalogResponse, doctorsResponse] = await Promise.all([
           authFetch(`${API_BASE_URL}/api/clinics/${clinicId}`),
           authFetch(`${API_BASE_URL}/api/clinical-catalog/${clinicId}`),
-          authFetch(`${API_BASE_URL}/api/doctors/${clinicId}`)
+          authFetch(`${API_BASE_URL}/api/doctors/${clinicId}?includePhoto=false`)
         ]);
 
         const [clinicData, catalogData, doctorsData] = await Promise.all([
@@ -242,7 +242,7 @@ const Settings = ({ data, setData, onLogout }) => {
           canManageAccess
             ? authFetch(`${API_BASE_URL}/api/users?clinicId=${clinicId}`)
             : Promise.resolve({ ok: false }),
-          authFetch(`${API_BASE_URL}/api/doctors/${clinicId}`),
+          authFetch(`${API_BASE_URL}/api/doctors/${clinicId}?includePhoto=false`),
           canManageRolePermissions
             ? authFetch(`${API_BASE_URL}/api/clinics/${clinicId}/permissions`)
             : Promise.resolve({ ok: false })

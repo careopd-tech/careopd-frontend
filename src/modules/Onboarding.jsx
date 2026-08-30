@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Building2, Stethoscope, ShieldCheck, ArrowLeft, Loader2, KeyRound } from 'lucide-react';
 import AlertMessage from '../components/ui/AlertMessage';
 import API_BASE_URL from '../config';
+import { PRIVACY_VERSION, TERMS_VERSION } from '../config/legal';
 
 const Onboarding = ({ setAuthState }) => {
   const [step, setStep] = useState(1);
@@ -149,7 +150,12 @@ const Onboarding = ({ setAuthState }) => {
       const response = await fetch(`${API_BASE_URL}/api/onboarding/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, email: normalizedEmail })
+        body: JSON.stringify({
+          ...formData,
+          email: normalizedEmail,
+          termsVersion: TERMS_VERSION,
+          privacyVersion: PRIVACY_VERSION
+        })
       });
 
       const result = await response.json().catch(() => ({}));
@@ -367,7 +373,7 @@ const Onboarding = ({ setAuthState }) => {
                       className="mt-0.5 w-4 h-4 rounded text-teal-600 focus:ring-teal-500 cursor-pointer"
                     />
                     <span className="text-[12px] text-slate-600 leading-tight">
-                      I agree to the <a href="#" className="text-teal-600 font-bold hover:underline">Terms of Service</a> and <a href="#" className="text-teal-600 font-bold hover:underline">Privacy Policy</a>. I acknowledge my organization acts as the Data Fiduciary.
+                      I agree to the <a href="/legal/terms.html" target="_blank" rel="noreferrer" className="text-teal-600 font-bold hover:underline">Terms of Service</a> and <a href="/legal/privacy.html" target="_blank" rel="noreferrer" className="text-teal-600 font-bold hover:underline">Privacy Policy</a>. I acknowledge my organization acts as the Data Fiduciary.
                     </span>
                   </label>
                 </div>

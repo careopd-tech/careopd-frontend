@@ -21,12 +21,20 @@ let refreshRequest = null;
 const AUTH_API_URL = `${API_BASE_URL}/api/auth`;
 const REFRESH_LEEWAY_MS = 5 * 60 * 1000;
 
-const notifySessionExpired = () => {
+const notifySessionExpired = (message = 'Your session has expired. Please sign in again.') => {
   if (sessionExpiryNotified) return;
   sessionExpiryNotified = true;
   window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, {
-    detail: { message: 'Your session has expired. Please sign in again.' }
+    detail: { message }
   }));
+};
+
+const handleClinicAccessBlock = async (response) => {
+  if (response.status !== 403) return false;
+  const result = await response.clone().json().catch(() => ({}));
+  if (!['CLINIC_SUSPENDED', 'CLINIC_CANCELLED', 'TRIAL_EXPIRED'].includes(result.code)) return false;
+  notifySessionExpired(result.error || 'Clinic access is currently unavailable.');
+  return true;
 };
 
 const getTokenExpiryTime = () => {
@@ -80,6 +88,7 @@ export const authFetch = async (url, options = {}) => {
     headers: getAuthHeaders(options.headers || {})
   };
   const response = await fetch(url, requestOptions);
+  if (await handleClinicAccessBlock(response)) return response;
   if (response.status !== 401) return response;
 
   try {
@@ -88,12 +97,13 @@ export const authFetch = async (url, options = {}) => {
       ...requestOptions,
       headers: getAuthHeaders(options.headers || {})
     });
+    if (await handleClinicAccessBlock(retryResponse)) return retryResponse;
     if (retryResponse.status === 401) {
       notifySessionExpired();
     }
     return retryResponse;
   } catch (err) {
-    notifySessionExpired();
+    notifySessionExpired(err.message);
     return response;
   }
 };

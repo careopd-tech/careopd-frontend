@@ -4,6 +4,7 @@ import Modal from '../ui/Modal';
 import AlertMessage from '../ui/AlertMessage';
 import API_BASE_URL from '../../config';
 import { authFetch } from '../../utils/auth';
+import { optimizeProfilePhoto } from '../../utils/imageOptimization';
 
 const NAME_REGEX = /^[a-zA-Z\s.-]*$/;
 const EMPTY_PROFILE = {
@@ -124,6 +125,8 @@ const getPendingFields = (profile) => {
 const MyProfileModal = ({ isOpen, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const [isOptimizingPhoto, setIsOptimizingPhoto] = useState(false);
+  const [photoChanged, setPhotoChanged] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [userData, setUserData] = useState(EMPTY_PROFILE);
@@ -169,6 +172,7 @@ const MyProfileModal = ({ isOpen, onClose }) => {
 
         const formattedProfile = buildProfileState(data, nextClinicType);
         setUserData(formattedProfile);
+        setPhotoChanged(false);
         setNeedsCompletionPrompt(getPendingFields(formattedProfile).length > 0);
       } catch (err) {
         setError('Server error occurred.');
@@ -202,21 +206,33 @@ const MyProfileModal = ({ isOpen, onClose }) => {
     handleFieldChange('experience', value.replace(/\D/g, '').slice(0, 3));
   };
 
-  const handlePhotoInput = (event) => {
+  const handlePhotoInput = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      handleFieldChange('avatar', reader.result);
-    };
-    reader.readAsDataURL(file);
+    setError('');
+    setIsOptimizingPhoto(true);
+    try {
+      const optimized = await optimizeProfilePhoto(file);
+      handleFieldChange('avatar', optimized.dataUrl);
+      setPhotoChanged(true);
+    } catch (photoError) {
+      setError(photoError.message || 'Could not optimize the selected photo.');
+    } finally {
+      setIsOptimizingPhoto(false);
+      event.target.value = '';
+    }
   };
 
   const handleUpdate = async (event) => {
     event.preventDefault();
     setError('');
     setSuccess('');
+
+    if (isOptimizingPhoto) {
+      setError('Please wait while the photo is being optimized.');
+      return;
+    }
 
     if (!userData.firstName.trim() || !userData.lastName.trim()) {
       setError('First name and last name are required.');
@@ -237,21 +253,23 @@ const MyProfileModal = ({ isOpen, onClose }) => {
 
     try {
       setLoading(true);
+      const profilePayload = {
+        firstName: userData.firstName,
+        middleName: userData.middleName,
+        lastName: userData.lastName,
+        gender: userData.gender,
+        address: userData.address,
+        department: userData.department,
+        qualification: userData.qualification,
+        experience: userData.experience,
+        regNo: userData.regNo
+      };
+      if (photoChanged) profilePayload.photo = userData.avatar;
+
       const response = await authFetch(`${API_BASE_URL}/api/users/${userId}?clinicId=${clinicId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstName: userData.firstName,
-          middleName: userData.middleName,
-          lastName: userData.lastName,
-          photo: userData.avatar,
-          gender: userData.gender,
-          address: userData.address,
-          department: userData.department,
-          qualification: userData.qualification,
-          experience: userData.experience,
-          regNo: userData.regNo
-        })
+        body: JSON.stringify(profilePayload)
       });
 
       const updatedData = await response.json().catch(() => ({}));
@@ -262,6 +280,7 @@ const MyProfileModal = ({ isOpen, onClose }) => {
 
       const formattedProfile = buildProfileState(updatedData, clinicType);
       setUserData(formattedProfile);
+      setPhotoChanged(false);
       setSuccess('Profile updated successfully.');
       setNeedsCompletionPrompt(false);
 
@@ -292,6 +311,7 @@ const MyProfileModal = ({ isOpen, onClose }) => {
     setNeedsCompletionPrompt(false);
     setSuccess('');
     setError('');
+    setPhotoChanged(false);
     return undefined;
   }, [isOpen]);
 
@@ -367,7 +387,7 @@ const MyProfileModal = ({ isOpen, onClose }) => {
             <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <Camera className="text-white" size={20} />
             </div>
-            <input type="file" accept="image/*" className="hidden" onChange={handlePhotoInput} />
+            <input type="file" accept="image/jpeg,image/png,image/webp" disabled={isOptimizingPhoto} className="hidden" onChange={handlePhotoInput} />
           </label>
         </div>
 
@@ -540,10 +560,12 @@ const MyProfileModal = ({ isOpen, onClose }) => {
 
             <button
               type="submit"
-              disabled={loading || fetching}
+              disabled={loading || fetching || isOptimizingPhoto}
               className="w-full py-2.5 bg-teal-600 text-white rounded-lg text-[13px] font-bold hover:bg-teal-700 transition-colors flex items-center justify-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              {loading ? (
+              {isOptimizingPhoto ? (
+                <><Loader2 size={16} className="animate-spin" /> Optimizing photo...</>
+              ) : loading ? (
                 <>
                   <Loader2 size={14} className="animate-spin" />
                   <span>Updating...</span>

@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
+import DeviceAccessGate from './components/system/DeviceAccessGate.jsx'
 
 const KEYBOARD_OPEN_THRESHOLD = 120;
 const VIEWPORT_SYNC_DELAY_MS = 700;
@@ -91,7 +92,9 @@ const dismissBootSplash = () => {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <DeviceAccessGate>
+      <App />
+    </DeviceAccessGate>
   </React.StrictMode>,
 )
 
