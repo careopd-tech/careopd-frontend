@@ -40,10 +40,8 @@ const Appointments = ({
   const dateContext = useGlobalDate();
   const safeCurrentDate = dateContext?.currentDate || getLocalDateString();
   const clinicId = localStorage.getItem('clinicId');
-  const userRole = localStorage.getItem('userRole') || 'admin';
   const doctorId = localStorage.getItem('doctorId') || '';
   const sessionUser = getSessionUser();
-  const rbacQuery = `&userRole=${userRole}&doctorId=${doctorId}`;
   
   // --- ADDED: RBAC HELPER ---
   const canManageAppointments = hasPermission(sessionUser.permissions, 'appointments.manage');
@@ -116,7 +114,11 @@ const Appointments = ({
   const [isVitalsModalOpen, setIsVitalsModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isViewVitalsModalOpen, setIsViewVitalsModalOpen] = useState(false);
-  const [expandedSection, setExpandedSection] = useState('today');
+  const [expandedSection, setExpandedSection] = useState(() => (
+    ['today', 'upcoming', 'previous'].includes(data.cachedExpandedSection)
+      ? data.cachedExpandedSection
+      : 'today'
+  ));
   const [rebookingApptId, setRebookingApptId] = useState(null);
   const [isFollowUpBooking, setIsFollowUpBooking] = useState(false);
   const [followUpSourceApptId, setFollowUpSourceApptId] = useState('');
@@ -165,6 +167,7 @@ const Appointments = ({
   const [invalidFields, setInvalidFields] = useState([]);
   const [patientSearchQuery, setPatientSearchQuery] = useState('');
   const [isPatientDropdownOpen, setIsPatientDropdownOpen] = useState(false);
+  const [isPatientSearching, setIsPatientSearching] = useState(false);
 
   // Refs
   const previousListRef = useRef(null);
@@ -174,6 +177,12 @@ const Appointments = ({
   const expandedSectionRef = useRef(expandedSection);
   const searchQueryRef = useRef(searchQuery);
   const searchPageRef = useRef(searchPage);
+  const searchResultsRef = useRef(searchResults);
+  const syncCursorRef = useRef('');
+  const deltaPollInFlightRef = useRef(false);
+  const sectionSyncRequestRef = useRef({ upcoming: 0, previous: 0 });
+  const hasRunInitialSectionEffectRef = useRef(false);
+  const patientSearchTimeoutRef = useRef(null);
   const hasSnappedToBottomRef = useRef(false);
   const consultationDraftSaveTimeoutRef = useRef(null);
   const initialConsultationDraftSnapshotRef = useRef('');
@@ -185,18 +194,21 @@ const Appointments = ({
   useEffect(() => { expandedSectionRef.current = expandedSection; }, [expandedSection]);
   useEffect(() => { searchQueryRef.current = searchQuery; }, [searchQuery]);
   useEffect(() => { searchPageRef.current = searchPage; }, [searchPage]);
+  useEffect(() => { searchResultsRef.current = searchResults; }, [searchResults]);
   useEffect(() => () => {
     if (consultationDraftSaveTimeoutRef.current) {
       window.clearTimeout(consultationDraftSaveTimeoutRef.current);
     }
   }, []);
 
-  // Force Expand Today on landing
   useEffect(() => {
-    if (!searchQuery) {
-      setExpandedSection('today');
-    }
-  }, [searchQuery]);
+    if (modalOnly || !expandedSection) return;
+    setData(prev => (
+      prev.cachedExpandedSection === expandedSection
+        ? prev
+        : { ...prev, cachedExpandedSection: expandedSection }
+    ));
+  }, [expandedSection, modalOnly, setData]);
 
   useEffect(() => {
     if (!bookingPatientRequest?._id) return;
@@ -230,16 +242,22 @@ const Appointments = ({
   }, [bookingPatientRequest, safeCurrentDate, onBookingRequestConsumed]);
 
   useEffect(() => {
-    if (!modalOnly || !isAddModalOpen || !clinicId) return undefined;
+    const needsSchedulingSupport = isAddModalOpen || isRescheduleModalOpen;
+    if ((!needsSchedulingSupport && !isFilterModalOpen) || !clinicId) return undefined;
 
+    const selectedSchedulingDoctorId = isRescheduleModalOpen
+      ? getEntityId(actionAppt?.doctorId)
+      : getEntityId(newAppt.doctorId);
     const shouldLoadDoctors = !(data.doctors || []).length;
-    const shouldLoadCalendar = Boolean(newAppt.doctorId) && !(data.calendar30 || []).length;
+    const shouldLoadCalendar = needsSchedulingSupport
+      && Boolean(selectedSchedulingDoctorId)
+      && !(data.calendar30 || []).length;
     const shouldLoadClinic = !data.clinic || !Object.keys(data.clinic).length;
     if (!shouldLoadDoctors && !shouldLoadCalendar && !shouldLoadClinic) return undefined;
 
     const requestParts = [
       shouldLoadDoctors ? 'doctors' : '',
-      shouldLoadCalendar ? `calendar:${newAppt.doctorId}` : '',
+      shouldLoadCalendar ? `calendar:${selectedSchedulingDoctorId}` : '',
       shouldLoadClinic ? 'clinic' : ''
     ].filter(Boolean);
     const requestKey = `${clinicId}:${safeCurrentDate}:${requestParts.join('|')}`;
@@ -252,10 +270,10 @@ const Appointments = ({
       try {
         const [doctors, calendar30, clinic] = await Promise.all([
           shouldLoadDoctors
-            ? authFetch(`${API_BASE_URL}/api/doctors/${clinicId}?includePhoto=false`).then(res => (res.ok ? res.json() : []))
+            ? authFetch(`${API_BASE_URL}/api/doctors/${clinicId}?view=booking`).then(res => (res.ok ? res.json() : []))
             : Promise.resolve(null),
           shouldLoadCalendar
-            ? authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments&date=${safeCurrentDate}${rbacQuery}`).then(res => (res.ok ? res.json() : []))
+            ? authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments&date=${safeCurrentDate}`).then(res => (res.ok ? res.json() : []))
             : Promise.resolve(null),
           shouldLoadClinic
             ? authFetch(`${API_BASE_URL}/api/clinics/${clinicId}`).then(res => (res.ok ? res.json() : null))
@@ -281,17 +299,50 @@ const Appointments = ({
       isMounted = false;
     };
   }, [
-    modalOnly,
     isAddModalOpen,
+    isRescheduleModalOpen,
+    isFilterModalOpen,
     clinicId,
     safeCurrentDate,
-    rbacQuery,
     data.doctors,
     data.calendar30,
     data.clinic,
     newAppt.doctorId,
+    actionAppt,
     setData
   ]);
+
+  useEffect(() => {
+    window.clearTimeout(patientSearchTimeoutRef.current);
+    const normalizedQuery = patientSearchQuery.trim();
+    if (!isAddModalOpen || normalizedQuery.length < 2 || !clinicId) {
+      setIsPatientSearching(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setIsPatientSearching(true);
+    patientSearchTimeoutRef.current = window.setTimeout(async () => {
+      try {
+        const response = await authFetch(`${API_BASE_URL}/api/patients/${clinicId}?mode=list&view=booking&page=1&limit=20&query=${encodeURIComponent(normalizedQuery)}`);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || cancelled || patientSearchQuery.trim() !== normalizedQuery) return;
+        const matches = Array.isArray(payload.data) ? payload.data : [];
+        setData(prev => {
+          const existing = Array.isArray(prev.patients) ? prev.patients : [];
+          const matchIds = new Set(matches.map(patient => getEntityId(patient)));
+          return { ...prev, patients: [...matches, ...existing.filter(patient => !matchIds.has(getEntityId(patient)))] };
+        });
+      } finally {
+        if (!cancelled) setIsPatientSearching(false);
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(patientSearchTimeoutRef.current);
+    };
+  }, [isAddModalOpen, patientSearchQuery, clinicId, setData]);
 
   // Reset the snap flag when the user leaves the 'previous' section
   useEffect(() => {
@@ -562,6 +613,7 @@ const Appointments = ({
       ...prev,
       appointments: patchList(prev.appointments || []),
       cachedSections: nextSections,
+      appointmentCacheDate: safeCurrentDate,
       calendar30: patchList(prev.calendar30 || [])
     }));
     return patchedAppointment;
@@ -646,7 +698,7 @@ const Appointments = ({
   });
 
   // --- 6. DATA FETCHING ---
-  const fetchAllData = async (forceSync = false, overrideQuery = undefined, resetLazySections = false) => {
+  const fetchAllData = async (forceSync = false, overrideQuery = undefined) => {
     if (!clinicId) return;
     setLoadError('');
     const isNewSearch = overrideQuery !== undefined;
@@ -655,73 +707,74 @@ const Appointments = ({
 
     try {
       const promises = [];
-      const dashboardRequests = [
-        { key: 'appointments snapshot', url: `${API_BASE_URL}/api/appointments/${clinicId}?mode=snapshot&date=${safeCurrentDate}${rbacQuery}` },
-        { key: 'doctors', url: `${API_BASE_URL}/api/doctors/${clinicId}?includePhoto=false` },
-        { key: 'patients', url: `${API_BASE_URL}/api/patients/${clinicId}` },
-        { key: 'appointments calendar', url: `${API_BASE_URL}/api/appointments/${clinicId}?tag=appointments&date=${safeCurrentDate}${rbacQuery}` }
-      ];
+      const fetchLoadedWindow = async ({ recordCount, buildUrl, extractData }) => {
+        const requestedCount = Math.max(1, recordCount);
+        const pageSize = requestedCount <= 100 ? requestedCount : 100;
+        const pageCount = Math.ceil(requestedCount / pageSize);
+        const responses = await Promise.all(Array.from({ length: pageCount }, (_, index) => (
+          authFetch(buildUrl(index + 1, pageSize, index === 0))
+        )));
+        const failedResponse = responses.find(response => !response.ok);
+        if (failedResponse) throw new Error(`Appointment refresh failed (${failedResponse.status}).`);
+        const payloads = await Promise.all(responses.map(response => response.json()));
+        return {
+          data: payloads.flatMap(extractData).slice(0, requestedCount),
+          firstPayload: payloads[0]
+        };
+      };
 
-      const dashboardPromise = Promise.all(dashboardRequests.map(req => (
-        authFetch(req.url)
-      ))).then(async ([snapshotRes, docsRes, patsRes, calRes]) => {
-        const dashboardResponses = [snapshotRes, docsRes, patsRes, calRes];
-        const failedIndex = dashboardResponses.findIndex(res => !res.ok);
-
-        if (failedIndex !== -1) {
-          const failedRequest = dashboardRequests[failedIndex];
-          const failedResponse = dashboardResponses[failedIndex];
-          const body = await failedResponse.text().catch(() => '');
-          console.error('Dashboard API failed:', {
-            endpoint: failedRequest.key,
-            url: failedRequest.url,
-            status: failedResponse.status,
-            body
-          });
-          setLoadError(`${failedRequest.key} failed (${failedResponse.status}). ${body}`);
-          return;
-        }
-
-        {
-          const [snapshot, docs, pats, calendar30, clinic] = await Promise.all([
-            snapshotRes.json(),
-            docsRes.json(),
-            patsRes.json(),
-            calRes.json(),
-            authFetch(`${API_BASE_URL}/api/clinics/${clinicId}`)
-              .then(async (response) => (response.ok ? response.json() : null))
+      const shouldFetchDashboard = !isSearchMode || forceSync;
+      if (shouldFetchDashboard) {
+        const dashboardPromise = Promise.all([
+          authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=snapshot&date=${safeCurrentDate}`),
+          (!data.clinic || !Object.keys(data.clinic).length)
+            ? authFetch(`${API_BASE_URL}/api/clinics/${clinicId}`)
+              .then(async response => (response.ok ? response.json() : null))
               .catch(() => null)
-          ]);
+            : Promise.resolve(null)
+        ]).then(async ([snapshotRes, clinic]) => {
+          if (!snapshotRes.ok) {
+            const body = await snapshotRes.text().catch(() => '');
+            setLoadError(`Appointments snapshot failed (${snapshotRes.status}). ${body}`);
+            return;
+          }
+
+          const snapshot = await snapshotRes.json();
+          if (snapshot.syncCursor && !syncCursorRef.current) syncCursorRef.current = snapshot.syncCursor;
 
           const activeSection = expandedSectionRef.current;
 
           const syncGroup = async (group, serverCount) => {
-            if (resetLazySections && activeSection !== group) return [];
-            if (activeSection !== group) return sectionsRef.current[group];
-
             const currentList = sectionsRef.current[group];
-            const needsSync = serverCount !== currentList.length || forceSync;
+            const shouldSynchronize = activeSection === group;
+            if (!shouldSynchronize) return currentList;
+            if (serverCount === 0) return [];
 
-            if (needsSync) {
-              if (serverCount === 0) return [];
-
-              const currentPages = Math.ceil((currentList.length || 1) / 20);
-              const limit = Math.max(currentPages * 20, 20);
-
-              const res = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=batch&group=${group}&page=1&limit=${limit}&date=${safeCurrentDate}${rbacQuery}`);
-              if (res.ok) {
-                let list = await res.json();
-                if (group === 'previous') {
-                  list.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
-                }
-                return list;
+            const loadedWindow = currentList.length > 0
+              ? Math.ceil(currentList.length / 20) * 20
+              : 20;
+            const refreshCount = Math.min(serverCount, loadedWindow);
+            try {
+              const refreshed = await fetchLoadedWindow({
+                recordCount: refreshCount,
+                buildUrl: (pageNumber, pageLimit) => `${API_BASE_URL}/api/appointments/${clinicId}?mode=batch&group=${group}&page=${pageNumber}&limit=${pageLimit}&date=${safeCurrentDate}`,
+                extractData: payload => Array.isArray(payload) ? payload : []
+              });
+              const list = refreshed.data;
+              if (group === 'previous') {
+                list.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
               }
+              return list;
+            } catch (groupError) {
+              console.error(`Failed to synchronize ${group} appointments:`, groupError);
+              return currentList;
             }
-            return currentList;
           };
 
-          const newUpcoming = await syncGroup('upcoming', snapshot.counts?.upcoming || 0);
-          const newPrevious = await syncGroup('previous', snapshot.counts?.previous || 0);
+          const [newUpcoming, newPrevious] = await Promise.all([
+            syncGroup('upcoming', snapshot.counts?.upcoming || 0),
+            syncGroup('previous', snapshot.counts?.previous || 0)
+          ]);
 
           const updatedToday = snapshot.today || [];
 
@@ -734,22 +787,30 @@ const Appointments = ({
           setSections(finalSections);
           setMetaCounts({ previous: snapshot.counts?.previous || 0, upcoming: snapshot.counts?.upcoming || 0 });
           setData(prev => ({
-            ...prev, clinic: clinic || prev.clinic, doctors: docs, patients: pats, appointments: updatedToday, counts: snapshot.counts, cachedSections: finalSections, calendar30: calendar30
+            ...prev,
+            clinic: clinic || prev.clinic,
+            appointments: updatedToday,
+            counts: snapshot.counts,
+            cachedSections: finalSections,
+            appointmentCacheDate: safeCurrentDate
           }));
-        }
-      });
-      promises.push(dashboardPromise);
+        });
+        promises.push(dashboardPromise);
+      }
 
       if (isSearchMode) {
         if (!forceSync) setIsSearching(true);
-        const currentPagesLoaded = isNewSearch ? 1 : searchPageRef.current;
-        const limitToFetch = Math.max(20, currentPagesLoaded * 20);
-
-        const searchPromise = authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=search&query=${currentQuery}&page=1&limit=${limitToFetch}${rbacQuery}`)
-          .then(res => res.json())
-          .then(data => {
-            const results = Array.isArray(data) ? data : (data.data || []);
-            const count = Array.isArray(data) ? data.length : (data.total || 0);
+        const normalizedQuery = currentQuery.trim();
+        const loadedSearchWindow = Math.max(20, (isNewSearch ? 1 : searchPageRef.current) * 20);
+        const searchPromise = fetchLoadedWindow({
+          recordCount: loadedSearchWindow,
+          buildUrl: (pageNumber, pageLimit, includeTotal) => `${API_BASE_URL}/api/appointments/${clinicId}?mode=search&query=${encodeURIComponent(normalizedQuery)}&page=${pageNumber}&limit=${pageLimit}&includeTotal=${includeTotal ? 'true' : 'false'}`,
+          extractData: payload => Array.isArray(payload) ? payload : (payload.data || [])
+        })
+          .then(searchWindow => {
+            if (searchQueryRef.current.trim() !== normalizedQuery) return;
+            const results = searchWindow.data;
+            const count = Number(searchWindow.firstPayload?.total) || results.length;
             setSearchResults(results);
             setSearchTotal(count);
             if (isNewSearch) { setSearchPage(1); }
@@ -765,21 +826,188 @@ const Appointments = ({
     finally { setLoading(false); setIsSearching(false); }
   };
 
+  const pollAppointmentDeltas = async () => {
+    if (!clinicId || !syncCursorRef.current || deltaPollInFlightRef.current) return;
+    deltaPollInFlightRef.current = true;
+
+    try {
+      let cursor = syncCursorRef.current;
+      let hasMore = true;
+      let latestCounts = null;
+      let latestSearchTotal = null;
+      const changedById = new Map();
+
+      for (let pageNumber = 0; hasMore && pageNumber < 50; pageNumber += 1) {
+        const activeSearchQuery = searchQueryRef.current.trim();
+        const searchParam = activeSearchQuery.length >= 2 ? `&searchQuery=${encodeURIComponent(activeSearchQuery)}` : '';
+        const response = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=changes&date=${safeCurrentDate}&cursor=${encodeURIComponent(cursor)}${searchParam}`);
+        if (!response.ok) throw new Error(`Appointment synchronization failed (${response.status}).`);
+        const payload = await response.json();
+        (payload.changes || []).forEach(appointment => changedById.set(getEntityId(appointment), appointment));
+        latestCounts = payload.counts || latestCounts;
+        if (Number.isFinite(Number(payload.searchTotal))) latestSearchTotal = Number(payload.searchTotal);
+        cursor = payload.nextCursor || cursor;
+        hasMore = payload.hasMore === true;
+      }
+
+      const changes = [...changedById.values()];
+      const currentSections = sectionsRef.current;
+      const changedIds = new Set(changes.map(appointment => getEntityId(appointment)));
+      const belongsToGroup = (appointment, group) => {
+        if (group === 'today') return appointment.date === safeCurrentDate;
+        if (group === 'upcoming') return appointment.date > safeCurrentDate;
+        return appointment.date < safeCurrentDate && appointment.status !== 'Cancelled';
+      };
+      const sortAscending = (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time);
+
+      const boundaryByGroup = { upcoming: [], previous: [] };
+      const activeGroup = expandedSectionRef.current;
+      if ((activeGroup === 'upcoming' || activeGroup === 'previous') && currentSections[activeGroup].length > 0 && changes.length > 0) {
+        const currentById = new Map(currentSections[activeGroup].map(appointment => [getEntityId(appointment), appointment]));
+        const affectedCount = changes.filter(appointment => {
+          const previousAppointment = currentById.get(getEntityId(appointment));
+          const belongsNow = belongsToGroup(appointment, activeGroup);
+          if (!previousAppointment) return belongsNow;
+          const orderingChanged = previousAppointment.date !== appointment.date || previousAppointment.time !== appointment.time;
+          const membershipChanged = !belongsNow;
+          return orderingChanged || membershipChanged;
+        }).length;
+        if (affectedCount > 0) {
+          const boundaryCount = Math.min(affectedCount, currentSections[activeGroup].length, 100);
+          const boundaryOffset = Math.max(0, currentSections[activeGroup].length - boundaryCount);
+          const boundaryResponse = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=batch&group=${activeGroup}&offset=${boundaryOffset}&limit=${boundaryCount}&date=${safeCurrentDate}`);
+          if (boundaryResponse.ok) boundaryByGroup[activeGroup] = await boundaryResponse.json();
+        }
+      }
+
+      const patchWindow = (group) => {
+        const current = currentSections[group] || [];
+        const capacity = current.length;
+        if (capacity === 0) return current;
+        const boundary = boundaryByGroup[group] || [];
+        const replacementIds = new Set(boundary.map(appointment => getEntityId(appointment)));
+        const candidates = [
+          ...current.filter(appointment => !changedIds.has(getEntityId(appointment)) && !replacementIds.has(getEntityId(appointment))),
+          ...changes.filter(appointment => belongsToGroup(appointment, group)),
+          ...boundary
+        ];
+        const unique = [...new Map(candidates.map(appointment => [getEntityId(appointment), appointment])).values()]
+          .sort(sortAscending);
+        return group === 'previous' ? unique.slice(-capacity) : unique.slice(0, capacity);
+      };
+
+      const todayCandidates = [
+        ...(currentSections.today || []).filter(appointment => !changedIds.has(getEntityId(appointment))),
+        ...changes.filter(appointment => belongsToGroup(appointment, 'today'))
+      ];
+      const nextSections = {
+        today: [...new Map(todayCandidates.map(appointment => [getEntityId(appointment), appointment])).values()]
+          .sort((a, b) => a.time.localeCompare(b.time)),
+        upcoming: patchWindow('upcoming'),
+        previous: patchWindow('previous')
+      };
+
+      sectionsRef.current = nextSections;
+      setSections(nextSections);
+      if (latestCounts) {
+        setMetaCounts({ previous: latestCounts.previous || 0, upcoming: latestCounts.upcoming || 0 });
+      }
+      setData(prev => ({
+        ...prev,
+        appointments: nextSections.today,
+        counts: latestCounts ? { previous: latestCounts.previous || 0, upcoming: latestCounts.upcoming || 0 } : prev.counts,
+        cachedSections: nextSections,
+        appointmentCacheDate: safeCurrentDate
+      }));
+
+      const activeSearch = searchQueryRef.current.trim();
+      if (activeSearch.length >= 2 && changes.length > 0) {
+        const numericSearch = /^\d+$/.test(activeSearch);
+        const normalizedSearch = activeSearch.toLowerCase();
+        const matchesSearch = (appointment) => {
+          const patient = appointment.patientId && typeof appointment.patientId === 'object' ? appointment.patientId : {};
+          const doctor = appointment.doctorId && typeof appointment.doctorId === 'object' ? appointment.doctorId : {};
+          if (numericSearch) return String(patient.phone || '').includes(activeSearch);
+          return [patient.name, doctor.name, doctor.department]
+            .some(value => String(value || '').toLowerCase().includes(normalizedSearch));
+        };
+        const currentSearch = searchResultsRef.current;
+        const capacity = Math.max(currentSearch.length, searchPageRef.current * 20);
+        const currentSearchById = new Map(currentSearch.map(appointment => [getEntityId(appointment), appointment]));
+        const boundaryCount = Math.min(100, changes.filter(appointment => {
+          const previousAppointment = currentSearchById.get(getEntityId(appointment));
+          const matchesNow = matchesSearch(appointment);
+          if (!previousAppointment) return matchesNow;
+          return !matchesNow || previousAppointment.date !== appointment.date || previousAppointment.time !== appointment.time;
+        }).length);
+        let searchBoundary = [];
+        if (boundaryCount > 0 && capacity > 0) {
+          const boundaryOffset = Math.max(0, capacity - boundaryCount);
+          const boundaryResponse = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=search&query=${encodeURIComponent(activeSearch)}&offset=${boundaryOffset}&limit=${boundaryCount}&includeTotal=false`);
+          if (boundaryResponse.ok) {
+            const boundaryPayload = await boundaryResponse.json();
+            searchBoundary = Array.isArray(boundaryPayload) ? boundaryPayload : (boundaryPayload.data || []);
+          }
+        }
+        const searchBoundaryIds = new Set(searchBoundary.map(appointment => getEntityId(appointment)));
+        const nextSearch = [
+          ...currentSearch.filter(appointment => !changedIds.has(getEntityId(appointment)) && !searchBoundaryIds.has(getEntityId(appointment))),
+          ...changes.filter(matchesSearch),
+          ...searchBoundary
+        ]
+          .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time))
+          .slice(0, capacity);
+        searchResultsRef.current = nextSearch;
+        setSearchResults(nextSearch);
+        setSearchTotal(latestSearchTotal ?? nextSearch.length);
+      }
+
+      syncCursorRef.current = cursor;
+    } catch (error) {
+      console.error('Appointment delta synchronization failed:', error);
+    } finally {
+      deltaPollInFlightRef.current = false;
+    }
+  };
+
   useEffect(() => {
     if (modalOnly) return undefined;
 
-    // Refresh today's cards and section counts, but leave historical/future
-    // card data lazy-loaded only when the user opens those accordions.
-    setExpandedSection('today');
-    fetchAllData(true, undefined, true);
-    const intervalId = setInterval(() => fetchAllData(true), 60000);
-    return () => clearInterval(intervalId);
+    // Render every cached section immediately, then refresh the currently
+    // expanded loaded window and today's snapshot in the background.
+    syncCursorRef.current = '';
+    fetchAllData(true, '');
+    // Poll only records changed since this device's last server-issued cursor.
+    const intervalId = setInterval(pollAppointmentDeltas, 60000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') pollAppointmentDeltas();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [safeCurrentDate, modalOnly]);
 
   useEffect(() => {
+    if (!hasRunInitialSectionEffectRef.current) {
+      hasRunInitialSectionEffectRef.current = true;
+      return;
+    }
     if (modalOnly) return;
     if (expandedSection === 'previous' || expandedSection === 'upcoming') {
-      fetchAllData(true);
+      const group = expandedSection;
+      const requestId = sectionSyncRequestRef.current[group] + 1;
+      sectionSyncRequestRef.current[group] = requestId;
+      const isInitiallyEmpty = sectionsRef.current[group].length === 0;
+      if (isInitiallyEmpty) {
+        setBatchLoading(prev => ({ ...prev, [group]: true }));
+      }
+      fetchAllData(true, '').finally(() => {
+        if (sectionSyncRequestRef.current[group] === requestId && isInitiallyEmpty) {
+          setBatchLoading(prev => ({ ...prev, [group]: false }));
+        }
+      });
     }
   }, [expandedSection, modalOnly]);
 
@@ -810,6 +1038,7 @@ const Appointments = ({
     }
 
     setSearchQuery(val);
+    searchQueryRef.current = val;
 
     if (val) {
       setExpandedSection('today');
@@ -818,7 +1047,13 @@ const Appointments = ({
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
 
     if (!val) {
-      fetchAllData(false, '');
+      setSearchResults([]);
+      setSearchTotal(0);
+      setSearchPage(1);
+    } else if (val.trim().length < 2) {
+      setSearchResults([]);
+      setSearchTotal(0);
+      setIsSearching(false);
     } else {
       searchTimeoutRef.current = setTimeout(() => fetchAllData(false, val), 500);
     }
@@ -845,7 +1080,7 @@ const Appointments = ({
         limitToFetch = 20;
       }
 
-      const response = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=batch&group=${group}&page=${pageToFetch}&limit=${limitToFetch}&date=${safeCurrentDate}${rbacQuery}`);
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=batch&group=${group}&page=${pageToFetch}&limit=${limitToFetch}&date=${safeCurrentDate}`);
       if (response.ok) {
         const newItems = await response.json();
 
@@ -857,9 +1092,15 @@ const Appointments = ({
             ...sectionsRef.current,
             [group]: newItems
           };
+          const nextPage = Math.ceil(newItems.length / 20) + 1;
           setSections(nextSections);
-          setData(d => ({ ...d, cachedSections: nextSections }));
-          setPages(prev => ({ ...prev, [group]: Math.ceil(newItems.length / 20) + 1 }));
+          setData(d => ({
+            ...d,
+            cachedSections: nextSections,
+            cachedPages: { ...(d.cachedPages || {}), [group]: nextPage },
+            appointmentCacheDate: safeCurrentDate
+          }));
+          setPages(prev => ({ ...prev, [group]: nextPage }));
         }
         else if (newItems.length > 0) {
           if (group === 'previous') {
@@ -875,9 +1116,15 @@ const Appointments = ({
               ? [...uniqueNewItems, ...sectionsRef.current.previous] 
               : [...sectionsRef.current.upcoming, ...uniqueNewItems] 
           };
+          const nextPage = Math.ceil(nextSections[group].length / 20) + 1;
           setSections(nextSections);
-          setData(d => ({ ...d, cachedSections: nextSections }));
-          setPages(prev => ({ ...prev, [group]: prev[group] + 1 }));
+          setData(d => ({
+            ...d,
+            cachedSections: nextSections,
+            cachedPages: { ...(d.cachedPages || {}), [group]: nextPage },
+            appointmentCacheDate: safeCurrentDate
+          }));
+          setPages(prev => ({ ...prev, [group]: nextPage }));
         }
       }
     } catch (err) { console.error(err); } finally { setBatchLoading(prev => ({ ...prev, [group]: false })); }
@@ -888,11 +1135,13 @@ const Appointments = ({
     setIsSearchLoadingMore(true);
     try {
       const nextPage = searchPage + 1;
-      const response = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=search&query=${searchQuery}&page=${nextPage}&limit=20${rbacQuery}`);
+      const queryAtRequest = searchQuery.trim();
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=search&query=${encodeURIComponent(queryAtRequest)}&page=${nextPage}&limit=20&includeTotal=false`);
+      if (!response.ok) throw new Error(`Appointment search failed (${response.status}).`);
       const data = await response.json();
       const newItems = Array.isArray(data) ? data : (data.data || []);
 
-      if (newItems.length > 0) {
+      if (newItems.length > 0 && searchQueryRef.current.trim() === queryAtRequest) {
         setSearchResults(prev => {
           const existingIds = new Set(prev.map(item => item._id));
           const uniqueNewItems = newItems.filter(item => !existingIds.has(item._id));
@@ -907,9 +1156,10 @@ const Appointments = ({
   const handleToggleSection = (id) => {
     if (expandedSection === id) setExpandedSection(null);
     else {
+      if ((id === 'previous' || id === 'upcoming') && sectionsRef.current[id].length === 0) {
+        setBatchLoading(prev => ({ ...prev, [id]: true }));
+      }
       setExpandedSection(id);
-      if (id === 'previous' && sections.previous.length === 0 && metaCounts.previous > 0) fetchBatch(id);
-      if (id === 'upcoming' && sections.upcoming.length === 0 && metaCounts.upcoming > 0) fetchBatch(id);
     }
   };
 
@@ -1539,7 +1789,7 @@ const Appointments = ({
 
     try {
       const patientId = getEntityId(appt.patientId);
-      const response = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=history&patientId=${patientId}${rbacQuery}`);
+      const response = await authFetch(`${API_BASE_URL}/api/appointments/${clinicId}?mode=history&patientId=${patientId}`);
       const result = await response.json().catch(() => ([]));
       if (!response.ok) {
         return setHistoryError('Failed to load patient history.');
@@ -2365,7 +2615,7 @@ const Appointments = ({
                           </button>
                         )}
                       </>
-                    ) : (<div className="type-secondary py-10 text-center text-slate-400">{searchResults.length > 0 ? "No results match your active filters." : `No records found for "${searchQuery}"`}</div>)}
+                    ) : (<div className="type-secondary py-10 text-center text-slate-400">{searchQuery.trim().length < 2 ? 'Enter at least 2 characters to search.' : searchResults.length > 0 ? "No results match your active filters." : `No records found for "${searchQuery}"`}</div>)}
                   </div>
                 </div>
               ) : (
@@ -2558,6 +2808,12 @@ const Appointments = ({
                       >
                         <div className="bg-teal-100 p-1 rounded-md"><Plus size={14} className="text-teal-700" /></div> Create New Patient
                       </button>
+
+                      {isPatientSearching && (
+                        <div className="type-secondary p-3 text-center text-slate-400 flex items-center justify-center gap-2">
+                          <Loader2 size={14} className="animate-spin text-teal-600" /> Searching patients...
+                        </div>
+                      )}
                       
                       {patientSearchQuery.length > 0 && data.patients
                         .filter(p => 
@@ -2585,7 +2841,7 @@ const Appointments = ({
                          </button>
                       ))}
                       
-                      {patientSearchQuery !== '' && data.patients.filter(p => (p.name || '').toLowerCase().includes(patientSearchQuery.toLowerCase()) || (p.phone || '').includes(patientSearchQuery)).length === 0 && (
+                      {!isPatientSearching && patientSearchQuery !== '' && data.patients.filter(p => (p.name || '').toLowerCase().includes(patientSearchQuery.toLowerCase()) || (p.phone || '').includes(patientSearchQuery)).length === 0 && (
                          <div className="type-secondary p-4 text-center text-slate-400">No matching patients found.</div>
                       )}
                    </div>

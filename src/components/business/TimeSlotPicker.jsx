@@ -78,7 +78,7 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, cl
         }
 
         let status = 'Available';
-        if (isExpired) status = 'Passed';
+        if (isExpired) status = 'Elapsed';
         else if (isBooked) status = 'Booked';
 
         result.push({ time: t, status, isCurrent });
@@ -102,8 +102,8 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, cl
       {processedSlots.map(slot => {
         const isSelected = selectedTime === slot.time;
         
-        // ISSUE 1 FIX: Properly disable 'Passed' slots, and Booked slots (unless it's the Current one)
-        const isDisabled = slot.status === 'Passed' || (slot.status === 'Booked' && !slot.isCurrent);
+        // Properly disable elapsed slots, and booked slots (unless it's the current one).
+        const isDisabled = slot.status === 'Elapsed' || (slot.status === 'Booked' && !slot.isCurrent);
         
         let colorClass = '';
         let label = slot.status;
@@ -119,8 +119,8 @@ const TimeSlotPicker = ({ selectedTime, onSelect, doctor, date, appointments, cl
             colorClass = 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100 active:scale-95 cursor-pointer';
         } else if (slot.status === 'Booked') {
             colorClass = 'bg-blue-50 border-blue-200 text-blue-700 opacity-80 cursor-not-allowed';
-        } else if (slot.status === 'Passed') {
-            // ISSUE 2 FIX: Darker Grey for Passed/Expired slots
+        } else if (slot.status === 'Elapsed') {
+            // Darker grey for elapsed slots.
             colorClass = 'bg-slate-100 border-slate-300 text-slate-600 cursor-not-allowed shadow-inner';
         }
 
