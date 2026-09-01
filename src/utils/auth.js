@@ -37,6 +37,12 @@ const handleClinicAccessBlock = async (response) => {
   return true;
 };
 
+const getAuthenticationFailure = async (response) => {
+  if (response.status !== 401) return null;
+  const result = await response.clone().json().catch(() => ({}));
+  return String(result.code || '').startsWith('AUTH_') ? result : null;
+};
+
 const getTokenExpiryTime = () => {
   try {
     const segment = getAuthToken().split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
@@ -90,6 +96,8 @@ export const authFetch = async (url, options = {}) => {
   const response = await fetch(url, requestOptions);
   if (await handleClinicAccessBlock(response)) return response;
   if (response.status !== 401) return response;
+  const authenticationFailure = await getAuthenticationFailure(response);
+  if (!authenticationFailure) return response;
 
   try {
     await refreshSession();
@@ -99,7 +107,10 @@ export const authFetch = async (url, options = {}) => {
     });
     if (await handleClinicAccessBlock(retryResponse)) return retryResponse;
     if (retryResponse.status === 401) {
-      notifySessionExpired();
+      const retryAuthenticationFailure = await getAuthenticationFailure(retryResponse);
+      if (retryAuthenticationFailure) {
+        notifySessionExpired(retryAuthenticationFailure.error);
+      }
     }
     return retryResponse;
   } catch (err) {

@@ -18,7 +18,8 @@ const Onboarding = ({ setAuthState }) => {
     type: '',
     phone: '', email: '', password: '', otp: '', registrationToken: '',
     doctorName: '', regNo: '', regYear: '', medicalCouncil: '',
-    clinicName: '', clinicalEstablishmentNo: '', ceIssueDate: '', registeringAuthority: '',
+    clinicName: '', userName: '', willConsult: null,
+    clinicalEstablishmentNo: '', ceIssueDate: '', registeringAuthority: '',
     hasAgreedToTerms: false
   });
 
@@ -28,7 +29,9 @@ const Onboarding = ({ setAuthState }) => {
       ...formData,
       type,
       doctorName: type === 'Solo' ? formData.doctorName : '',
-      clinicName: type === 'Clinic' ? formData.clinicName : ''
+      clinicName: type === 'Clinic' ? formData.clinicName : '',
+      userName: type === 'Clinic' ? formData.userName : '',
+      willConsult: type === 'Clinic' ? formData.willConsult : null
     });
     setStep(2);
   };
@@ -67,6 +70,10 @@ const Onboarding = ({ setAuthState }) => {
   const handleSendOtp = async () => {
     const selectedName = formData.type === 'Solo' ? formData.doctorName : formData.clinicName;
     if (!selectedName.trim() || !formData.phone) return setError('Fill required fields.');
+    if (formData.type === 'Clinic' && !formData.userName.trim()) return setError('Enter your name.');
+    if (formData.type === 'Clinic' && typeof formData.willConsult !== 'boolean') {
+      return setError('Select whether you will also consult as a doctor.');
+    }
     if (!/^\d{10}$/.test(formData.phone)) return setError('Enter a valid 10-digit mobile number.');
 
     setError('');
@@ -256,7 +263,35 @@ const Onboarding = ({ setAuthState }) => {
                       <input required type="text" placeholder="John Doe" className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[14px] outline-none focus:ring-2 focus:ring-teal-500" value={formData.doctorName} onChange={e => setFormData({...formData, doctorName: e.target.value})} />
                     </div>
                   ) : (
-                    <input required type="text" placeholder="CareOPD Medical Center" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[14px] outline-none focus:ring-2 focus:ring-teal-500" value={formData.clinicName} onChange={e => setFormData({...formData, clinicName: e.target.value})} />
+                    <div className="space-y-4">
+                      <input required type="text" placeholder="CareOPD Medical Center" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[14px] outline-none focus:ring-2 focus:ring-teal-500" value={formData.clinicName} onChange={e => setFormData({...formData, clinicName: e.target.value})} />
+                      <div>
+                        <label className="block text-[12px] font-bold text-slate-600 mb-1 uppercase">
+                          Your Name <span className="text-red-500">*</span>
+                        </label>
+                        <input required type="text" placeholder="Your full name" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[14px] outline-none focus:ring-2 focus:ring-teal-500" value={formData.userName} onChange={e => setFormData({...formData, userName: e.target.value})} />
+                      </div>
+                      <fieldset>
+                        <legend className="block text-[12px] font-bold text-slate-600 mb-2 uppercase">
+                          Will you also consult as a doctor? <span className="text-red-500">*</span>
+                        </legend>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[true, false].map(option => (
+                            <label key={String(option)} className={`flex items-center justify-center gap-2 p-2.5 border rounded-xl cursor-pointer transition-colors ${formData.willConsult === option ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'}`}>
+                              <input
+                                type="radio"
+                                name="willConsult"
+                                value={String(option)}
+                                checked={formData.willConsult === option}
+                                onChange={() => setFormData({...formData, willConsult: option})}
+                                className="accent-teal-600"
+                              />
+                              <span className="text-[14px] font-semibold">{option ? 'Yes' : 'No'}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
+                    </div>
                   )}
                 </div>
 

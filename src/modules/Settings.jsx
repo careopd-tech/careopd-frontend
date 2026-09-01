@@ -69,10 +69,9 @@ const preventInvalidMoneyKey = (event) => {
   }
 };
 
-const getNonNegativeMoneyInput = (value, fallback = '') => {
+const getNonNegativeWholeNumberInput = (value, fallback = '') => {
   if (value === '') return '';
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric >= 0 ? value : fallback;
+  return /^\d+$/.test(value) ? value : fallback;
 };
 
 const Settings = ({ data, setData, onLogout }) => {
@@ -100,14 +99,14 @@ const Settings = ({ data, setData, onLogout }) => {
   const [statusRemark, setStatusRemark] = useState('');
   const [transferRemark, setTransferRemark] = useState('');
   const [permissionProfiles, setPermissionProfiles] = useState({
-    clinic_admin: {},
+    admin: {},
     doctor: {}
   });
   const [savedPermissionProfiles, setSavedPermissionProfiles] = useState({
-    clinic_admin: {},
+    admin: {},
     doctor: {}
   });
-  const [activePermissionRole, setActivePermissionRole] = useState('clinic_admin');
+  const [activePermissionRole, setActivePermissionRole] = useState('admin');
   const [permissionsLoading, setPermissionsLoading] = useState(false);
   const [notification, setNotification] = useState(null);
   const [notificationStack, setNotificationStack] = useState(() => {
@@ -127,7 +126,7 @@ const Settings = ({ data, setData, onLogout }) => {
 
   const savedUser = getSessionUser();
   const ownerUserId = savedUser.ownerUserId || data.clinic?.ownerUserId || '';
-  const isSuperAdminOwner = savedUser.accountRole === 'super_admin' && (!ownerUserId || String(ownerUserId) === String(savedUser._id));
+  const isSuperAdminOwner = savedUser.role === 'super_admin' && (!ownerUserId || String(ownerUserId) === String(savedUser._id));
   const canManageAccess = hasPermission(savedUser.permissions, 'settings.users_access.manage');
   const canManageRolePermissions = isSuperAdminOwner && hasPermission(savedUser.permissions, 'settings.access_controls.manage');
   const canManageClinicProfile = hasPermission(savedUser.permissions, 'settings.clinic_profile.edit');
@@ -263,7 +262,7 @@ const Settings = ({ data, setData, onLogout }) => {
 
         if (permissionsRes.ok) {
           const permissionsPayload = await permissionsRes.json();
-          const nextPermissionProfiles = permissionsPayload.permissionProfiles || { clinic_admin: {}, doctor: {} };
+          const nextPermissionProfiles = permissionsPayload.permissionProfiles || { admin: {}, doctor: {} };
           setPermissionProfiles(nextPermissionProfiles);
           setSavedPermissionProfiles(nextPermissionProfiles);
         } else if (permissionsRes.status === 403 && canManageRolePermissions) {
@@ -635,7 +634,7 @@ const Settings = ({ data, setData, onLogout }) => {
           name,
           email,
           phone,
-          role: 'clinic_admin'
+          role: 'admin'
         })
       });
 
@@ -837,9 +836,12 @@ const Settings = ({ data, setData, onLogout }) => {
         className={`flex justify-between items-center p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm transition-colors group ${canEdit ? 'hover:border-teal-300 cursor-pointer' : 'cursor-default'}`}
       >
         <div className="min-w-0 pr-2">
-          <h4 className={`type-card-title text-slate-800 truncate transition-colors ${canEdit ? 'group-hover:text-teal-700' : ''}`}>{title}</h4>
-          {isClinicDetails && (
-            <p className="type-label text-teal-700 truncate mt-0.5">{workspaceTypeLabel} ({workspaceStatusLabel})</p>
+          {isClinicDetails ? (
+            <h4 className={`type-card-title text-slate-800 truncate transition-colors ${canEdit ? 'group-hover:text-teal-700' : ''}`}>
+              Clinic Type: <span className="text-teal-700">{data.clinic?.type === 'Clinic' ? 'Clinic' : 'Solo'}</span>
+            </h4>
+          ) : (
+            <h4 className={`type-card-title text-slate-800 truncate transition-colors ${canEdit ? 'group-hover:text-teal-700' : ''}`}>{title}</h4>
           )}
           {subtitle && <p className="type-label text-slate-600 truncate mt-0.5">{subtitle}</p>}
         </div>
@@ -920,14 +922,6 @@ const Settings = ({ data, setData, onLogout }) => {
   const clinicSchedule = getClinicSchedule(data.clinic || {});
   const clinicRegistrationStatus = data.clinic?.clinicRegistrationStatus || (data.clinic?.type === 'Clinic' ? 'Approved' : 'Not Submitted');
   const clinicRegistrationRemark = String(data.clinic?.clinicRegistrationReviewRemark || '').trim();
-  const workspaceTypeLabel = data.clinic?.type === 'Clinic' ? 'Clinic Workspace' : 'Solo Practice';
-  const workspaceStatusLabel = data.clinic?.type === 'Clinic'
-    ? 'Clinic-level features unlocked'
-    : clinicRegistrationStatus === 'Under Review'
-      ? 'Registration Under Review'
-      : clinicRegistrationStatus === 'Correction Required'
-        ? 'Correction Required'
-        : 'Registration Not Submitted';
   const registrationActionSubtitle = clinicRegistrationStatus === 'Under Review'
     ? 'Submitted for operations review. You can edit and resubmit if details need correction.'
     : clinicRegistrationStatus === 'Correction Required'
@@ -938,11 +932,11 @@ const Settings = ({ data, setData, onLogout }) => {
     : 'Submit for Review';
   const roleLabels = {
     super_admin: 'Super Admin',
-    clinic_admin: 'Clinic Admin',
-    doctor: 'Clinic Doctor'
+    admin: 'Admin',
+    doctor: 'Doctor'
   };
   const permissionGroupsByRole = {
-    clinic_admin: [
+    admin: [
       {
         title: 'Access',
         items: [
@@ -960,6 +954,20 @@ const Settings = ({ data, setData, onLogout }) => {
       }
     ],
     doctor: [
+      {
+        title: 'Appointment Operations',
+        items: [
+          { key: 'appointments.create', label: 'Book appointments' },
+          { key: 'appointments.edit', label: 'Edit appointments' },
+          { key: 'appointments.cancel', label: 'Cancel appointments' },
+          { key: 'appointments.rebook', label: 'Reschedule and rebook appointments' },
+          { key: 'appointments.check_in', label: 'Check in patients' },
+          { key: 'appointments.mark_reports_ready', label: 'Mark reports ready' },
+          { key: 'appointments.start_review_reports', label: 'Start report reviews' },
+          { key: 'appointments.mark_walked_out', label: 'Mark patients as walked out' },
+          { key: 'appointments.send_reminder', label: 'Send appointment reminders' }
+        ]
+      },
       {
         title: 'Billing',
         items: [
@@ -1092,7 +1100,7 @@ const Settings = ({ data, setData, onLogout }) => {
   };
 
   const renderRolePermissionTabs = () => {
-    const roleKeys = ['clinic_admin', 'doctor'];
+    const roleKeys = ['admin', 'doctor'];
     const searchedRole = isSearchMode
       ? roleKeys.find(roleKey => matchesSearch(roleLabels[roleKey]))
       : null;
@@ -1136,23 +1144,14 @@ const Settings = ({ data, setData, onLogout }) => {
           searchText: `clinic code join sign in secure code ${data.clinic?.clinicCode || ''}`,
           render: () => (
             <div className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm">
-              <p className="type-label text-slate-600 uppercase">Clinic Code</p>
-              <p className="type-page-title tracking-[0.18em] text-teal-600 mt-1">
-                {data.clinic?.clinicCode ? `${data.clinic.clinicCode.slice(0, 4)}-${data.clinic.clinicCode.slice(4)}` : 'Not Available'}
+              <p className="type-card-title text-slate-800 truncate">
+                Clinic Code:{' '}
+                <span className="text-teal-700 tracking-[0.12em]">
+                  {data.clinic?.clinicCode ? `${data.clinic.clinicCode.slice(0, 4)}-${data.clinic.clinicCode.slice(4)}` : 'Not Available'}
+                </span>
               </p>
-              <p className="type-secondary text-slate-400 mt-1">Share this code with your team for secure sign-in.</p>
+              <p className="type-label text-slate-600 truncate mt-0.5">Share this code with your team for secure sign-in.</p>
             </div>
-          )
-        },
-        {
-          key: 'clinic-details',
-          searchText: `clinic details clinic name address ${data.clinic?.name || ''} ${data.clinic?.address || ''}`,
-          render: () => (
-            <SettingItem
-              title="Clinic Details"
-              subtitle={(data.clinic?.name || 'My Clinic') + " • " + (data.clinic?.address || 'Set address...')}
-              onEdit={canManageClinicProfile ? () => openEdit({ title: 'Edit Clinic Details', type: 'clinic_details', initialData: { name: data.clinic?.name, address: data.clinic?.address } }) : undefined}
-            />
           )
         },
         {
@@ -1185,7 +1184,12 @@ const Settings = ({ data, setData, onLogout }) => {
               title="Billing & Services"
               subtitle={isClinicWorkspace
                 ? `${clinicDoctors.length} doctor fee${clinicDoctors.length === 1 ? '' : 's'} • ${(data.clinic?.billingServices || []).filter(service => service.active !== false).length} services configured`
-                : `Consultation Rs ${Number(data.clinic?.consultationFee || 0).toFixed(2)} • ${(data.clinic?.billingServices || []).filter(service => service.active !== false).length} services configured`}
+                : (
+                  <>
+                    <span className="font-semibold text-teal-700">Consultation Rs {Number(data.clinic?.consultationFee || 0)}</span>
+                    <span>{` • ${(data.clinic?.billingServices || []).filter(service => service.active !== false).length} services configured`}</span>
+                  </>
+                )}
               onEdit={canManageBillingServices ? () => openEdit({
                 title: 'Billing & Services',
                 type: 'billing_services',
@@ -1229,13 +1233,34 @@ const Settings = ({ data, setData, onLogout }) => {
         }
       });
 
+      clinicItems.push({
+        key: 'clinic-details',
+        searchText: `clinic details clinic name address ${data.clinic?.name || ''} ${data.clinic?.address || ''}`,
+        render: () => (
+          <SettingItem
+            title="Clinic Details"
+            subtitle={(
+              <>
+                <span>{data.clinic?.name || 'My Clinic'} • </span>
+                {String(data.clinic?.address || '').trim() ? (
+                  <span>{String(data.clinic.address).trim()}</span>
+                ) : (
+                  <span className="font-semibold text-red-600">Set Address</span>
+                )}
+              </>
+            )}
+            onEdit={canManageClinicProfile ? () => openEdit({ title: 'Edit Clinic Details', type: 'clinic_details', initialData: { name: data.clinic?.name, address: data.clinic?.address } }) : undefined}
+          />
+        )
+      });
+
       if (canUpgradeSolo && canManageClinicProfile) {
         clinicItems.push({
           key: 'upgrade-clinic',
           searchText: `register clinic upgrade establishment review ${clinicRegistrationStatus} ${clinicRegistrationRemark}`,
           render: () => (
             <SettingItem
-              title="Register Your Clinic"
+              title="Upgrade Your Clinic Type"
               subtitle={registrationActionSubtitle}
               onEdit={openUpgradeModal}
             />
@@ -1296,15 +1321,6 @@ const Settings = ({ data, setData, onLogout }) => {
 
     const permissionItems = canManageRolePermissions
       ? [
-          {
-            key: 'permissions-info',
-            searchText: 'delegate daily operations ownership permissions role controls clinic admins doctors manage workspace',
-            render: () => (
-              <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
-                <p className="type-secondary text-amber-800">Only the Super Admin can configure role access. Use these controls for optional admin and doctor add-ons.</p>
-              </div>
-            )
-          },
           {
             key: 'permissions-editor',
             searchText: `save role permissions clinic admin doctor access ${permissionGroups.map(group => `${group.title} ${group.items.map(item => item.label).join(' ')}`).join(' ')}`,
@@ -1661,9 +1677,9 @@ const Settings = ({ data, setData, onLogout }) => {
                      onChange={e => {
                        const selectedDoctor = clinicDoctors.find(doctor => String(doctor._id) === String(e.target.value));
                        setFormData({
-                         ...formData,
-                         selectedDoctorId: e.target.value,
-                         consultationFee: String(Number(selectedDoctor?.consultationFee || 0))
+                          ...formData,
+                          selectedDoctorId: e.target.value,
+                          consultationFee: String(Number(selectedDoctor?.consultationFee || 0))
                        });
                      }}
                    >
@@ -1679,19 +1695,23 @@ const Settings = ({ data, setData, onLogout }) => {
 
                <div>
                  <label className="type-label block text-slate-600 mb-1 uppercase">Consultation Fee *</label>
-                 <input
-                   type="number"
-                   min="0"
-                   step="0.01"
-                   className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('consultationFee') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
-                   value={formData.consultationFee || ''}
-                   onKeyDown={preventInvalidMoneyKey}
-                   onPaste={e => {
-                     const pastedValue = e.clipboardData.getData('text');
-                     if (Number(pastedValue) < 0 || pastedValue.includes('-')) e.preventDefault();
-                   }}
-                   onChange={e => setFormData({ ...formData, consultationFee: getNonNegativeMoneyInput(e.target.value, formData.consultationFee || '') })}
-                 />
+                   <input
+                     type="number"
+                     min="0"
+                    step="1"
+                    inputMode="numeric"
+                    className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('consultationFee') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
+                    value={formData.consultationFee || ''}
+                    onKeyDown={e => {
+                      preventInvalidMoneyKey(e);
+                      if (e.key === '.') e.preventDefault();
+                    }}
+                    onPaste={e => {
+                      const pastedValue = e.clipboardData.getData('text');
+                      if (!/^\d+$/.test(pastedValue)) e.preventDefault();
+                    }}
+                    onChange={e => setFormData({ ...formData, consultationFee: getNonNegativeWholeNumberInput(e.target.value, formData.consultationFee || '') })}
+                  />
                </div>
 
                <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -1732,20 +1752,24 @@ const Settings = ({ data, setData, onLogout }) => {
                        <input
                          type="number"
                          min="0"
-                         step="0.01"
+                         step="1"
+                         inputMode="numeric"
                          placeholder="Price"
                          className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes(`billingService-${index}-price`) ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
                          value={service.price || ''}
-                         onKeyDown={preventInvalidMoneyKey}
+                         onKeyDown={e => {
+                           preventInvalidMoneyKey(e);
+                           if (e.key === '.') e.preventDefault();
+                         }}
                          onPaste={e => {
                            const pastedValue = e.clipboardData.getData('text');
-                           if (Number(pastedValue) < 0 || pastedValue.includes('-')) e.preventDefault();
+                           if (!/^\d+$/.test(pastedValue)) e.preventDefault();
                          }}
                          onChange={e => {
                            const nextServices = [...(formData.billingServices || [])];
                            nextServices[index] = {
                              ...nextServices[index],
-                             price: getNonNegativeMoneyInput(e.target.value, nextServices[index]?.price || '')
+                             price: getNonNegativeWholeNumberInput(e.target.value, nextServices[index]?.price || '')
                            };
                            setFormData({ ...formData, billingServices: nextServices });
                          }}
@@ -1781,14 +1805,14 @@ const Settings = ({ data, setData, onLogout }) => {
         </div>
       </Modal>
 
-      <Modal isOpen={upgradeModalOpen} onClose={() => { setUpgradeModalOpen(false); setModalError(''); setInvalidFields([]); }} title="Register Your Clinic" footer={
+      <Modal isOpen={upgradeModalOpen} onClose={() => { setUpgradeModalOpen(false); setModalError(''); setInvalidFields([]); }} title="Upgrade Your Clinic Type" footer={
           <button onClick={handleUpgradeToClinic} disabled={loading} className="type-section-title w-full bg-teal-600 text-white py-1.5 rounded-lg disabled:opacity-70 hover:bg-teal-700 transition-colors">
              {loading ? 'Submitting...' : registrationSubmitLabel}
           </button>
         }>
         <div className="space-y-2">
           <div className="rounded-lg border border-teal-100 bg-teal-50 px-2 py-2">
-            <p className="type-secondary text-teal-900">Congratulations on expanding your practice! Add your official establishment details to unlock clinic-level features.</p>
+            <p className="type-secondary text-teal-900">We’re excited to see you grow! Add your official establishment details to unlock clinic-level features.</p>
           </div>
           {clinicRegistrationStatus === 'Correction Required' && clinicRegistrationRemark ? (
             <div className="rounded-lg border border-amber-100 bg-amber-50 px-2 py-2">

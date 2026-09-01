@@ -46,11 +46,18 @@ const Appointments = ({
   // --- ADDED: RBAC HELPER ---
   const canManageAppointments = hasPermission(sessionUser.permissions, 'appointments.manage');
   const canViewAllAppointments = hasPermission(sessionUser.permissions, 'appointments.view_all') || canManageAppointments;
+  const canCreateAppointments = hasPermission(sessionUser.permissions, 'appointments.create') || canManageAppointments;
+  const canCancelAppointments = hasPermission(sessionUser.permissions, 'appointments.cancel') || canManageAppointments;
+  const canRebookAppointments = hasPermission(sessionUser.permissions, 'appointments.rebook') || canManageAppointments;
+  const canCheckInAppointments = hasPermission(sessionUser.permissions, 'appointments.check_in') || canManageAppointments;
+  const canMarkReportsReady = hasPermission(sessionUser.permissions, 'appointments.mark_reports_ready') || canManageAppointments;
+  const canStartReportReview = hasPermission(sessionUser.permissions, 'appointments.start_review_reports') || canManageAppointments;
+  const canMarkWalkedOut = hasPermission(sessionUser.permissions, 'appointments.mark_walked_out') || canManageAppointments;
+  const canSendAppointmentReminder = hasPermission(sessionUser.permissions, 'appointments.send_reminder') || canManageAppointments;
   const canCollectPayments = hasPermission(sessionUser.permissions, 'billing.collect_payment');
   const canViewPrescriptions = hasPermission(sessionUser.permissions, 'documents.view_prescription');
   const canViewReports = hasPermission(sessionUser.permissions, 'clinical.view_reports');
   const canRecordVitals = hasPermission(sessionUser.permissions, 'appointments.record_vitals') || hasPermission(sessionUser.permissions, 'appointments.consult_own');
-  const isAdmin = canManageAppointments;
 
   // --- NEW: 30-Day Window Boundary ---
   const maxDateObj = new Date(safeCurrentDate);
@@ -1267,6 +1274,23 @@ const Appointments = ({
     );
   };
 
+  const hasLocalDoctorTimeConflict = (doctorIdValue, date, time, excludeAppointmentId = null) => {
+    if (!doctorIdValue || !date || !time) return false;
+    const allAppointments = [
+      ...(sections.previous || []),
+      ...(sections.today || []),
+      ...(sections.upcoming || []),
+      ...(data.calendar30 || [])
+    ];
+    return allAppointments.some(appt => (
+      getEntityId(appt._id) !== getEntityId(excludeAppointmentId) &&
+      getEntityId(appt.doctorId) === getEntityId(doctorIdValue) &&
+      appt.date === date &&
+      appt.time === time &&
+      !['Cancelled', 'Walked Out', 'Expired', 'No Show'].includes(getUiStatus(appt))
+    ));
+  };
+
   const closeAddAppointmentModal = () => {
     if (modalOnly) {
       bookingSupportRequestKeysRef.current.clear();
@@ -1300,6 +1324,9 @@ const Appointments = ({
 
     if (errors.length > 0) { setInvalidFields(errors); return setModalError('Please fill required fields *'); }
     if (!validateFutureDate(newAppt.date, newAppt.time)) return setModalError('Cannot book in the past.');
+    if (hasLocalDoctorTimeConflict(newAppt.doctorId, newAppt.date, newAppt.time, rebookingApptId)) {
+      return setModalError('The selected doctor already has an appointment at this time.');
+    }
     if (hasLocalPatientConflict(newAppt.patientId, newAppt.date, newAppt.time, rebookingApptId)) {
       return setModalError('Selected Patient has an existing appointment at the same time.');
     }
@@ -1343,6 +1370,9 @@ const Appointments = ({
         onBookingSuccess?.({ shortMessage, detailedMessage, type: 'success' });
         closeAddAppointmentModal();
       } else {
+        if (result.errorCode === 'ERR_DOCTOR_SLOT_CONFLICT') {
+          return setModalError('The selected doctor already has an appointment at this time.');
+        }
         if (result.errorCode === 'ERR_APPOINTMENT_CONFLICT') {
           return setModalError('Selected Patient has an existing appointment at the same time.');
         }
@@ -1407,6 +1437,9 @@ const Appointments = ({
   const confirmReschedule = async () => {
     if (!rescheduleData.date || !rescheduleData.time) return setModalError('Select date & time');
     if (!validateFutureDate(rescheduleData.date, rescheduleData.time)) return setModalError('Cannot reschedule to the past.');
+    if (hasLocalDoctorTimeConflict(getEntityId(actionAppt?.doctorId), rescheduleData.date, rescheduleData.time, actionAppt?._id)) {
+      return setModalError('The selected doctor already has an appointment at this time.');
+    }
     if (hasLocalPatientConflict(getEntityId(actionAppt?.patientId), rescheduleData.date, rescheduleData.time, actionAppt?._id)) {
       return setModalError('Selected Patient has an existing appointment at the same time.');
     }
@@ -1420,7 +1453,9 @@ const Appointments = ({
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
-        return setModalError(result.errorCode === 'ERR_APPOINTMENT_CONFLICT'
+        return setModalError(result.errorCode === 'ERR_DOCTOR_SLOT_CONFLICT'
+          ? 'The selected doctor already has an appointment at this time.'
+          : result.errorCode === 'ERR_APPOINTMENT_CONFLICT'
           ? 'Selected Patient has an existing appointment at the same time.'
           : (result.error || 'Failed to reschedule appointment.'));
       }
@@ -2232,9 +2267,9 @@ const Appointments = ({
     ].filter(Boolean);
 
     if (isCompleted) {
-      primaryAction = actions.bookFollowUp;
+      primaryAction = canCreateAppointments ? actions.bookFollowUp : null;
       overflowActions = [
-        ...(hasRecommendedTests ? [actions.reportReview] : []),
+        ...(hasRecommendedTests && canStartReportReview ? [actions.reportReview] : []),
         ...closedLoopOverflowActions.filter((action) => action.label !== primaryAction?.label)
       ];
     } else if (showActions && (isToday || isCarryoverVisit)) {
@@ -2242,7 +2277,7 @@ const Appointments = ({
         if (isTreatingPhysician && appt.reportsReadyAt) {
           primaryAction = actions.consult;
           overflowActions = [...clinicianOverflowActions, ...billingOverflowActions];
-        } else if (canManageAppointments && !appt.reportsReadyAt) {
+        } else if (canMarkReportsReady && !appt.reportsReadyAt) {
           primaryAction = actions.reportsReady;
           overflowActions = billingOverflowActions;
         }
@@ -2250,7 +2285,7 @@ const Appointments = ({
         if (isTreatingPhysician) {
           primaryAction = actions.consult;
           overflowActions = [...clinicianOverflowActions, ...billingOverflowActions, actions.leftEarly];
-        } else if (canManageAppointments) {
+        } else if (canMarkWalkedOut) {
           overflowActions = [...billingOverflowActions, actions.leftEarly];
         }
       } else if (isInConsultation && isTreatingPhysician) {
@@ -2271,22 +2306,36 @@ const Appointments = ({
           overflowActions = isCheckedIn
             ? [...clinicianOverflowActions, ...billingOverflowActions, actions.leftEarly]
             : [...clinicianOverflowActions, ...billingOverflowActions];
-        } else if (canManageAppointments && canRecordVitals && vitalsRequiredBeforeConsult && isCheckedIn) {
+        } else if (canRecordVitals && vitalsRequiredBeforeConsult && isCheckedIn) {
           primaryAction = actions.vitals;
-          overflowActions = [...billingOverflowActions, actions.leftEarly];
-        } else if (canManageAppointments && isCheckedIn) {
+          overflowActions = [...billingOverflowActions, ...(canMarkWalkedOut ? [actions.leftEarly] : [])];
+        } else if (canMarkWalkedOut && isCheckedIn) {
           overflowActions = [...billingOverflowActions, actions.leftEarly];
         }
-      } else if (isToday && canManageAppointments) {
+      } else if (isToday && (canCheckInAppointments || canRebookAppointments || canCancelAppointments || canSendAppointmentReminder)) {
+        const scheduledOverflowActions = [
+          canRebookAppointments ? actions.reschedule : null,
+          canCancelAppointments ? actions.cancel : null,
+          canSendAppointmentReminder ? actions.reminder : null
+        ].filter(Boolean);
         if (todayPhase === 'arrival-window') {
-          primaryAction = actions.checkIn;
-          overflowActions = [actions.reschedule, actions.cancel, actions.reminder];
+          primaryAction = canCheckInAppointments
+            ? actions.checkIn
+            : (scheduledOverflowActions.shift() || null);
+          overflowActions = scheduledOverflowActions;
         } else if (todayPhase === 'delayed') {
           primaryAction = actions.contact;
-          overflowActions = [actions.checkIn, actions.reschedule, actions.cancel];
+          overflowActions = [
+            canCheckInAppointments ? actions.checkIn : null,
+            canRebookAppointments ? actions.reschedule : null,
+            canCancelAppointments ? actions.cancel : null,
+            canSendAppointmentReminder ? actions.reminder : null
+          ].filter(Boolean);
         } else {
-          primaryAction = actions.reschedule;
-          overflowActions = [actions.checkIn, actions.cancel, actions.reminder];
+          primaryAction = canRebookAppointments
+            ? actions.reschedule
+            : (canCheckInAppointments ? actions.checkIn : (scheduledOverflowActions.shift() || null));
+          overflowActions = scheduledOverflowActions.filter(action => action.label !== primaryAction?.label);
         }
         if (canConsultWithoutCheckIn) {
           overflowActions = [...overflowActions, actions.consult];
@@ -2294,14 +2343,19 @@ const Appointments = ({
       }
     }
 
-    if (showActions && isFuture && canManageAppointments) {
-      primaryAction = actions.reschedule;
-      overflowActions = [actions.reminder, actions.cancel];
+    if (showActions && isFuture && (canRebookAppointments || canCancelAppointments || canSendAppointmentReminder)) {
+      const futureActions = [
+        canRebookAppointments ? actions.reschedule : null,
+        canSendAppointmentReminder ? actions.reminder : null,
+        canCancelAppointments ? actions.cancel : null
+      ].filter(Boolean);
+      primaryAction = futureActions.shift() || null;
+      overflowActions = futureActions;
     }
 
     const hasPrimaryInlineAction = (showActions || isCompleted) && Boolean(primaryAction);
-    const hasArchivedInlineAction = (isCancelled || isNoShow || isExpired || isWalkedOut) && isAdmin;
-    const cardOverflowActions = ((showActions || isCompleted) && (isToday || isCarryoverVisit || isCompleted || (isFuture && canManageAppointments)))
+    const hasArchivedInlineAction = (isCancelled || isNoShow || isExpired || isWalkedOut) && canRebookAppointments;
+    const cardOverflowActions = ((showActions || isCompleted) && (isToday || isCarryoverVisit || isCompleted || isFuture))
       ? overflowActions
       : [];
 
@@ -2449,7 +2503,7 @@ const Appointments = ({
                 {appointmentDisplayId}
               </span>
             ) : <span />}
-            {isAdmin && (
+            {canRebookAppointments && (
               <button
                 type="button"
                 onClick={(event) => {
@@ -2628,8 +2682,7 @@ const Appointments = ({
             </div>
           </div>
 
-          {/* ADDED: ADMIN SECURITY LOCK FOR CREATING APPOINTMENTS */}
-          {isAdmin && (
+          {canCreateAppointments && (
             <FAB icon={Plus} onClick={() => { setRebookingApptId(null); setIsFollowUpBooking(false); setFollowUpSourceApptId(''); setIsAddModalOpen(true); }} />
           )}
         </>

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Camera, Loader2, Mail, Phone, Save, Shield, Stethoscope } from 'lucide-react';
+import { Camera, CheckCircle, Loader2, Mail, Minus, Phone, Save, Shield, Stethoscope, X } from 'lucide-react';
 import Modal from '../ui/Modal';
 import AlertMessage from '../ui/AlertMessage';
 import API_BASE_URL from '../../config';
@@ -25,6 +25,15 @@ const EMPTY_PROFILE = {
 };
 
 const PROFILE_PROGRESS_TOTAL_FIELDS = 7;
+const PROFILE_FIELD_LABELS = {
+  avatar: 'Profile Photo',
+  firstName: 'First Name',
+  lastName: 'Last Name',
+  address: 'Address',
+  department: 'Department',
+  qualification: 'Qualification',
+  regNo: 'Registration Number'
+};
 
 const getSessionUser = () => {
   try {
@@ -74,7 +83,6 @@ const splitDoctorName = (value = '') => {
 const isSeededSoloDoctorProfile = (doctorProfile, clinicType) => (
   clinicType === 'Solo'
   && Boolean(doctorProfile)
-  && doctorProfile.photo === 'DR'
   && !doctorProfile.address
   && doctorProfile.department === 'General Physician'
   && doctorProfile.qualification === 'MBBS'
@@ -93,7 +101,7 @@ const buildProfileState = (userPayload, clinicType) => {
     lastName: parsedName.lastName,
     email: userPayload?.email || '',
     phone: userPayload?.phone || '',
-    role: userPayload?.accountRole || userPayload?.role || '',
+    role: userPayload?.role || '',
     gender: doctorProfile?.gender || userPayload?.gender || (doctorProfile ? 'M' : ''),
     address: doctorProfile?.address || '',
     department: isSeededSolo ? '' : (doctorProfile?.department || ''),
@@ -112,12 +120,12 @@ const getPendingFields = (profile) => {
   }
 
   const missingFields = [];
+  if (!isBase64Photo(profile.avatar)) missingFields.push('avatar');
   if (!String(profile.firstName || '').trim()) missingFields.push('firstName');
   if (!String(profile.lastName || '').trim()) missingFields.push('lastName');
   if (!String(profile.address || '').trim()) missingFields.push('address');
   if (!String(profile.department || '').trim()) missingFields.push('department');
   if (!String(profile.qualification || '').trim()) missingFields.push('qualification');
-  if (String(profile.experience || '').trim() === '') missingFields.push('experience');
   if (!String(profile.regNo || '').trim()) missingFields.push('regNo');
   return missingFields;
 };
@@ -126,16 +134,16 @@ const MyProfileModal = ({ isOpen, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [isOptimizingPhoto, setIsOptimizingPhoto] = useState(false);
-  const [photoChanged, setPhotoChanged] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [successToast, setSuccessToast] = useState('');
+  const [pendingSaveFields, setPendingSaveFields] = useState([]);
   const [userData, setUserData] = useState(EMPTY_PROFILE);
   const [clinicType, setClinicType] = useState('');
-  const [needsCompletionPrompt, setNeedsCompletionPrompt] = useState(false);
   const closeTimerRef = useRef(null);
+  const successToastTimerRef = useRef(null);
 
   const pendingFields = useMemo(() => getPendingFields(userData), [userData]);
-  const requiresCompletion = userData.isDoctorProfile && needsCompletionPrompt;
+  const requiresCompletion = userData.isDoctorProfile && pendingFields.length > 0;
   const completedProfileFields = PROFILE_PROGRESS_TOTAL_FIELDS - pendingFields.length;
   const profileCompletionPercent = Math.round((completedProfileFields / PROFILE_PROGRESS_TOTAL_FIELDS) * 100);
   const progressRadius = 20;
@@ -148,7 +156,6 @@ const MyProfileModal = ({ isOpen, onClose }) => {
     const fetchProfile = async () => {
       setFetching(true);
       setError('');
-      setSuccess('');
 
       const clinicId = localStorage.getItem('clinicId');
       const userId = getSessionUser()._id;
@@ -172,8 +179,6 @@ const MyProfileModal = ({ isOpen, onClose }) => {
 
         const formattedProfile = buildProfileState(data, nextClinicType);
         setUserData(formattedProfile);
-        setPhotoChanged(false);
-        setNeedsCompletionPrompt(getPendingFields(formattedProfile).length > 0);
       } catch (err) {
         setError('Server error occurred.');
       } finally {
@@ -211,36 +216,82 @@ const MyProfileModal = ({ isOpen, onClose }) => {
     if (!file) return;
 
     setError('');
+    setSuccessToast('');
+    window.clearTimeout(successToastTimerRef.current);
     setIsOptimizingPhoto(true);
     try {
       const optimized = await optimizeProfilePhoto(file);
-      handleFieldChange('avatar', optimized.dataUrl);
-      setPhotoChanged(true);
+
+      const clinicId = localStorage.getItem('clinicId');
+      const sessionUser = getSessionUser();
+      const userId = sessionUser._id;
+      if (!clinicId || !userId) throw new Error('Unable to update profile photo right now.');
+
+      const response = await authFetch(`${API_BASE_URL}/api/users/${userId}/photo?clinicId=${clinicId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photo: optimized.dataUrl })
+      });
+      const updatedData = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(updatedData.error || 'Failed to update profile photo.');
+
+      const formattedProfile = buildProfileState(updatedData, clinicType);
+      const savedPhoto = formattedProfile.avatar || optimized.dataUrl;
+      handleFieldChange('avatar', savedPhoto);
+      localStorage.setItem('user', JSON.stringify({ ...sessionUser, photo: savedPhoto }));
+      setSuccessToast('Profile photo updated successfully.');
+      successToastTimerRef.current = window.setTimeout(() => setSuccessToast(''), 4000);
     } catch (photoError) {
-      setError(photoError.message || 'Could not optimize the selected photo.');
+      setError(photoError.message || 'Could not update the selected photo.');
     } finally {
       setIsOptimizingPhoto(false);
       event.target.value = '';
     }
   };
 
+  const handleRemovePhoto = async () => {
+    setError('');
+    setSuccessToast('');
+    window.clearTimeout(successToastTimerRef.current);
+    setIsOptimizingPhoto(true);
+
+    try {
+      const clinicId = localStorage.getItem('clinicId');
+      const sessionUser = getSessionUser();
+      const userId = sessionUser._id;
+      if (!clinicId || !userId) throw new Error('Unable to remove profile photo right now.');
+
+      const response = await authFetch(`${API_BASE_URL}/api/users/${userId}/photo?clinicId=${clinicId}`, {
+        method: 'DELETE'
+      });
+      const updatedData = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(updatedData.error || 'Failed to remove profile photo.');
+
+      handleFieldChange('avatar', '');
+      localStorage.setItem('user', JSON.stringify({ ...sessionUser, photo: '' }));
+      setSuccessToast('Profile photo removed successfully.');
+      successToastTimerRef.current = window.setTimeout(() => setSuccessToast(''), 4000);
+    } catch (photoError) {
+      setError(photoError.message || 'Could not remove the profile photo.');
+    } finally {
+      setIsOptimizingPhoto(false);
+    }
+  };
+
+  const handlePendingSaveAcknowledgement = () => {
+    setPendingSaveFields([]);
+    onClose();
+  };
+
   const handleUpdate = async (event) => {
     event.preventDefault();
     setError('');
-    setSuccess('');
+    setSuccessToast('');
+    window.clearTimeout(successToastTimerRef.current);
+    setPendingSaveFields([]);
 
     if (isOptimizingPhoto) {
       setError('Please wait while the photo is being optimized.');
-      return;
-    }
-
-    if (!userData.firstName.trim() || !userData.lastName.trim()) {
-      setError('First name and last name are required.');
-      return;
-    }
-
-    if (userData.isDoctorProfile && pendingFields.length > 0) {
-      setError('Please complete the missing profile details before continuing.');
       return;
     }
 
@@ -264,8 +315,6 @@ const MyProfileModal = ({ isOpen, onClose }) => {
         experience: userData.experience,
         regNo: userData.regNo
       };
-      if (photoChanged) profilePayload.photo = userData.avatar;
-
       const response = await authFetch(`${API_BASE_URL}/api/users/${userId}?clinicId=${clinicId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -279,10 +328,14 @@ const MyProfileModal = ({ isOpen, onClose }) => {
       }
 
       const formattedProfile = buildProfileState(updatedData, clinicType);
+      const nextPendingFields = getPendingFields(formattedProfile);
       setUserData(formattedProfile);
-      setPhotoChanged(false);
-      setSuccess('Profile updated successfully.');
-      setNeedsCompletionPrompt(false);
+      if (nextPendingFields.length > 0) {
+        setPendingSaveFields(nextPendingFields);
+      } else {
+        setSuccessToast('Profile updated successfully.');
+        successToastTimerRef.current = window.setTimeout(() => setSuccessToast(''), 4000);
+      }
 
       const sessionUser = getSessionUser();
       const nextSessionUser = {
@@ -295,9 +348,11 @@ const MyProfileModal = ({ isOpen, onClose }) => {
       localStorage.setItem('userName', updatedData.name || '');
       localStorage.setItem('userEmail', updatedData.email || '');
       window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = window.setTimeout(() => {
-        onClose();
-      }, 3000);
+      if (nextPendingFields.length === 0) {
+        closeTimerRef.current = window.setTimeout(() => {
+          onClose();
+        }, 3000);
+      }
     } catch (err) {
       setError('Server error occurred.');
     } finally {
@@ -308,21 +363,42 @@ const MyProfileModal = ({ isOpen, onClose }) => {
   useEffect(() => {
     if (isOpen) return undefined;
     window.clearTimeout(closeTimerRef.current);
-    setNeedsCompletionPrompt(false);
-    setSuccess('');
+    setPendingSaveFields([]);
     setError('');
-    setPhotoChanged(false);
     return undefined;
   }, [isOpen]);
 
   useEffect(() => () => {
     window.clearTimeout(closeTimerRef.current);
+    window.clearTimeout(successToastTimerRef.current);
   }, []);
 
   const initials = `${userData.firstName?.[0] || ''}${userData.lastName?.[0] || ''}`.toUpperCase() || 'U';
 
   return (
-    <Modal
+    <>
+      {successToast && (
+        <div
+          role="status"
+          className="fixed top-4 right-4 z-[200] flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2.5 text-[12px] font-medium text-green-700 shadow-lg animate-fadeIn"
+        >
+          <CheckCircle size={16} className="flex-shrink-0" />
+          <span>{successToast}</span>
+          <button
+            type="button"
+            onClick={() => {
+              window.clearTimeout(successToastTimerRef.current);
+              setSuccessToast('');
+            }}
+            className="ml-1 rounded-md p-1 text-green-600 transition-colors hover:bg-green-100 hover:text-green-800"
+            aria-label="Dismiss notification"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
+      <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="My Profile"
@@ -330,15 +406,9 @@ const MyProfileModal = ({ isOpen, onClose }) => {
       panelClassName="careopd-modal-panel bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[calc(var(--app-height)-1.5rem)] animate-scaleIn"
     >
       <div className="space-y-4">
-        <div className="sticky top-0 z-10 -mx-4 px-4 pb-4 bg-white space-y-4">
-          <AlertMessage message={error} />
-
-          {success && (
-            <div className="bg-green-50 text-green-700 p-2.5 rounded-lg text-[12px] font-medium border border-green-200 animate-fadeIn">
-              {success}
-            </div>
-          )}
-
+        {(error || requiresCompletion) && (
+          <div className="sticky top-0 z-20 -mx-4 px-4 pb-4 bg-white space-y-4">
+            <AlertMessage message={error} />
           {requiresCompletion && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-[12px] text-amber-900 flex items-center justify-between gap-3 shadow-sm">
               <div className="min-w-0">
@@ -373,10 +443,12 @@ const MyProfileModal = ({ isOpen, onClose }) => {
               </div>
             </div>
           )}
-        </div>
+          </div>
+        )}
 
         <div className="flex justify-center">
-          <label className="relative group cursor-pointer">
+          <div className="relative">
+            <label className="relative group block cursor-pointer">
             <div className="w-20 h-20 rounded-full bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden hover:bg-slate-200 transition-colors">
               {userData.avatar ? (
                 <img src={userData.avatar} alt="Profile" className="w-full h-full object-cover" />
@@ -387,8 +459,21 @@ const MyProfileModal = ({ isOpen, onClose }) => {
             <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <Camera className="text-white" size={20} />
             </div>
-            <input type="file" accept="image/jpeg,image/png,image/webp" disabled={isOptimizingPhoto} className="hidden" onChange={handlePhotoInput} />
-          </label>
+              <input type="file" accept="image/jpeg,image/png,image/webp" disabled={isOptimizingPhoto || loading || fetching} className="hidden" onChange={handlePhotoInput} />
+            </label>
+            {userData.avatar && (
+              <button
+                type="button"
+                onClick={handleRemovePhoto}
+                disabled={isOptimizingPhoto || loading || fetching}
+                className="absolute -right-1 -top-1 z-[1] flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-red-500 text-white shadow-md transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Remove profile photo"
+                title="Remove profile photo"
+              >
+                <Minus size={14} strokeWidth={3} />
+              </button>
+            )}
+          </div>
         </div>
 
         <form onSubmit={handleUpdate} className="space-y-4">
@@ -455,7 +540,7 @@ const MyProfileModal = ({ isOpen, onClose }) => {
                 <Shield size={12} /> Role
               </label>
               <div className="type-body w-full p-2 border border-indigo-100 bg-indigo-50 rounded-lg text-indigo-700 font-bold truncate">
-                {userData.role || 'User'}
+                {{ super_admin: 'Super Admin', admin: 'Admin', doctor: 'Doctor' }[userData.role] || 'User'}
               </div>
             </div>
 
@@ -529,7 +614,7 @@ const MyProfileModal = ({ isOpen, onClose }) => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="type-label block text-slate-600 mb-1 uppercase">
-                    Experience in Months <span className="text-red-500">*</span>
+                    Experience in Months
                   </label>
                   <input
                     type="text"
@@ -564,7 +649,7 @@ const MyProfileModal = ({ isOpen, onClose }) => {
               className="w-full py-2.5 bg-teal-600 text-white rounded-lg text-[13px] font-bold hover:bg-teal-700 transition-colors flex items-center justify-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {isOptimizingPhoto ? (
-                <><Loader2 size={16} className="animate-spin" /> Optimizing photo...</>
+                <><Loader2 size={16} className="animate-spin" /> Updating photo...</>
               ) : loading ? (
                 <>
                   <Loader2 size={14} className="animate-spin" />
@@ -578,7 +663,32 @@ const MyProfileModal = ({ isOpen, onClose }) => {
             </button>
         </form>
       </div>
-    </Modal>
+      </Modal>
+
+      <Modal
+        isOpen={pendingSaveFields.length > 0}
+        onClose={handlePendingSaveAcknowledgement}
+        title="Profile Updated"
+        showCloseButton={false}
+        panelClassName="careopd-modal-panel bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col animate-scaleIn"
+        footer={(
+          <button
+            type="button"
+            onClick={handlePendingSaveAcknowledgement}
+            className="w-full rounded-lg bg-teal-600 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-teal-700"
+          >
+            OK
+          </button>
+        )}
+      >
+        <p className="text-[13px] leading-5 text-slate-700">
+          Your changes have been saved. Take your time and come back to complete the following pending details:
+        </p>
+        <p className="mt-2 text-[13px] font-semibold leading-5 text-slate-900">
+          {pendingSaveFields.map((field) => PROFILE_FIELD_LABELS[field] || field).join(', ')}
+        </p>
+      </Modal>
+    </>
   );
 };
 

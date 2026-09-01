@@ -7,6 +7,7 @@ const Modal = ({
   title,
   children,
   footer,
+  showCloseButton = true,
   bodyClassName = 'p-4 overflow-y-auto flex-1 overscroll-contain',
   panelClassName = 'careopd-modal-panel bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[calc(var(--app-height)-1.5rem)] animate-scaleIn'
 }) => {
@@ -24,9 +25,11 @@ const Modal = ({
       <div className={panelClassName}>
         <div className="px-4 py-3 md:landscape:py-2 border-b border-slate-100 flex justify-between items-center bg-slate-50 flex-shrink-0">
           <h3 className="font-bold text-slate-800 text-[15px]">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-            <X size={18} />
-          </button>
+          {showCloseButton && (
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+              <X size={18} />
+            </button>
+          )}
         </div>
         
         <div className={bodyClassName}>

@@ -164,6 +164,19 @@ const App = () => {
     returnToLogin();
   };
 
+  const handleOnboardingAuthState = (nextState) => {
+    if (nextState === 'login') {
+      returnToLogin();
+      return;
+    }
+    setAuthState(nextState);
+  };
+
+  const handlePublicAuthState = (nextState) => {
+    setAuthMessage('');
+    setAuthState(nextState);
+  };
+
   useEffect(() => {
     if (authState !== 'restoring-session') return;
 
@@ -249,7 +262,7 @@ const App = () => {
   );
 
   if (authState === 'onboarding') {
-    return renderWithUpdatePrompt(<Onboarding setAuthState={setAuthState} />);
+    return renderWithUpdatePrompt(<Onboarding setAuthState={handleOnboardingAuthState} />);
   }
 
   if (authState === 'restoring-session') {
@@ -259,7 +272,7 @@ const App = () => {
   }
 
   if (authState !== 'authenticated') {
-    return renderWithUpdatePrompt(<Auth authState={authState} setAuthState={setAuthState} setUserRole={setUserRole} sessionMessage={authMessage} />);
+    return renderWithUpdatePrompt(<Auth authState={authState} setAuthState={handlePublicAuthState} setUserRole={setUserRole} sessionMessage={authMessage} />);
   }
 
   // --- UNIFIED ROUTING ---
@@ -318,7 +331,6 @@ const App = () => {
           activeTab={effectiveActiveTab}
           setActiveTab={setActiveTab}
           userRole={userRole}
-          accountRole={savedUser.accountRole}
           clinicType={data.clinic?.type}
           hasLinkedDoctor={hasLinkedDoctor}
           permissions={savedUser.permissions || {}}

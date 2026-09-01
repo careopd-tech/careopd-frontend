@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Plus, CheckCircle, CalendarDays, XCircle, Building2, AlertTriangle, 
-  ChevronDown, ChevronRight, Edit2, CheckCircle as CheckIcon, AlertCircle, Loader2, MoreVertical
+  ChevronDown, ChevronRight, Edit2, CheckCircle as CheckIcon, AlertCircle, Loader2, MoreVertical,
+  Camera, Minus
 } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import FAB from '../components/ui/FAB';
@@ -248,7 +249,7 @@ const Doctors = ({ data, setData, onLogout }) => {
 
   // --- 2. ACTIONS ---
   const isOwnerDoctor = (doctor) => (
-    sessionUser.accountRole === 'super_admin' &&
+    sessionUser.role === 'super_admin' &&
     String(sessionUser.doctorId || '') === String(doctor?._id || '')
   );
 
@@ -387,6 +388,7 @@ const Doctors = ({ data, setData, onLogout }) => {
       ...getDefaultDoctorState(),
       ...resolvedDoctor,
       ...getWorkspaceDoctorHours(resolvedDoctor),
+      experience: resolvedDoctor.experience ?? '',
       firstName: fName,
       middleName: mName,
       lastName: lName,
@@ -519,7 +521,6 @@ const Doctors = ({ data, setData, onLogout }) => {
     const finalDept = isNewDept ? newDeptName : newDoctor.department;
     if (!finalDept) errors.push('department');
     if (!newDoctor.qualification) errors.push('qualification');
-    if (newDoctor.experience === '' || newDoctor.experience === null) errors.push('experience');
     if (!newDoctor.regNo) errors.push('regNo');
 
     const doctorFollowsClinicSchedule = newDoctor.followsClinicSchedule === true;
@@ -533,7 +534,7 @@ const Doctors = ({ data, setData, onLogout }) => {
       setInvalidFields(errors);
       if (errors.includes('photo')) setAddDoctorTab('personal');
       else if (['firstName', 'lastName', 'phone', 'email', 'address'].some(f => errors.includes(f))) setAddDoctorTab('personal');
-      else if (['department', 'qualification', 'experience', 'regNo'].some(f => errors.includes(f))) setAddDoctorTab('professional');
+      else if (['department', 'qualification', 'regNo'].some(f => errors.includes(f))) setAddDoctorTab('professional');
       else setAddDoctorTab(isSoloWorkspace ? 'professional' : 'working_hours');
       
       const msg = errors.includes('photo') ? 'Profile photo is required *' : 'Please fill required fields correctly *';
@@ -566,7 +567,7 @@ const Doctors = ({ data, setData, onLogout }) => {
       address: newDoctor.address, 
       department: finalDept,
       qualification: newDoctor.qualification,
-      experience: newDoctor.experience,
+      experience: newDoctor.experience === '' ? null : newDoctor.experience,
       regNo: newDoctor.regNo,
       ...resolvedDoctorHours,
       followsClinicSchedule: doctorFollowsClinicSchedule,
@@ -946,18 +947,21 @@ const Doctors = ({ data, setData, onLogout }) => {
             {addDoctorTab === 'personal' && (
               <div className="space-y-2.5 animate-fadeIn">
                 <div className="flex justify-center mb-1">
-                  <label className="relative cursor-pointer group">
-                    <div className={`w-14 h-14 rounded-full bg-slate-100 border-2 border-dashed flex items-center justify-center overflow-hidden hover:bg-slate-200 transition-colors ${invalidFields.includes('photo') ? 'border-red-500 bg-red-50' : 'border-slate-300'}`}>
+                  <div className="relative">
+                    <label className="relative group block cursor-pointer">
+                    <div className={`w-20 h-20 rounded-full bg-slate-100 border-2 border-dashed flex items-center justify-center overflow-hidden hover:bg-slate-200 transition-colors ${invalidFields.includes('photo') ? 'border-red-500 bg-red-50' : 'border-slate-300'}`}>
                       {newDoctor.photoUrl ? (
                         <img src={newDoctor.photoUrl} alt="Preview" className="w-full h-full object-cover" />
                       ) : newDoctor._id && typeof newDoctor.photo === 'string' && newDoctor.photo.length > 50 ? (
                         <img src={newDoctor.photo} alt="Doc" className="w-full h-full object-cover"/>
                       ) : (
-                        <div className={`flex flex-col items-center ${invalidFields.includes('photo') ? 'text-red-500' : 'text-slate-400'}`}>
-                           <Plus size={16} />
-                           <span className="type-utility mt-0.5 uppercase">Photo <span className="text-red-500">*</span></span>
+                        <div className={`text-2xl font-bold ${invalidFields.includes('photo') ? 'text-red-500' : 'text-teal-700'}`}>
+                          {`${newDoctor.firstName?.[0] || ''}${newDoctor.lastName?.[0] || ''}`.toUpperCase() || 'U'}
                         </div>
                       )}
+                    </div>
+                    <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Camera className="text-white" size={20} />
                     </div>
                     <input 
                       type="file" 
@@ -967,7 +971,20 @@ const Doctors = ({ data, setData, onLogout }) => {
                       className="hidden" 
                       onChange={handlePhotoInput} 
                     />
-                  </label>
+                    </label>
+                    {(newDoctor.photoUrl || (newDoctor._id && typeof newDoctor.photo === 'string' && newDoctor.photo.length > 50)) && (
+                      <button
+                        type="button"
+                        onClick={() => setNewDoctor(prev => ({ ...prev, photoUrl: '', photo: '', photoChanged: true }))}
+                        disabled={isOptimizingPhoto || isSavingDoctor}
+                        className="absolute -right-1 -top-1 z-[1] flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-red-500 text-white shadow-md transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-label="Remove profile photo"
+                        title="Remove profile photo"
+                      >
+                        <Minus size={14} strokeWidth={3} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div>
                   {/* NEW: Split Name Inputs */}
@@ -1058,8 +1075,8 @@ const Doctors = ({ data, setData, onLogout }) => {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="type-label block text-slate-600 mb-0.5 uppercase">Experience (Months) <span className="text-red-500">*</span></label>
-                    <input type="number" placeholder="Months" className={`type-body w-full p-2 border rounded-lg bg-slate-50 focus:ring-1 outline-none ${invalidFields.includes('experience') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`} value={newDoctor.experience} onChange={handleExperienceInput} />
+                    <label className="type-label block text-slate-600 mb-0.5 uppercase">Experience (Months)</label>
+                    <input type="text" inputMode="numeric" placeholder="Months" className="type-body w-full p-2 border border-slate-200 rounded-lg bg-slate-50 focus:ring-1 focus:ring-teal-500 outline-none" value={newDoctor.experience} onChange={handleExperienceInput} />
                   </div>
                   <div>
                     <label className="type-label block text-slate-600 mb-0.5 uppercase">Reg. Number <span className="text-red-500">*</span></label>
@@ -1094,7 +1111,17 @@ const Doctors = ({ data, setData, onLogout }) => {
                 </div>
 
                 <div>
-                  <h4 className="type-utility uppercase text-slate-700 mb-1 border-b border-slate-100 pb-1">Morning Shift</h4>
+                  <div className="mb-1 flex items-center justify-between border-b border-slate-100 pb-1">
+                    <h4 className="type-utility uppercase text-slate-700">Morning Shift</h4>
+                    <button
+                      type="button"
+                      disabled={newDoctor.followsClinicSchedule === true}
+                      onClick={() => setNewDoctor(prev => ({ ...prev, morningStart: '', morningEnd: '' }))}
+                      className="type-utility uppercase text-slate-400 transition-colors hover:text-red-500 disabled:cursor-not-allowed disabled:text-slate-300"
+                    >
+                      Clear
+                    </button>
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="type-label block text-slate-600 mb-0.5 uppercase">Start Time <span className="text-red-500">*</span></label>
