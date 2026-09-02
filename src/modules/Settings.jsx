@@ -644,7 +644,13 @@ const Settings = ({ data, setData, onLogout }) => {
         setAccessUsers(prev => [...prev, result]);
         setAccessModalOpen(false);
         setInvalidFields([]);
-        showNotification('Admin Added', 'success', `Activation link sent to ${email}.`);
+        if (result.activationDelivery?.delivered) {
+          showNotification('Admin Added', 'success', `Activation link sent to ${email}.`);
+        } else if (result.activationDelivery?.previewed) {
+          showNotification('Admin Added', 'success', 'Admin created. The activation link was written to the local development log.');
+        } else {
+          showNotification('Admin Added', 'error', 'Admin created, but the activation email was not delivered. Use Resend Activation after checking email configuration.');
+        }
       } else {
         setModalError(result.error || 'Failed to create user.');
       }
@@ -672,14 +678,13 @@ const Settings = ({ data, setData, onLogout }) => {
     setModalError('');
     const clinicId = localStorage.getItem('clinicId');
     const nextStatus = user.status === 'Inactive' ? 'Active' : 'Inactive';
-    const expectedStatus = user.status === 'Inactive' && user.activationPending ? 'Pending' : nextStatus;
 
     try {
       setLoading(true);
       const response = await authFetch(`${API_BASE_URL}/api/users/${user._id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clinicId, status: nextStatus, activationPending: Boolean(user.activationPending), remark: statusRemark.trim() })
+        body: JSON.stringify({ clinicId, status: nextStatus, remark: statusRemark.trim() })
       });
 
       const result = await response.json().catch(() => ({}));
@@ -688,11 +693,17 @@ const Settings = ({ data, setData, onLogout }) => {
         setAccessUsers(prev => prev.map(item => item._id === result._id ? result : item));
         setStatusConfirmUser(null);
         setStatusRemark('');
-        showNotification(
-          expectedStatus === 'Pending' ? 'User Reactivated' : expectedStatus === 'Active' ? 'User Reactivated' : 'User Deactivated',
-          'success',
-          `${user.name || 'User'} has been marked as ${expectedStatus}.`
-        );
+        if (result.status === 'Pending' && result.activationDelivery && !result.activationDelivery.delivered && !result.activationDelivery.previewed) {
+          showNotification('User Reactivated', 'error', `${user.name || 'User'} is Pending, but the new activation email was not delivered.`);
+        } else {
+          showNotification(
+            result.status === 'Inactive' ? 'User Deactivated' : 'User Reactivated',
+            'success',
+            result.status === 'Pending'
+              ? `${user.name || 'User'} is Pending and a new activation link has been issued.`
+              : `${user.name || 'User'} has been marked as ${result.status}.`
+          );
+        }
       } else {
         showNotification('Action Failed', 'error', result.error || 'Failed to update user status.');
       }
@@ -717,11 +728,15 @@ const Settings = ({ data, setData, onLogout }) => {
       const result = await response.json().catch(() => ({}));
 
       if (response.ok) {
-        showNotification(
-          user.status === 'Pending' ? 'Activation Link Sent' : 'Reset Link Sent',
-          'success',
-          result.message || (user.status === 'Pending' ? 'Activation link sent successfully.' : 'Password reset link sent successfully.')
-        );
+        if (result.activationDelivery?.previewed) {
+          showNotification('Link Generated', 'success', 'The link was written to the local development log.');
+        } else {
+          showNotification(
+            result.mode === 'activate' ? 'Activation Link Sent' : 'Reset Link Sent',
+            'success',
+            result.message || (result.mode === 'activate' ? 'Activation link sent successfully.' : 'Password reset link sent successfully.')
+          );
+        }
       } else {
         showNotification('Action Failed', 'error', result.error || 'Failed to send password reset link.');
       }
@@ -1001,27 +1016,38 @@ const Settings = ({ data, setData, onLogout }) => {
   );
 
   const renderUserAccessCard = (user) => {
-    const isProtectedOwner = user.role === 'super_admin';
+    const isProtectedOwner = ownerUserId
+      ? String(user._id) === String(ownerUserId)
+      : user.role === 'super_admin';
     return (
       <div key={user._id} className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm space-y-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <h4 className="type-card-title text-slate-800 break-words">{user.name}</h4>
-            <span className={`type-utility px-1.5 py-0.5 rounded-full ${
+          <h4 className="type-card-title text-slate-800 break-words">{user.name}</h4>
+          <div className="flex items-center justify-between gap-3 mt-1.5">
+            <p className="type-label text-slate-600 break-words min-w-0">{user.phone || '-'}</p>
+            <span className={`type-utility inline-flex items-center gap-1 flex-shrink-0 ${
               user.status === 'Inactive'
-                ? 'bg-slate-100 text-slate-600'
+                ? 'text-slate-600'
                 : user.status === 'Pending'
-                  ? 'bg-amber-50 text-amber-700'
-                  : 'bg-teal-50 text-teal-700'
-            } flex-shrink-0`}>
+                  ? 'text-amber-700'
+                  : 'text-teal-700'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                user.status === 'Inactive'
+                  ? 'bg-slate-400'
+                  : user.status === 'Pending'
+                    ? 'bg-amber-500'
+                    : 'bg-teal-500'
+              }`} aria-hidden="true" />
               {user.status || 'Active'}
             </span>
           </div>
-          <p className="type-label text-slate-600 break-words mt-0.5">{user.phone || '-'}</p>
-          <p className="type-label text-slate-600 break-words mt-0.5">{user.email || '-'}</p>
-          <p className="type-label text-slate-400 break-words mt-0.5">
-            {roleLabels[user.role] || user.role}
-          </p>
+          <div className="flex items-center justify-between gap-3 mt-1.5">
+            <p className="type-label text-slate-600 break-words min-w-0">{user.email || '-'}</p>
+            <span className="type-utility text-indigo-700 flex-shrink-0">
+              {roleLabels[user.role] || user.role}
+            </span>
+          </div>
         </div>
         <div className="flex flex-wrap gap-1.5 justify-end">
           {canTransferOwnership && !isProtectedOwner && user.status === 'Active' && (
@@ -1043,20 +1069,19 @@ const Settings = ({ data, setData, onLogout }) => {
               {user.status === 'Pending' ? 'Resend Activation' : 'Reset Password'}
             </button>
           )}
-          <button
-            type="button"
-            disabled={isProtectedOwner}
-            onClick={() => openStatusConfirm(user)}
-            className={`type-label px-2.5 py-1.5 rounded-md transition-colors ${
-              isProtectedOwner
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                : user.status === 'Inactive'
+          {!isProtectedOwner && (
+            <button
+              type="button"
+              onClick={() => openStatusConfirm(user)}
+              className={`type-label px-2.5 py-1.5 rounded-md transition-colors ${
+                user.status === 'Inactive'
                   ? 'bg-green-50 text-green-700 hover:bg-green-100'
                   : 'bg-red-50 text-red-600 hover:bg-red-100'
-            }`}
-          >
-            {isProtectedOwner ? 'Owner' : user.status === 'Inactive' ? 'Reactivate' : 'Deactivate'}
-          </button>
+              }`}
+            >
+              {user.status === 'Inactive' ? 'Reactivate' : 'Deactivate'}
+            </button>
+          )}
         </div>
       </div>
     );
@@ -1975,7 +2000,7 @@ const Settings = ({ data, setData, onLogout }) => {
               ? statusConfirmUser?.activationPending
                 ? 'This will restore the invite. The user will remain Pending until they open the activation link and set a password.'
                 : 'This will restore access for the selected user.'
-              : 'This will immediately block the selected user from signing in.'}
+              : 'This will immediately block this login account and revoke its sessions. Doctor availability is managed separately from the Doctors page.'}
           </p>
           <div>
             <label className="type-label block text-slate-600 mb-1 uppercase">Remark</label>

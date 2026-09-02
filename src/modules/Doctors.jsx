@@ -613,7 +613,11 @@ const Doctors = ({ data, setData, onLogout }) => {
         setAddDoctorTab('personal');
         setIsNewDept(false);
         setNewDeptName('');
-        showNotification(newDoctor._id ? 'Profile Updated' : 'Doctor Added', 'success');
+        if (!newDoctor._id && savedDoc.activationDelivery && !savedDoc.activationDelivery.delivered && !savedDoc.activationDelivery.previewed) {
+          showNotification('Doctor added, but the activation email was not delivered', 'error');
+        } else {
+          showNotification(newDoctor._id ? 'Profile Updated' : 'Doctor Added', 'success');
+        }
       } else {
         const errData = await response.json();
         setModalError(errData.error || 'Failed to save doctor.');
@@ -1213,6 +1217,10 @@ const Doctors = ({ data, setData, onLogout }) => {
              <AlertTriangle size={16} className="shrink-0" />
              <p>{statusModalMessage}</p>
           </div>
+
+          <p className="type-label text-slate-500">
+            This changes clinical availability and booking eligibility only. Login access is managed separately in Settings → Users &amp; Access.
+          </p>
 
           <div>
             <label className="type-body block text-slate-700 mb-1">Reason</label>
