@@ -654,10 +654,7 @@ const Appointments = ({
     hasPermission(sessionUser.permissions, 'appointments.consult_own')
   );
 
-  const hasPreConsultVitalsWorkflow = (
-    data.clinic?.type === 'Clinic' &&
-    data.clinic?.preConsultVitalsEnabled === true
-  );
+  const hasPreConsultVitalsWorkflow = data.clinic?.preConsultVitalsEnabled === true;
 
   const departments = useMemo(() => [...new Set((data.doctors || []).map(d => d.department))], [data.doctors]);
 
@@ -2107,7 +2104,12 @@ const Appointments = ({
     const isInConsultation = hasActiveConsultation(appt);
     const isCarryoverVisit = isPast && showActions && hasVisitProgress(appt);
     const isTreatingPhysician = isAssignedClinician(appt);
-    const canConsultWithoutCheckIn = data.clinic?.type === 'Solo' && isTreatingPhysician;
+    const canConsultWithoutCheckIn = (
+      data.clinic?.type === 'Solo'
+      && isTreatingPhysician
+      && !hasPreConsultVitalsWorkflow
+      && data.clinic?.collectConsultationPaymentAtCheckIn !== true
+    );
     const todayPhase = getTodayAppointmentPhase(appt);
     const cardStatus = getCardStatus(appt);
     const cardStatusTextClass = {

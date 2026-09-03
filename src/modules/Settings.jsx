@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { 
-  Building2, MessageCircle, FileText, Plus, Edit2, ChevronDown, ChevronRight, UserPlus, Users, CheckCircle, AlertCircle, ShieldCheck, Trash2
+  Building2, MessageCircle, FileText, Plus, Edit2, ChevronDown, ChevronRight, UserPlus, Users, CheckCircle, AlertCircle, ShieldCheck, Trash2, Save, X, Loader2
 } from 'lucide-react';
 import Modal from '../components/ui/Modal';
 import ModuleHeader from '../components/ui/ModuleHeader';
@@ -74,6 +74,10 @@ const getNonNegativeWholeNumberInput = (value, fallback = '') => {
   return /^\d+$/.test(value) ? value : fallback;
 };
 
+const isConsultationFeeExplicitlySet = (record) => (
+  Boolean(record?.consultationFeeUpdatedAt) || Number(record?.consultationFee || 0) > 0
+);
+
 const Settings = ({ data, setData, onLogout }) => {
   const todayStr = getLocalDateString();
   const [expandedSection, setExpandedSection] = useState('clinic');
@@ -92,6 +96,7 @@ const Settings = ({ data, setData, onLogout }) => {
   });
   const [accessUsers, setAccessUsers] = useState([]);
   const [accessLoading, setAccessLoading] = useState(false);
+  const [accessUsersLoaded, setAccessUsersLoaded] = useState(false);
   const [accessModalOpen, setAccessModalOpen] = useState(false);
   const [clinicalLibraryType, setClinicalLibraryType] = useState('');
   const [statusConfirmUser, setStatusConfirmUser] = useState(null);
@@ -123,6 +128,11 @@ const Settings = ({ data, setData, onLogout }) => {
     email: '',
     phone: ''
   });
+  const [doctorFeeSearch, setDoctorFeeSearch] = useState('');
+  const [serviceSearch, setServiceSearch] = useState('');
+  const [editingDoctorFeeId, setEditingDoctorFeeId] = useState('');
+  const [doctorFeeDrafts, setDoctorFeeDrafts] = useState({});
+  const [savingDoctorFeeId, setSavingDoctorFeeId] = useState('');
 
   const savedUser = getSessionUser();
   const ownerUserId = savedUser.ownerUserId || data.clinic?.ownerUserId || '';
@@ -143,10 +153,34 @@ const Settings = ({ data, setData, onLogout }) => {
   const canManagePolicies = hasPermission(savedUser.permissions, 'settings.policies.edit');
   const canViewPolicies = canManagePolicies || hasPermission(savedUser.permissions, 'settings.policies.view');
   const canViewClinicSettings = canManageClinicProfile || canViewSchedule || canViewBillingServices || canViewWorkflow;
-  const canConfigureVitalsWorkflow = canManageWorkflow && data.clinic?.type === 'Clinic';
+  const canConfigureVitalsWorkflow = canManageWorkflow;
   const clinicDoctors = Array.isArray(data.doctors) ? data.doctors : [];
   const isClinicWorkspace = data.clinic?.type === 'Clinic';
+  const isSoloWorkspace = data.clinic?.type === 'Solo';
+  const currentConsultationFeeIsSet = isConsultationFeeExplicitlySet(data.clinic);
+  const pendingFeeDoctors = clinicDoctors.filter(doctor => !isConsultationFeeExplicitlySet(doctor));
+  const normalizedDoctorFeeSearch = doctorFeeSearch.trim().toLowerCase();
+  const visibleFeeDoctors = [...clinicDoctors]
+    .filter(doctor => !normalizedDoctorFeeSearch || String(doctor.name || '').toLowerCase().includes(normalizedDoctorFeeSearch))
+    .sort((left, right) => {
+      const feeOrder = Number(isConsultationFeeExplicitlySet(left)) - Number(isConsultationFeeExplicitlySet(right));
+      return feeOrder || String(left.name || '').localeCompare(String(right.name || ''));
+    });
   const canTransferOwnership = isSuperAdminOwner;
+  const hasSoloAdminSeatOccupied = data.clinic?.type === 'Solo' && accessUsers.some(user => (
+    user.role === 'admin' && ['Pending', 'Active'].includes(user.status)
+  ));
+  const isSoloAdminReactivationBlocked = (user) => (
+    data.clinic?.type === 'Solo'
+    && user?.role === 'admin'
+    && user?.status === 'Inactive'
+    && accessUsers.some(otherUser => (
+      String(otherUser._id) !== String(user._id)
+      && otherUser.role === 'admin'
+      && ['Pending', 'Active'].includes(otherUser.status)
+    ))
+  );
+  const isAddAdminDisabled = loading || accessLoading || !accessUsersLoaded || hasSoloAdminSeatOccupied;
 
   useEffect(() => {
     localStorage.setItem('settings_notifications', JSON.stringify(notificationStack.slice(0, 30)));
@@ -237,6 +271,7 @@ const Settings = ({ data, setData, onLogout }) => {
     const fetchAccessContext = async () => {
       try {
         setAccessLoading(true);
+        setAccessUsersLoaded(false);
         const requests = [
           canManageAccess
             ? authFetch(`${API_BASE_URL}/api/users?clinicId=${clinicId}`)
@@ -250,6 +285,7 @@ const Settings = ({ data, setData, onLogout }) => {
 
         if (usersRes.ok) {
           setAccessUsers(await usersRes.json());
+          setAccessUsersLoaded(true);
         } else if (usersRes.status === 403 && canManageAccess) {
           setAccessUsers([]);
           await refreshSession();
@@ -281,8 +317,59 @@ const Settings = ({ data, setData, onLogout }) => {
   const openEdit = (config) => {
     setModalError('');
     setInvalidFields([]);
+    if (config.type === 'billing_services') setServiceSearch('');
+    if (config.type === 'billing_services' && isClinicWorkspace) {
+      setDoctorFeeSearch('');
+      setEditingDoctorFeeId('');
+      setSavingDoctorFeeId('');
+      setDoctorFeeDrafts(Object.fromEntries(clinicDoctors.map(doctor => [
+        String(doctor._id),
+        isConsultationFeeExplicitlySet(doctor) ? String(Number(doctor.consultationFee || 0)) : ''
+      ])));
+    }
     setEditModal(config);
     setFormData(config.initialData || {});
+  };
+
+  const handleSaveDoctorFee = async (doctor) => {
+    const doctorId = String(doctor?._id || '');
+    const feeRaw = String(doctorFeeDrafts[doctorId] ?? '').trim();
+    if (!/^\d+$/.test(feeRaw)) {
+      setInvalidFields(current => [...new Set([...current.filter(field => !field.startsWith('doctorFee-')), `doctorFee-${doctorId}`])]);
+      setModalError(`Enter a valid whole-number consultation fee for ${doctor.name}.`);
+      return;
+    }
+
+    try {
+      setModalError('');
+      setInvalidFields(current => current.filter(field => field !== `doctorFee-${doctorId}`));
+      setSavingDoctorFeeId(doctorId);
+      const clinicId = localStorage.getItem('clinicId');
+      const response = await authFetch(`${API_BASE_URL}/api/doctors/${doctorId}/consultation-fee`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clinicId, consultationFee: Number(feeRaw) })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setModalError(result.error || `Failed to save consultation fee for ${doctor.name}.`);
+        return;
+      }
+
+      setData(previous => ({
+        ...previous,
+        doctors: (Array.isArray(previous.doctors) ? previous.doctors : []).map(item => (
+          String(item._id) === doctorId ? result : item
+        ))
+      }));
+      setDoctorFeeDrafts(current => ({ ...current, [doctorId]: String(Number(result.consultationFee || 0)) }));
+      setEditingDoctorFeeId('');
+      showNotification('Consultation Fee Saved', 'success', `${doctor.name}'s consultation fee was updated.`);
+    } catch (error) {
+      setModalError('Server connection error while saving consultation fee.');
+    } finally {
+      setSavingDoctorFeeId('');
+    }
   };
 
   const openUpgradeModal = () => {
@@ -299,6 +386,7 @@ const Settings = ({ data, setData, onLogout }) => {
   };
 
   const openAccessModal = () => {
+    if (isAddAdminDisabled) return;
     setModalError('');
     setInvalidFields([]);
     setAccessData({ name: '', email: '', phone: '' });
@@ -325,10 +413,11 @@ const Settings = ({ data, setData, onLogout }) => {
       }
       if (!formData.appointmentWindowMinutes) errors.push('appointmentWindowMinutes');
     } else if (editModal.type === 'billing_services') {
-      const consultationFeeRaw = String(formData.consultationFee ?? '').trim();
-      const numericConsultationFee = Number(consultationFeeRaw);
-      if (!consultationFeeRaw || !Number.isFinite(numericConsultationFee) || numericConsultationFee < 0) errors.push('consultationFee');
-      if (data.clinic?.type === 'Clinic' && !formData.selectedDoctorId) errors.push('selectedDoctorId');
+      if (!isClinicWorkspace) {
+        const consultationFeeRaw = String(formData.consultationFee ?? '').trim();
+        const numericConsultationFee = Number(consultationFeeRaw);
+        if (!consultationFeeRaw || !Number.isFinite(numericConsultationFee) || numericConsultationFee < 0) errors.push('consultationFee');
+      }
 
       const seenServiceNames = new Map();
       (formData.billingServices || []).forEach((service, index) => {
@@ -355,9 +444,6 @@ const Settings = ({ data, setData, onLogout }) => {
     if (errors.length > 0) {
       setInvalidFields(errors);
       if (editModal.type === 'billing_services') {
-        if (errors.includes('selectedDoctorId')) {
-          return setModalError('Select a doctor before saving consultation fee.');
-        }
         if (errors.includes('consultationFee')) {
           return setModalError('Consultation fee must be entered as a valid non-negative amount.');
         }
@@ -417,7 +503,6 @@ const Settings = ({ data, setData, onLogout }) => {
 
     const clinicId = localStorage.getItem('clinicId');
     let updatePayload = {};
-    let doctorFeePayload = null;
 
     if (editModal.type === 'template') {
       const currentList = [...(data.clinic.templates || [])];
@@ -475,13 +560,7 @@ const Settings = ({ data, setData, onLogout }) => {
         billingServices: billingServicesPayload
       };
 
-      if (data.clinic?.type === 'Clinic') {
-        doctorFeePayload = {
-          doctorId: formData.selectedDoctorId,
-          consultationFee: Number(formData.consultationFee),
-          updatedBy: savedUser?._id || null
-        };
-      } else {
+      if (!isClinicWorkspace) {
         updatePayload.consultationFee = Number(formData.consultationFee);
       }
     } else if (editModal.stateKey === 'hours') {
@@ -502,35 +581,9 @@ const Settings = ({ data, setData, onLogout }) => {
         });
         if (response.ok) {
           const updatedClinic = await response.json();
-          let updatedDoctor = null;
-          if (doctorFeePayload?.doctorId) {
-            const doctorResponse = await authFetch(`${API_BASE_URL}/api/doctors/${doctorFeePayload.doctorId}/consultation-fee`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                clinicId,
-                consultationFee: doctorFeePayload.consultationFee,
-                updatedBy: doctorFeePayload.updatedBy
-              })
-            });
-
-            if (!doctorResponse.ok) {
-              const result = await doctorResponse.json().catch(() => ({}));
-              setModalError(result.error || 'Failed to save doctor consultation fee.');
-              return;
-            }
-
-            updatedDoctor = await doctorResponse.json();
-          }
-
           setData(prev => ({
             ...prev,
-            clinic: updatedClinic,
-            doctors: updatedDoctor
-              ? (Array.isArray(prev.doctors) ? prev.doctors : []).map((doctor) => (
-                  String(doctor._id) === String(updatedDoctor._id) ? updatedDoctor : doctor
-                ))
-              : prev.doctors
+            clinic: updatedClinic
           }));
           setEditModal(null);
           showNotification('Settings Saved', 'success', `${editModal.title || 'Settings'} updated successfully.`);
@@ -662,6 +715,10 @@ const Settings = ({ data, setData, onLogout }) => {
   };
 
   const openStatusConfirm = (user) => {
+    if (isSoloAdminReactivationBlocked(user)) {
+      showNotification('Reactivation Unavailable', 'error', 'Deactivate the current pending or active admin before reactivating this admin.');
+      return;
+    }
     setModalError('');
     setStatusRemark('');
     setStatusConfirmUser(user);
@@ -675,6 +732,10 @@ const Settings = ({ data, setData, onLogout }) => {
 
   const handleToggleAccessUser = async (user = statusConfirmUser) => {
     if (!user) return;
+    if (isSoloAdminReactivationBlocked(user)) {
+      showNotification('Reactivation Unavailable', 'error', 'Deactivate the current pending or active admin before reactivating this admin.');
+      return;
+    }
     setModalError('');
     const clinicId = localStorage.getItem('clinicId');
     const nextStatus = user.status === 'Inactive' ? 'Active' : 'Inactive';
@@ -691,6 +752,16 @@ const Settings = ({ data, setData, onLogout }) => {
 
       if (response.ok) {
         setAccessUsers(prev => prev.map(item => item._id === result._id ? result : item));
+        if (result.doctorId && result.doctorStatus) {
+          setData(prev => ({
+            ...prev,
+            doctors: (Array.isArray(prev.doctors) ? prev.doctors : []).map(doctor => (
+              String(doctor._id) === String(result.doctorId)
+                ? { ...doctor, status: result.doctorStatus }
+                : doctor
+            ))
+          }));
+        }
         setStatusConfirmUser(null);
         setStatusRemark('');
         if (result.status === 'Pending' && result.activationDelivery && !result.activationDelivery.delivered && !result.activationDelivery.previewed) {
@@ -1005,9 +1076,12 @@ const Settings = ({ data, setData, onLogout }) => {
   const isSearchMode = searchTerm.length > 0;
   const matchesSearch = (...values) => values.some(value => normalizeSearchText(value).includes(searchTerm));
 
-  const renderPrimaryButton = ({ onClick, icon: Icon, label, className }) => (
+  const renderPrimaryButton = ({ onClick, icon: Icon, label, className, disabled = false, title }) => (
     <button
+      type="button"
       onClick={onClick}
+      disabled={disabled}
+      title={title}
       className={className}
     >
       {typeof Icon === 'function' ? <Icon size={14} /> : null}
@@ -1019,6 +1093,7 @@ const Settings = ({ data, setData, onLogout }) => {
     const isProtectedOwner = ownerUserId
       ? String(user._id) === String(ownerUserId)
       : user.role === 'super_admin';
+    const reactivationBlocked = isSoloAdminReactivationBlocked(user);
     return (
       <div key={user._id} className="p-2.5 bg-white border border-slate-200 rounded-lg shadow-sm space-y-2">
         <div className="min-w-0">
@@ -1072,9 +1147,13 @@ const Settings = ({ data, setData, onLogout }) => {
           {!isProtectedOwner && (
             <button
               type="button"
+              disabled={reactivationBlocked}
+              title={reactivationBlocked ? 'Deactivate the current admin before reactivating this admin.' : undefined}
               onClick={() => openStatusConfirm(user)}
               className={`type-label px-2.5 py-1.5 rounded-md transition-colors ${
-                user.status === 'Inactive'
+                reactivationBlocked
+                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  : user.status === 'Inactive'
                   ? 'bg-green-50 text-green-700 hover:bg-green-100'
                   : 'bg-red-50 text-red-600 hover:bg-red-100'
               }`}
@@ -1087,13 +1166,15 @@ const Settings = ({ data, setData, onLogout }) => {
     );
   };
 
-  const renderRolePermissionCard = (roleKey) => {
+  const renderRolePermissionCard = (roleKey, { standalone = false } = {}) => {
     const rolePermissionGroups = permissionGroupsByRole[roleKey] || [];
     return (
-      <div className="px-3 pb-3 pt-2 bg-white border border-t-0 border-slate-200 rounded-b-xl shadow-sm space-y-3">
+      <div className={`${standalone ? 'p-3 rounded-xl' : 'px-3 pb-3 pt-2 border-t-0 rounded-b-xl'} bg-white border border-slate-200 shadow-sm space-y-3`}>
         <div className="p-2 rounded-lg bg-slate-50 border border-slate-100">
           <p className="type-secondary text-slate-600">
-            Core {roleLabels[roleKey]} permissions are mandatory. Only optional access is configurable here.
+            {standalone
+              ? 'Core Admin permissions are mandatory; only optional access can be configured below.'
+              : `Core ${roleLabels[roleKey]} permissions are mandatory. Only optional access is configurable here.`}
           </p>
         </div>
         {rolePermissionGroups.map(group => (
@@ -1125,6 +1206,10 @@ const Settings = ({ data, setData, onLogout }) => {
   };
 
   const renderRolePermissionTabs = () => {
+    if (isSoloWorkspace) {
+      return renderRolePermissionCard('admin', { standalone: true });
+    }
+
     const roleKeys = ['admin', 'doctor'];
     const searchedRole = isSearchMode
       ? roleKeys.find(roleKey => matchesSearch(roleLabels[roleKey]))
@@ -1204,30 +1289,50 @@ const Settings = ({ data, setData, onLogout }) => {
         {
           key: 'billing-services',
           searchText: `billing services consultation fee pricing ecg blood sugar diabetic check ${isClinicWorkspace ? clinicDoctors.map(doctor => `${doctor.name} ${doctor.department} ${doctor.consultationFee || 0}`).join(' ') : data.clinic?.consultationFee || 0} ${(data.clinic?.billingServices || []).map(service => `${service.name} ${service.price}`).join(' ')}`,
-          render: () => (
-            <SettingItem
-              title="Billing & Services"
-              subtitle={isClinicWorkspace
-                ? `${clinicDoctors.length} doctor fee${clinicDoctors.length === 1 ? '' : 's'} • ${(data.clinic?.billingServices || []).filter(service => service.active !== false).length} services configured`
-                : (
-                  <>
-                    <span className="font-semibold text-teal-700">Consultation Rs {Number(data.clinic?.consultationFee || 0)}</span>
-                    <span>{` • ${(data.clinic?.billingServices || []).filter(service => service.active !== false).length} services configured`}</span>
-                  </>
-                )}
-              onEdit={canManageBillingServices ? () => openEdit({
-                title: 'Billing & Services',
-                type: 'billing_services',
-                initialData: {
-                  selectedDoctorId: isClinicWorkspace ? String(clinicDoctors[0]?._id || '') : '',
-                  consultationFee: isClinicWorkspace
-                    ? String(Number(clinicDoctors[0]?.consultationFee || 0))
-                    : String(Number(data.clinic?.consultationFee || 0)),
-                  billingServices: normalizeBillingServiceRows(data.clinic?.billingServices || [])
-                }
-              }) : undefined}
-            />
-          )
+          render: () => {
+            const activeServiceCount = (data.clinic?.billingServices || []).filter(service => service.active !== false).length;
+            const unsetFeeDoctors = clinicDoctors.filter(doctor => !isConsultationFeeExplicitlySet(doctor));
+            const soloFeeIsSet = isConsultationFeeExplicitlySet(data.clinic);
+
+            return (
+              <SettingItem
+                title="Billing & Services"
+                subtitle={isClinicWorkspace
+                  ? (
+                    <>
+                      {clinicDoctors.length === 0 ? (
+                        <span>No doctors added</span>
+                      ) : unsetFeeDoctors.length > 0 ? (
+                        <span className="font-semibold text-red-600">
+                          {unsetFeeDoctors.length} of {clinicDoctors.length} doctor fee{clinicDoctors.length === 1 ? '' : 's'} pending
+                        </span>
+                      ) : (
+                        <span className="font-semibold text-teal-700">{clinicDoctors.length} doctor fee{clinicDoctors.length === 1 ? '' : 's'} configured</span>
+                      )}
+                      <span>{` • ${activeServiceCount} services configured`}</span>
+                    </>
+                  )
+                  : (
+                    <>
+                      {soloFeeIsSet ? (
+                        <span className="font-semibold text-teal-700">Consultation Rs {Number(data.clinic?.consultationFee || 0)}</span>
+                      ) : (
+                        <span className="font-semibold text-red-600">Set Consultation Fee</span>
+                      )}
+                      <span>{` • ${activeServiceCount} services configured`}</span>
+                    </>
+                  )}
+                onEdit={canManageBillingServices ? () => openEdit({
+                  title: 'Billing & Services',
+                  type: 'billing_services',
+                  initialData: {
+                    consultationFee: !isClinicWorkspace && soloFeeIsSet ? String(Number(data.clinic?.consultationFee || 0)) : '',
+                    billingServices: normalizeBillingServiceRows(data.clinic?.billingServices || [])
+                  }
+                }) : undefined}
+              />
+            );
+          }
         }
       );
 
@@ -1338,7 +1443,13 @@ const Settings = ({ data, setData, onLogout }) => {
               onClick: openAccessModal,
               icon: UserPlus,
               label: 'Add Admin',
-              className: 'type-secondary w-full mt-1.5 py-2 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg flex items-center justify-center gap-1.5 transition-colors border border-teal-100'
+              disabled: isAddAdminDisabled,
+              title: hasSoloAdminSeatOccupied ? 'Deactivate the current admin before adding another admin.' : undefined,
+              className: `type-secondary w-full mt-1.5 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-colors border ${
+                isAddAdminDisabled
+                  ? 'text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed'
+                  : 'text-teal-600 bg-teal-50 hover:bg-teal-100 border-teal-100'
+              }`
             })
           }
         ]
@@ -1348,7 +1459,11 @@ const Settings = ({ data, setData, onLogout }) => {
       ? [
           {
             key: 'permissions-editor',
-            searchText: `save role permissions clinic admin doctor access ${permissionGroups.map(group => `${group.title} ${group.items.map(item => item.label).join(' ')}`).join(' ')}`,
+            searchText: `save role permissions clinic admin ${isSoloWorkspace ? '' : 'doctor'} access ${
+              (isSoloWorkspace ? permissionGroupsByRole.admin : permissionGroups)
+                .map(group => `${group.title} ${group.items.map(item => item.label).join(' ')}`)
+                .join(' ')
+            }`,
             render: renderRolePermissionTabs
           }
         ]
@@ -1551,7 +1666,7 @@ const Settings = ({ data, setData, onLogout }) => {
         bodyClassName={editModal?.type === 'billing_services' ? 'p-4 flex-1 min-h-0 overflow-hidden overscroll-contain' : undefined}
         footer={
           <button onClick={handleSaveSetting} disabled={loading} className="type-section-title w-full bg-teal-600 text-white py-1.5 rounded-lg disabled:opacity-70 hover:bg-teal-700 transition-colors">
-             {loading ? 'Saving...' : 'Save Changes'}
+             {loading ? 'Saving...' : editModal?.type === 'billing_services' && isClinicWorkspace ? 'Save Services' : 'Save Changes'}
           </button>
         }
       >
@@ -1693,75 +1808,190 @@ const Settings = ({ data, setData, onLogout }) => {
 
            {editModal?.type === 'billing_services' && (
              <>
-               {isClinicWorkspace && (
+               {isClinicWorkspace ? (
+                 <div className="flex-none rounded-lg border border-slate-200 bg-slate-50 p-3">
+                   <div className="flex items-center justify-between gap-3">
+                     <p className="type-section-title text-slate-800">Consultation Fees</p>
+                     <p className={`type-label ${pendingFeeDoctors.length > 0 ? 'text-red-600' : 'text-teal-700'}`}>
+                       {pendingFeeDoctors.length} of {clinicDoctors.length} pending
+                     </p>
+                   </div>
+
+                   <input
+                     type="search"
+                     value={doctorFeeSearch}
+                     onChange={event => setDoctorFeeSearch(event.target.value)}
+                     placeholder="Search doctor"
+                     className="type-body mt-2.5 w-full rounded-lg border border-slate-200 bg-white p-2 outline-none placeholder:text-slate-400 focus:ring-1 focus:ring-teal-500"
+                   />
+
+                   <div className="mt-2 max-h-[132px] space-y-1.5 overflow-y-auto overscroll-contain pr-1">
+                     {clinicDoctors.length === 0 && (
+                       <div className="type-secondary rounded-lg border border-dashed border-slate-200 bg-white py-4 text-center text-slate-400">
+                         No doctors added yet.
+                       </div>
+                     )}
+                     {clinicDoctors.length > 0 && visibleFeeDoctors.length === 0 && (
+                       <div className="type-secondary rounded-lg border border-dashed border-slate-200 bg-white py-4 text-center text-slate-500">
+                         No doctors match your search.
+                       </div>
+                     )}
+                     {visibleFeeDoctors.map(doctor => {
+                       const doctorId = String(doctor._id);
+                       const feeIsSet = isConsultationFeeExplicitlySet(doctor);
+                       const isEditing = editingDoctorFeeId === doctorId;
+                       const isSaving = savingDoctorFeeId === doctorId;
+                       return (
+                         <div key={doctorId} className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2">
+                           <span className="type-body min-w-0 flex-1 truncate font-medium text-slate-800">{doctor.name}</span>
+                           <input
+                             type="number"
+                             min="0"
+                             step="1"
+                             inputMode="numeric"
+                             readOnly={!isEditing}
+                             autoFocus={isEditing}
+                             aria-label={`Consultation fee for ${doctor.name}`}
+                             placeholder="Set fee"
+                             value={isEditing ? (doctorFeeDrafts[doctorId] ?? '') : feeIsSet ? String(Number(doctor.consultationFee || 0)) : ''}
+                             disabled={isSaving}
+                             onClick={() => {
+                               if (isEditing) return;
+                               setModalError('');
+                               setInvalidFields(current => current.filter(field => field !== `doctorFee-${doctorId}`));
+                               setEditingDoctorFeeId(doctorId);
+                             }}
+                             onKeyDown={event => {
+                               preventInvalidMoneyKey(event);
+                               if (event.key === '.') event.preventDefault();
+                               if (event.key === 'Enter') handleSaveDoctorFee(doctor);
+                               if (event.key === 'Escape') setEditingDoctorFeeId('');
+                             }}
+                             onPaste={event => {
+                               if (!/^\d+$/.test(event.clipboardData.getData('text'))) event.preventDefault();
+                             }}
+                             onChange={event => {
+                               setInvalidFields(current => current.filter(field => field !== `doctorFee-${doctorId}`));
+                               setDoctorFeeDrafts(current => ({
+                                 ...current,
+                                 [doctorId]: getNonNegativeWholeNumberInput(event.target.value, current[doctorId] || '')
+                               }));
+                             }}
+                             className={`type-body h-[30px] w-24 rounded-lg border px-2 text-right outline-none transition-colors placeholder:font-semibold ${
+                               invalidFields.includes(`doctorFee-${doctorId}`)
+                                 ? 'border-red-500 focus:ring-1 focus:ring-red-500'
+                                 : isEditing
+                                   ? 'border-teal-300 bg-white text-slate-800 focus:ring-1 focus:ring-teal-500'
+                                   : feeIsSet
+                                     ? 'cursor-text border-transparent bg-slate-50 font-semibold text-teal-700'
+                                     : 'cursor-text border-transparent bg-red-50 text-red-600 placeholder:text-red-600'
+                             }`}
+                           />
+                           {isEditing && (
+                             <>
+                               <button
+                                 type="button"
+                                 disabled={isSaving}
+                                 onClick={() => handleSaveDoctorFee(doctor)}
+                                 className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-teal-700 transition-colors hover:bg-teal-50 disabled:opacity-60"
+                                 aria-label={`Save consultation fee for ${doctor.name}`}
+                                 title="Save"
+                               >
+                                 {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                               </button>
+                               <button
+                                 type="button"
+                                 disabled={isSaving}
+                                 onClick={() => {
+                                   setDoctorFeeDrafts(current => ({
+                                     ...current,
+                                     [doctorId]: feeIsSet ? String(Number(doctor.consultationFee || 0)) : ''
+                                   }));
+                                   setEditingDoctorFeeId('');
+                                 }}
+                                 className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-60"
+                                 aria-label={`Cancel editing consultation fee for ${doctor.name}`}
+                                 title="Cancel"
+                               >
+                                 <X size={12} />
+                               </button>
+                             </>
+                           )}
+                         </div>
+                       );
+                     })}
+                   </div>
+                 </div>
+               ) : (
                  <div>
-                   <label className="type-label block text-slate-600 mb-1 uppercase">Doctor *</label>
-                   <select
-                     className={`type-body w-full p-2 border rounded-lg bg-white outline-none focus:ring-1 ${invalidFields.includes('selectedDoctorId') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
-                     value={formData.selectedDoctorId || ''}
-                     onChange={e => {
-                       const selectedDoctor = clinicDoctors.find(doctor => String(doctor._id) === String(e.target.value));
-                       setFormData({
-                          ...formData,
-                          selectedDoctorId: e.target.value,
-                          consultationFee: String(Number(selectedDoctor?.consultationFee || 0))
-                       });
-                     }}
-                   >
-                     <option value="" disabled>Select doctor</option>
-                     {clinicDoctors.map((doctor) => (
-                       <option key={doctor._id} value={doctor._id}>
-                         {doctor.name}{doctor.department ? ` - ${doctor.department}` : ''}
-                       </option>
-                     ))}
-                   </select>
+                   <label className={`type-label block mb-1 uppercase ${currentConsultationFeeIsSet ? 'text-slate-600' : 'text-red-600'}`}>
+                     {currentConsultationFeeIsSet ? 'Consultation Fee' : 'Set Consultation Fee'} *
+                   </label>
+                     <input
+                       type="number"
+                       min="0"
+                       step="1"
+                       inputMode="numeric"
+                       placeholder="Enter consultation fee"
+                       className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 placeholder:text-slate-400 ${invalidFields.includes('consultationFee') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
+                       value={formData.consultationFee || ''}
+                       onKeyDown={e => {
+                         preventInvalidMoneyKey(e);
+                         if (e.key === '.') e.preventDefault();
+                       }}
+                       onPaste={e => {
+                         const pastedValue = e.clipboardData.getData('text');
+                         if (!/^\d+$/.test(pastedValue)) e.preventDefault();
+                       }}
+                       onChange={e => setFormData({ ...formData, consultationFee: getNonNegativeWholeNumberInput(e.target.value, formData.consultationFee || '') })}
+                     />
                  </div>
                )}
-
-               <div>
-                 <label className="type-label block text-slate-600 mb-1 uppercase">Consultation Fee *</label>
-                   <input
-                     type="number"
-                     min="0"
-                    step="1"
-                    inputMode="numeric"
-                    className={`type-body w-full p-2 border rounded-lg outline-none focus:ring-1 ${invalidFields.includes('consultationFee') ? 'border-red-500 focus:ring-red-500' : 'border-slate-200 focus:ring-teal-500'}`}
-                    value={formData.consultationFee || ''}
-                    onKeyDown={e => {
-                      preventInvalidMoneyKey(e);
-                      if (e.key === '.') e.preventDefault();
-                    }}
-                    onPaste={e => {
-                      const pastedValue = e.clipboardData.getData('text');
-                      if (!/^\d+$/.test(pastedValue)) e.preventDefault();
-                    }}
-                    onChange={e => setFormData({ ...formData, consultationFee: getNonNegativeWholeNumberInput(e.target.value, formData.consultationFee || '') })}
-                  />
-               </div>
 
                <div className="flex min-h-0 flex-1 flex-col gap-2">
                  <div className="flex items-center justify-between">
                    <label className="type-label text-slate-600 uppercase">Available Services</label>
                    <button
                      type="button"
-                     onClick={() => setFormData({
-                       ...formData,
-                       billingServices: [{ name: '', price: '', active: true }, ...(formData.billingServices || [])]
-                     })}
+                     onClick={() => {
+                       setServiceSearch('');
+                       setFormData({
+                         ...formData,
+                         billingServices: [{ name: '', price: '', active: true }, ...(formData.billingServices || [])]
+                       });
+                     }}
                      className="type-label text-teal-600 bg-teal-50 border border-teal-100 px-2 py-1 rounded-lg flex items-center gap-1"
                    >
                      <Plus size={12} /> Add Service
                    </button>
                  </div>
 
-                 <div className="min-h-0 max-h-[min(18rem,38vh)] flex-1 space-y-2 overflow-y-auto pr-1">
+                 <input
+                   type="search"
+                   value={serviceSearch}
+                   onChange={event => setServiceSearch(event.target.value)}
+                   placeholder="Search service"
+                   className="type-body w-full rounded-lg border border-slate-200 bg-white p-2 outline-none placeholder:text-slate-400 focus:ring-1 focus:ring-teal-500"
+                 />
+
+                 <div className="max-h-[174px] space-y-2 overflow-y-auto overscroll-contain pr-1">
                    {(formData.billingServices || []).length === 0 && (
                      <div className="type-secondary text-slate-400 text-center py-4 border border-dashed border-slate-200 rounded-lg">
                        No services configured yet.
                      </div>
                    )}
 
-                   {(formData.billingServices || []).map((service, index) => (
+                   {(formData.billingServices || []).length > 0 && !(formData.billingServices || []).some(service => (
+                     !serviceSearch.trim() || String(service.name || '').toLowerCase().includes(serviceSearch.trim().toLowerCase())
+                   )) && (
+                     <div className="type-secondary text-slate-500 text-center py-4 border border-dashed border-slate-200 rounded-lg">
+                       No services match your search.
+                     </div>
+                   )}
+
+                   {(formData.billingServices || []).map((service, index) => ({ service, index })).filter(({ service }) => (
+                     !serviceSearch.trim() || String(service.name || '').toLowerCase().includes(serviceSearch.trim().toLowerCase())
+                   )).map(({ service, index }) => (
                      <div key={service._id || `service-${index}`} className="grid grid-cols-[minmax(0,1fr)_110px_auto] gap-2 items-center border border-slate-200 bg-slate-50 rounded-lg p-2">
                        <input
                          type="text"
@@ -1977,9 +2207,11 @@ const Settings = ({ data, setData, onLogout }) => {
             <button
               type="button"
               onClick={() => handleToggleAccessUser()}
-              disabled={loading}
+              disabled={loading || isSoloAdminReactivationBlocked(statusConfirmUser)}
               className={`type-section-title w-full text-white py-1.5 rounded-lg disabled:opacity-70 transition-colors ${
-                statusConfirmUser?.status === 'Inactive'
+                isSoloAdminReactivationBlocked(statusConfirmUser)
+                  ? 'bg-slate-400 cursor-not-allowed'
+                  : statusConfirmUser?.status === 'Inactive'
                   ? 'bg-teal-600 hover:bg-teal-700'
                   : 'bg-red-600 hover:bg-red-700'
               }`}
@@ -1998,9 +2230,11 @@ const Settings = ({ data, setData, onLogout }) => {
           <p className="type-body text-slate-600 leading-relaxed">
             {statusConfirmUser?.status === 'Inactive'
               ? statusConfirmUser?.activationPending
-                ? 'This will restore the invite. The user will remain Pending until they open the activation link and set a password.'
-                : 'This will restore access for the selected user.'
-              : 'This will immediately block this login account and revoke its sessions. Doctor availability is managed separately from the Doctors page.'}
+                ? 'This will restore the invite and the linked doctor’s previous availability. Login remains Pending until account activation is completed.'
+                : 'This will restore login access and the linked doctor availability previously changed from Users & Access.'
+              : statusConfirmUser?.doctorId
+                ? 'This will immediately block this login, revoke its sessions, and move the linked doctor profile to Inactive.'
+                : 'This will immediately block this login account and revoke its sessions.'}
           </p>
           <div>
             <label className="type-label block text-slate-600 mb-1 uppercase">Remark</label>
